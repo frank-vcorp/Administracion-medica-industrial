@@ -39,6 +39,8 @@ import {
   type EventTestForZipPdf,
   resolveEventTestFilesForZip,
 } from '@/lib/clinical/study-pdf-for-zip'
+import { renderPatientHealthDictamenToMemory } from '@/lib/patient-dictamen-pdf'
+import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
 
 export {
   resolveBackendFileUrl,
@@ -228,6 +230,7 @@ const eventTestsForZipSelect = {
             orderBy: { createdAt: 'desc' as const },
             take: 1,
             select: {
+              id: true,
               validatedPdfUrl: true,
               validatedPdfError: true,
             },
@@ -248,6 +251,7 @@ type RawEventTestForZip = {
     sourceFileName?: string | null
     aiPrediagnoses?: Array<{
       doctorReviews?: Array<{
+        id?: string
         validatedPdfUrl: string | null
         validatedPdfError: string | null
       }>
@@ -270,6 +274,7 @@ function mapEventTestForZipPdf(test: RawEventTestForZip): EventTestForZipPdf {
     sourceFileUrl: snapshot?.sourceFileUrl ?? test.fileUrl,
     sourceFileName: snapshot?.sourceFileName ?? null,
     validatedPdfUrl,
+    reviewId: latestReview?.id ?? null,
   }
 }
 
@@ -490,6 +495,33 @@ export async function buildCierreClinicoZip(
     path: dictamenGeneralPath,
     data: new Uint8Array(dictamenGeneralBuffer),
   })
+
+  // ── 3.5) Recomendaciones / Reporte para el Paciente ───────────────────
+  const patientRecs =
+    readPatientHealthRecommendations(event.exam?.physicalExamData as Record<string, unknown> | null) ||
+    event.verdict.recommendations
+  if (patientRecs && patientRecs.trim().length > 0) {
+    try {
+      const patientPdfBuffer = await renderPatientHealthDictamenToMemory({
+        signedAt: event.verdict.signedAt ?? new Date(),
+        eventId: event.id,
+        worker: {
+          firstName: event.worker.firstName,
+          lastName: event.worker.lastName,
+          universalId: event.worker.universalId,
+        },
+        healthRecommendations: patientRecs,
+        validator: { fullName: validator.fullName },
+        verdictId: event.verdict.id,
+      })
+      entries.splice(1, 0, {
+        path: '02_Reporte_Paciente/recomendaciones-paciente.pdf',
+        data: new Uint8Array(patientPdfBuffer),
+      })
+    } catch (e) {
+      console.warn('[zip-cierre] No se pudo generar reporte de paciente para el ZIP:', e)
+    }
+  }
 
   // ── 4) Manifest ────────────────────────────────────────────────────────
   const workerName =

@@ -18,6 +18,18 @@ import { buildVerdictFromExam } from '@/lib/clinical/verdict.builder'
 import { buildRecommendationsFromExam } from '@/lib/clinical/recommendations'
 import { isAdminLike } from '@/lib/auth/roles'
 import { sendCierreClinico } from '@/actions/cierre-clinico-send.actions'
+import {
+  Stethoscope,
+  CheckCircle2,
+  Lock,
+  Download,
+  FileText,
+  Archive,
+  Mail,
+  MessageSquare,
+  RotateCw,
+  AlertTriangle,
+} from 'lucide-react'
 
 interface EventFlowControllerProps {
     eventId: string
@@ -216,8 +228,8 @@ export default function EventFlowController({
                 {isValidating && (
                     <div className="space-y-6 text-left animate-in fade-in zoom-in-95 duration-500">
                         <div className="flex items-center gap-4 mb-6">
-                            <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center text-xl">
-                                🩺
+                            <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center">
+                                <Stethoscope className="w-6 h-6" strokeWidth={2.25} />
                             </div>
                             <div>
                                 <h3 className="text-xl font-bold text-slate-800">Reporte médico de aptitud</h3>
@@ -255,10 +267,20 @@ export default function EventFlowController({
                                 disabled={isPending}
                                 className="w-full max-w-sm bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-xl font-bold shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                             >
-                                {isPending ? 'Generando Firma Digital...' : '🔏 Firmar y Emitir Dictamen'}
+                                {isPending ? (
+                                    <>
+                                        <RotateCw className="w-4 h-4 animate-spin mr-1" />
+                                        Generando Firma Digital...
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="w-4 h-4 mr-1 text-emerald-400" />
+                                        Firmar y Emitir Dictamen
+                                    </>
+                                )}
                             </button>
                             <p className="text-[10px] text-slate-400 flex items-center gap-1">
-                                <span className="text-emerald-500">🔒</span> Se aplicará sello digital del Dr. Usuario Demo
+                                <Lock className="w-3.5 h-3.5 text-emerald-500 inline mr-0.5" /> Se aplicará sello digital del Dr. Usuario Demo
                             </p>
                         </div>
                     </div>
@@ -267,8 +289,8 @@ export default function EventFlowController({
                 {/* 3. SECCIÓN: COMPLETADO */}
                 {isCompleted && (
                     <div className="space-y-6 animate-in fade-in fill-mode-both duration-700">
-                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-4xl mb-4 shadow-sm border-4 border-white">
-                            ✨
+                        <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border-4 border-white">
+                            <CheckCircle2 className="w-10 h-10 text-emerald-600" strokeWidth={2.25} />
                         </div>
                         <div>
                             <h3 className="text-3xl font-extrabold text-slate-900">¡Expediente Completado!</h3>
@@ -295,7 +317,8 @@ export default function EventFlowController({
                                         data-has-medical-verdict={String(hasMedicalVerdict)}
                                         className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-2"
                                     >
-                                        ⬇️ Dictamen empleador (PDF)
+                                        <Download className="w-4 h-4" />
+                                        Dictamen empleador (PDF)
                                     </a>
                                     <a
                                         href={`/api/pdf/patient-dictamen/${eventId}`}
@@ -304,7 +327,8 @@ export default function EventFlowController({
                                         data-testid="patient-dictamen-pdf-download-link"
                                         className="bg-teal-600 hover:bg-teal-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-teal-100 transition-all flex items-center justify-center gap-2"
                                     >
-                                        ⬇️ Recomendaciones paciente (PDF)
+                                        <FileText className="w-4 h-4" />
+                                        Recomendaciones paciente (PDF)
                                     </a>
                                 </>
                             )}
@@ -323,7 +347,8 @@ export default function EventFlowController({
                                 data-implementacion="IMPL-20260826-08"
                                 className="bg-sky-600 hover:bg-sky-700 text-white px-10 py-4 rounded-xl font-bold shadow-lg shadow-sky-100 transition-all flex items-center justify-center gap-2"
                             >
-                                📦 Descargar ZIP de cierre
+                                <Archive className="w-4 h-4" />
+                                Descargar ZIP de cierre
                             </a>
                             <button
                                 onClick={() => router.push('/reception')}
@@ -347,9 +372,10 @@ export default function EventFlowController({
                                             setSendNote(res.success ? 'Cierre enviado por correo.' : (res.error ?? 'No se pudo enviar el correo.'))
                                         })
                                     }}
-                                    className="bg-white border border-slate-300 text-slate-800 px-6 py-3 rounded-xl font-bold disabled:opacity-50"
+                                    className="bg-white border border-slate-300 text-slate-800 px-6 py-3 rounded-xl font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"
                                 >
-                                    {sending === 'email' ? 'Enviando correo…' : '✉️ Enviar por correo'}
+                                    <Mail className="w-4 h-4 text-slate-600" />
+                                    {sending === 'email' ? 'Enviando correo…' : 'Enviar por correo'}
                                 </button>
                                 <button
                                     type="button"
@@ -363,9 +389,10 @@ export default function EventFlowController({
                                             setSendNote(res.success ? 'Cierre enviado por WhatsApp (Baileys).' : (res.error ?? 'Baileys no pudo enviar el archivo.'))
                                         })
                                     }}
-                                    className="bg-[#128C7E] hover:bg-[#0f7a6e] text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50"
+                                    className="bg-[#128C7E] hover:bg-[#0f7a6e] text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"
                                 >
-                                    {sending === 'whatsapp' ? 'Enviando por Baileys…' : '💬 Enviar por WhatsApp'}
+                                    <MessageSquare className="w-4 h-4 text-white" />
+                                    {sending === 'whatsapp' ? 'Enviando por Baileys…' : 'Enviar por WhatsApp'}
                                 </button>
                             </div>
                         )}
@@ -420,7 +447,17 @@ export default function EventFlowController({
                                     data-implementacion="IMPL-20260826-08"
                                     className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-6 py-3 rounded-xl font-semibold transition-all text-sm flex items-center justify-center gap-2 disabled:opacity-50 mx-auto"
                                 >
-                                    {isPending ? 'Re-emitiendo…' : '🔄 Re-emitir Dictamen General (formato SME)'}
+                                    {isPending ? (
+                                        <>
+                                            <RotateCw className="w-4 h-4 animate-spin" />
+                                            Re-emitiendo…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RotateCw className="w-4 h-4 text-indigo-600" />
+                                            Re-emitir Dictamen General (formato SME)
+                                        </>
+                                    )}
                                 </button>
                                 {reemitInfo && (
                                     <div
@@ -454,8 +491,9 @@ export default function EventFlowController({
                 )}
 
                 {error && (
-                    <div className="mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 italic">
-                        ⚠️ {error}
+                    <div className="mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 italic flex items-center justify-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                        <span>{error}</span>
                     </div>
                 )}
 

@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
   clinicalCaptureReadonlyBannerText,
@@ -468,6 +468,7 @@ export default function ExamenMedicoEstudio({
   onPapeletaActiveSectionChange,
   registerLeaveGuard,
 }: ExamenMedicoEstudioProps) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const emSectionRaw = readPapeletaQueryParam('emSection', searchParams.get('emSection'))
   const emNavFromUrl = parseExamenMedicoNavSection(emSectionRaw)
@@ -1534,11 +1535,13 @@ export default function ExamenMedicoEstudio({
         onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED', { skipRefresh: true })
         scrollSectionToTop()
       } else {
-        setSaveMsg(
-          markComplete
-            ? '🏁 Captura del examen médico cerrada. El estudio queda pendiente de interpretación/diagnóstico; la aptitud laboral se define al emitir el dictamen en Validación.'
-            : '✅ Borrador guardado.',
-        )
+        if (markComplete) {
+          setSaveMsg('🏁 Examen médico finalizado. Redirigiendo a Paso 3 (Firma)...')
+          onStatusChange?.(res.studyStatus ?? 'COMPLETED', { skipRefresh: false })
+          router.push(navigateToValidatingView(eventId))
+        } else {
+          setSaveMsg('✅ Borrador guardado.')
+        }
         if (res.aiWarning) {
           setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
         }
@@ -2850,7 +2853,7 @@ export default function ExamenMedicoEstudio({
                 }
                 onSaveDraft={() => handleSave(false)}
                 onPrimary={!captureClosed ? () => handleSave(true) : undefined}
-                primaryLabel={!captureClosed ? '📋 Guardar para revisión' : undefined}
+                primaryLabel={!captureClosed ? 'Finalizar examen y pasar a Firma →' : undefined}
                 primaryVariant="emerald"
                 primaryDisabled={!recomendaciones.trim()}
                 primaryTitle={!recomendaciones.trim() ? 'Ingresa recomendaciones' : undefined}

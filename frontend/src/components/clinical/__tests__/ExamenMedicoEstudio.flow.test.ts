@@ -17,6 +17,7 @@ const mockSaveExamenMedicoPapeleta = vi.fn(async () => ({
 }))
 
 vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => mockSearchParams.value,
 }))
 

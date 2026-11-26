@@ -75,13 +75,24 @@ const styles = StyleSheet.create({
         color: '#475569',
         marginTop: 6,
     },
-    section: { marginBottom: 20 },
-    sectionTitle: { fontSize: 12, fontWeight: 'bold', backgroundColor: '#f1f5f9', padding: 5, marginBottom: 10, color: '#0f172a' },
+    section: { marginBottom: 16 },
+    sectionTitle: { fontSize: 11, fontWeight: 'bold', backgroundColor: '#f1f5f9', padding: 4, marginBottom: 8, color: '#0f172a' },
     row: { flexDirection: 'row', marginBottom: 5 },
-    label: { width: 140, fontSize: 10, fontWeight: 'bold', color: '#475569' },
-    value: { flex: 1, fontSize: 10, color: '#0f172a' },
-    verdictBox: { padding: 15, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 5, backgroundColor: '#f8fafc' },
-    verdictText: { fontSize: 11, lineHeight: 1.5, color: '#0f172a' },
+    label: { width: 140, fontSize: 9, fontWeight: 'bold', color: '#475569' },
+    value: { flex: 1, fontSize: 9, color: '#0f172a' },
+    headerGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 2 },
+    headerCell: { width: '50%', flexDirection: 'row', marginBottom: 4 },
+    headerCellThird: { width: '33.33%', flexDirection: 'row', marginBottom: 4 },
+    aptitudGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+    aptitudCard: { width: '48%', flexDirection: 'row', alignItems: 'center', padding: 5, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 4, backgroundColor: '#ffffff', marginBottom: 4 },
+    aptitudCardSelected: { borderColor: '#059669', backgroundColor: '#ecfdf5' },
+    aptitudCheckbox: { width: 13, height: 13, borderWidth: 1.5, borderColor: '#64748b', borderRadius: 2, alignItems: 'center', justifyContent: 'center', marginRight: 6 },
+    aptitudCheckboxSelected: { borderColor: '#059669', backgroundColor: '#059669' },
+    aptitudCheckText: { fontSize: 8, fontWeight: 'bold', color: '#ffffff' },
+    aptitudLabel: { fontSize: 8, fontWeight: 'bold', color: '#334155', flex: 1 },
+    aptitudLabelSelected: { color: '#065f46' },
+    verdictBox: { padding: 10, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 4, backgroundColor: '#f8fafc' },
+    verdictText: { fontSize: 9, lineHeight: 1.45, color: '#0f172a' },
     // IMPL-20260826-04: estilos para el resumen de estudios
     // (aplicados + adicionales disponibles del catálogo AMI).
     studyRow: { marginBottom: 8, paddingLeft: 10 },
@@ -141,13 +152,23 @@ export const MedicalDictamenPDF = ({ data }: {
     data: {
         signedAt: string | Date,
         eventId: string,
-        worker: { firstName: string, lastName: string, universalId: string },
+        worker: {
+            firstName: string,
+            lastName: string,
+            universalId: string,
+            sexo?: string | null,
+            edad?: number | string | null,
+            puesto?: string | null,
+            tipoExamen?: string | null,
+        },
         company?: { name: string },
         finalDiagnosis: string,
         recommendations?: string,
         /** Aptitud para cubrir o seguir en la plaza (audiencia empleador). */
         aptitudLaboral?: string,
-        validator: { fullName: string },
+        /** Restricciones o condicionantes laborales específicas. */
+        restrictions?: string | null,
+        validator: { fullName: string, professionalLicense?: string | null },
         id: string,
         studies?: { serviceName: string, extractedData: unknown }[],
         labs?: { serviceName: string, extractedData: unknown }[],
@@ -214,21 +235,49 @@ export const MedicalDictamenPDF = ({ data }: {
             {/* I. DATOS DEL TRABAJADOR Y EMPRESA */}
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>I. DATOS DEL TRABAJADOR Y EMPRESA</Text>
-                <View style={styles.row}>
-                    <Text style={styles.label}>Nombre Completo:</Text>
-                    <Text style={styles.value}>{data.worker.firstName} {data.worker.lastName}</Text>
-                </View>
-                <View style={styles.row}>
-                    <Text style={styles.label}>ID de Paciente:</Text>
-                    <Text style={styles.value}>{data.worker.universalId}</Text>
-                </View>
-                <View style={styles.row}>
-                    <Text style={styles.label}>Empresa Contratante:</Text>
-                    <Text style={styles.value}>{data.company?.name || 'Independiente'}</Text>
-                </View>
-                <View style={styles.row}>
-                    <Text style={styles.label}>Folio del evento:</Text>
-                    <Text style={styles.value}>{deriveFolio(data.eventId, data.id)}</Text>
+                <View style={styles.headerGrid}>
+                    <View style={styles.headerCell}>
+                        <Text style={[styles.label, { width: 65 }]}>Nombre:</Text>
+                        <Text style={styles.value}>{data.worker.firstName} {data.worker.lastName}</Text>
+                    </View>
+                    <View style={styles.headerCell}>
+                        <Text style={[styles.label, { width: 50 }]}>Fecha:</Text>
+                        <Text style={styles.value}>
+                            {new Date(data.signedAt).toLocaleDateString('es-MX', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                            })}
+                        </Text>
+                    </View>
+                    <View style={styles.headerCellThird}>
+                        <Text style={[styles.label, { width: 40 }]}>Sexo:</Text>
+                        <Text style={styles.value}>{data.worker.sexo || '—'}</Text>
+                    </View>
+                    <View style={styles.headerCellThird}>
+                        <Text style={[styles.label, { width: 40 }]}>Edad:</Text>
+                        <Text style={styles.value}>{data.worker.edad ? `${data.worker.edad} años` : '—'}</Text>
+                    </View>
+                    <View style={styles.headerCellThird}>
+                        <Text style={[styles.label, { width: 75 }]}>Tipo examen:</Text>
+                        <Text style={styles.value}>{data.worker.tipoExamen || 'Ingreso'}</Text>
+                    </View>
+                    <View style={styles.headerCell}>
+                        <Text style={[styles.label, { width: 65 }]}>Empresa:</Text>
+                        <Text style={styles.value}>{data.company?.name || 'Independiente'}</Text>
+                    </View>
+                    <View style={styles.headerCell}>
+                        <Text style={[styles.label, { width: 50 }]}>Puesto:</Text>
+                        <Text style={styles.value}>{data.worker.puesto || '—'}</Text>
+                    </View>
+                    <View style={styles.headerCell}>
+                        <Text style={[styles.label, { width: 65 }]}>ID Paciente:</Text>
+                        <Text style={styles.value}>{data.worker.universalId}</Text>
+                    </View>
+                    <View style={styles.headerCell}>
+                        <Text style={[styles.label, { width: 50 }]}>Folio:</Text>
+                        <Text style={styles.value}>{deriveFolio(data.eventId, data.id)}</Text>
+                    </View>
                 </View>
             </View>
 
@@ -358,28 +407,59 @@ export const MedicalDictamenPDF = ({ data }: {
                 </View>
             )}
 
-            {/* IV. APTITUD LABORAL (EMPLEADOR) */}
-            {data.aptitudLaboral ? (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>IV. APTITUD LABORAL (EMPLEADOR)</Text>
-                    <View style={styles.verdictBox}>
-                        <Text style={styles.verdictText}>{data.aptitudLaboral}</Text>
-                    </View>
+            {/* IV. DICTAMEN DE APTITUD */}
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>IV. DICTAMEN DE APTITUD</Text>
+                <View style={styles.aptitudGrid}>
+                    {[
+                        { key: 'APTO', label: 'APTO' },
+                        { key: 'CONDICIONADO', label: 'APTO CONDICIONADO' },
+                        { key: 'RESTRICCIONES', label: 'APTO CON RESTRICCIONES' },
+                        { key: 'NO_CUMPLE', label: 'NO CUMPLE CON LOS CRITERIOS DE SALUD' },
+                    ].map((opt) => {
+                        const raw = (data.aptitudLaboral || '').toUpperCase()
+                        let isSelected = false
+                        if (opt.key === 'APTO') {
+                            isSelected = raw.includes('APTO') && !raw.includes('CONDICION') && !raw.includes('RESTRIC') && !raw.includes('NO')
+                        } else if (opt.key === 'CONDICIONADO') {
+                            isSelected = raw.includes('CONDICION')
+                        } else if (opt.key === 'RESTRICCIONES') {
+                            isSelected = raw.includes('RESTRIC')
+                        } else if (opt.key === 'NO_CUMPLE') {
+                            isSelected = raw.includes('NO CUMPLE') || raw.includes('NO APTO') || raw.includes('RECHAZ')
+                        }
+                        return (
+                            <View key={opt.key} style={[styles.aptitudCard, isSelected ? styles.aptitudCardSelected : {}]}>
+                                <View style={[styles.aptitudCheckbox, isSelected ? styles.aptitudCheckboxSelected : {}]}>
+                                    {isSelected ? <Text style={styles.aptitudCheckText}>X</Text> : null}
+                                </View>
+                                <Text style={[styles.aptitudLabel, isSelected ? styles.aptitudLabelSelected : {}]}>
+                                    {opt.label}
+                                </Text>
+                            </View>
+                        )
+                    })}
                 </View>
-            ) : null}
+                {(data.restrictions || (data.aptitudLaboral && !data.aptitudLaboral.toUpperCase().startsWith('APTO'))) ? (
+                    <View style={[styles.verdictBox, { marginTop: 4, padding: 6 }]}>
+                        <Text style={[styles.label, { width: '100%', marginBottom: 2, fontSize: 8 }]}>Restricciones / Condicionantes:</Text>
+                        <Text style={styles.verdictText}>{data.restrictions || data.aptitudLaboral}</Text>
+                    </View>
+                ) : null}
+            </View>
 
             {/* V. CONCLUSIÓN MÉDICA (DICTAMEN) */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{data.aptitudLaboral ? 'V. CONCLUSIÓN MÉDICA (DICTAMEN)' : 'IV. CONCLUSIÓN MÉDICA (DICTAMEN)'}</Text>
+                <Text style={styles.sectionTitle}>V. CONCLUSIÓN MÉDICA (DICTAMEN)</Text>
                 <View style={styles.verdictBox}>
                     <Text style={styles.verdictText}>{data.finalDiagnosis}</Text>
                 </View>
             </View>
 
-            {/* VI. RECOMENDACIONES Y SEGUIMIENTO */}
+            {/* VI. OBSERVACIONES Y RECOMENDACIONES */}
             {data.recommendations && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>{data.aptitudLaboral ? 'VI. RECOMENDACIONES Y SEGUIMIENTO' : 'V. RECOMENDACIONES Y SEGUIMIENTO'}</Text>
+                    <Text style={styles.sectionTitle}>VI. OBSERVACIONES Y RECOMENDACIONES</Text>
                     <Text style={styles.verdictText}>{data.recommendations}</Text>
                 </View>
             )}
@@ -388,8 +468,13 @@ export const MedicalDictamenPDF = ({ data }: {
             <View style={styles.signatureArea}>
                 <View style={styles.signatureLine} />
                 <Text style={styles.signatureName}>Dr. {data.validator.fullName}</Text>
-                <Text style={{ fontSize: 9, color: '#64748b' }}>Médico Dictaminador</Text>
-                <Text style={{ fontSize: 7, color: '#cbd5e1', marginTop: 8 }}>
+                <Text style={{ fontSize: 9, color: '#64748b', marginTop: 1 }}>Médico Dictaminador</Text>
+                {data.validator.professionalLicense ? (
+                    <Text style={{ fontSize: 9, color: '#64748b', marginTop: 1 }}>
+                        Céd. Prof.: {data.validator.professionalLicense}
+                    </Text>
+                ) : null}
+                <Text style={{ fontSize: 7, color: '#cbd5e1', marginTop: 6 }}>
                     Certificado Digital: {data.id}
                 </Text>
             </View>

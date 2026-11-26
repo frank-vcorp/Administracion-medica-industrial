@@ -68,13 +68,14 @@ export async function GET(
             role === 'DOCTOR_GENERAL' ||
             role === 'DOCTOR_VALIDATOR'
 
-        // Fetch verdict and fully linked entities (worker, company, validator)
+        // Fetch verdict and fully linked entities (worker, company, validator, exam)
         const verdict = await prisma.medicalVerdict.findUnique({
             where: { eventId },
             include: {
                 event: {
                     include: {
                         worker: { include: { company: true } },
+                        exam: true,
                         studies: true,
                         labs: true
                     }
@@ -167,22 +168,40 @@ export async function GET(
 
         // Si NO hay pdfUrl firmado, regeneramos el PDF en línea desde el
         // snapshot (no toca disco).
+        const ped = (verdict.event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+        const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
+        const sexo = (ped.sexo ?? dp.sexo) as string | null
+        const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
+        const tipoExamen = (ped.tipo_examen ?? 'INGRESO') as string | null
+        const aptitudLaboral = (ped.aptitud as string | null) ?? undefined
+        const restrictions = (ped.restricciones as string | null) ?? undefined
+        const edad = verdict.event.worker.dob
+            ? Math.floor((Date.now() - new Date(verdict.event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+            : (dp.edad ? Number(dp.edad) : undefined)
+
         const data = {
             id: verdict.id,
             eventId: verdict.eventId,
             signedAt: verdict.signedAt,
             finalDiagnosis: verdict.finalDiagnosis,
             recommendations: verdict.recommendations || undefined,
+            aptitudLaboral,
+            restrictions,
             worker: {
                 firstName: verdict.event.worker.firstName,
                 lastName: verdict.event.worker.lastName,
-                universalId: verdict.event.worker.universalId
+                universalId: verdict.event.worker.universalId,
+                sexo,
+                edad,
+                puesto,
+                tipoExamen,
             },
             company: {
                 name: verdict.event.worker.company?.name || 'Clínica AMI'
             },
             validator: {
-                fullName: verdict.validator?.fullName || 'Médico Validador'
+                fullName: verdict.validator?.fullName || 'Médico Validador',
+                professionalLicense: verdict.validator?.professionalLicense ?? undefined,
             },
             studies: verdict.event.studies.map(s => ({
                 serviceName: s.serviceName,

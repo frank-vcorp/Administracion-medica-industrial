@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import { renderToStream } from '@react-pdf/renderer'
+import { PatientHealthDictamenPDF } from '@/components/pdf/PatientHealthDictamenPDF'
+import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -37,39 +40,76 @@ export async function GET(
   const verdict = await prisma.medicalVerdict.findUnique({
     where: { eventId },
     include: {
-      event: { include: { worker: { select: { universalId: true } } } },
+      event: {
+        include: {
+          worker: { select: { firstName: true, lastName: true, universalId: true } },
+          exam: { select: { physicalExamData: true } },
+        },
+      },
+      validator: { select: { fullName: true } },
     },
   })
 
-  if (!verdict?.patientPdfUrl) {
-    return new NextResponse('El dictamen de salud para el paciente aún no está disponible.', {
-      status: 404,
-    })
+  if (!verdict) {
+    return new NextResponse('El dictamen aún no ha sido emitido.', { status: 404 })
   }
 
-  const signedKey = basenameSafe(verdict.patientPdfUrl)
-  const backendFileUrl = `${BACKEND_URL}/api/files/${encodeURIComponent(signedKey)}`
+  if (verdict.patientPdfUrl) {
+    const signedKey = basenameSafe(verdict.patientPdfUrl)
+    const backendFileUrl = `${BACKEND_URL}/api/files/${encodeURIComponent(signedKey)}`
 
-  try {
-    const backendResponse = await fetch(backendFileUrl, { method: 'GET', redirect: 'manual' })
-    if (backendResponse.status === 302 || backendResponse.status === 301) {
-      const location = backendResponse.headers.get('location')
-      if (location) {
-        return NextResponse.redirect(location)
+    try {
+      const backendResponse = await fetch(backendFileUrl, { method: 'GET', redirect: 'manual' })
+      if (backendResponse.status === 302 || backendResponse.status === 301) {
+        const location = backendResponse.headers.get('location')
+        if (location) {
+          return NextResponse.redirect(location)
+        }
       }
+      if (backendResponse.ok) {
+        const buf = await backendResponse.arrayBuffer()
+        return new NextResponse(buf, {
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `inline; filename="Salud-${verdict.event.worker.universalId}.pdf"`,
+          },
+        })
+      }
+    } catch {
+      // Si falla la conexión con el backend, regenerar en línea abajo
     }
-    if (backendResponse.ok) {
-      const buf = await backendResponse.arrayBuffer()
-      return new NextResponse(buf, {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `inline; filename="Salud-${verdict.event.worker.universalId}.pdf"`,
-        },
-      })
-    }
-  } catch {
-    return new NextResponse('No se pudo resolver el dictamen del paciente.', { status: 502 })
   }
 
-  return new NextResponse('Dictamen del paciente no encontrado.', { status: 404 })
+  // Fallback: Regenerar en línea si no hay patientPdfUrl o el backend falló
+  const ped = (verdict.event.exam?.physicalExamData as Record<string, unknown> | null) ?? null
+  const healthRecommendations =
+    readPatientHealthRecommendations(ped) ||
+    verdict.recommendations ||
+    'Mantener estilos de vida saludables, alimentación balanceada y seguimiento médico preventivo.'
+
+  const stream = await renderToStream(
+    <PatientHealthDictamenPDF
+      data={{
+        signedAt: verdict.signedAt ?? new Date(),
+        eventId: verdict.eventId,
+        worker: {
+          firstName: verdict.event.worker.firstName,
+          lastName: verdict.event.worker.lastName,
+          universalId: verdict.event.worker.universalId,
+        },
+        healthRecommendations,
+        validator: {
+          fullName: verdict.validator?.fullName || 'Médico Validador',
+        },
+        verdictId: verdict.id,
+      }}
+    />,
+  )
+
+  return new NextResponse(stream as unknown as ReadableStream, {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="Salud-${verdict.event.worker.universalId}.pdf"`,
+    },
+  })
 }

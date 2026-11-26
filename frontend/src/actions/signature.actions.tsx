@@ -239,6 +239,15 @@ export async function signMedicalDictamPDF(eventId: string) {
     const physicalExamData =
       (event.exam?.physicalExamData as Record<string, unknown> | null) ?? null
     const aptitudLaboral = readEmployerAptitudLaboral(physicalExamData)
+    const ped = physicalExamData ?? {}
+    const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
+    const sexo = (ped.sexo ?? dp.sexo) as string | null
+    const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
+    const tipoExamen = (ped.tipo_examen ?? 'INGRESO') as string | null
+    const restrictions = (ped.restricciones as string | null) ?? null
+    const edad = event.worker.dob
+      ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+      : (dp.edad ? Number(dp.edad) : null)
 
     // 3. Renderizar el dictamen en MEMORIA (sin disco). Si el render
     // falla, NO seguimos (sería pasarle al firmador un buffer vacío).
@@ -258,6 +267,10 @@ export async function signMedicalDictamPDF(eventId: string) {
             lastName: event.worker.lastName,
             universalId: event.worker.universalId,
             nationalId: event.worker.nationalId ?? null,
+            sexo,
+            edad,
+            puesto,
+            tipoExamen,
           },
           company: event.worker.company
             ? { name: event.worker.company.name ?? 'Independiente' }
@@ -265,8 +278,10 @@ export async function signMedicalDictamPDF(eventId: string) {
           finalDiagnosis: event.verdict.finalDiagnosis,
           recommendations: event.verdict.recommendations ?? null,
           aptitudLaboral: aptitudLaboral || null,
+          restrictions,
           validator: {
             fullName: event.verdict.validator.fullName,
+            professionalLicense: event.verdict.validator.professionalLicense ?? null,
           },
           studies: (event.studies ?? []).map((s) => ({
             serviceName: s.serviceName,

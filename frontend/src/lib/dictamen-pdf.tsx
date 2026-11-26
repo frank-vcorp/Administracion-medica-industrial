@@ -79,6 +79,10 @@ export interface BuildDictamenPayloadInput {
     universalId: string
     /** ID nacional (RFC/DNI/etc) — opcional, no usado por el PDF. */
     nationalId?: string | null
+    sexo?: string | null
+    edad?: number | string | null
+    puesto?: string | null
+    tipoExamen?: string | null
   }
   /** Empresa (opcional). */
   company?: { name: string } | null
@@ -88,8 +92,10 @@ export interface BuildDictamenPayloadInput {
   recommendations?: string | null
   /** Aptitud laboral (dictamen empleador — S8-05). */
   aptitudLaboral?: string | null
+  /** Restricciones o condicionantes laborales (opcional). */
+  restrictions?: string | null
   /** Identidad del validador (snapshot congelado al firmar). */
-  validator: { fullName: string }
+  validator: { fullName: string; professionalLicense?: string | null }
   /** Estudios auxiliares (Audiometría, Espirometría, RX, etc.). */
   studies?: Array<{ serviceName: string; extractedData?: unknown | null }>
   /** Laboratorios. */
@@ -180,11 +186,16 @@ export function buildDictamenPdfPayload(
       firstName: input.worker.firstName,
       lastName: input.worker.lastName,
       universalId: input.worker.universalId,
+      sexo: input.worker.sexo,
+      edad: input.worker.edad,
+      puesto: input.worker.puesto,
+      tipoExamen: input.worker.tipoExamen,
     },
     company: input.company ?? undefined,
     finalDiagnosis: input.finalDiagnosis,
     recommendations: input.recommendations ?? undefined,
     aptitudLaboral: input.aptitudLaboral ?? undefined,
+    restrictions: input.restrictions ?? undefined,
     validator: input.validator,
     id: input.verdictId,
     // `MedicalDictamenPDF` exige `extractedData: unknown` (required).
@@ -259,8 +270,12 @@ export async function renderDictamenGeneralPdfForEvent(
           lastName: true,
           universalId: true,
           nationalId: true,
+          dob: true,
           company: { select: { name: true } },
         },
+      },
+      exam: {
+        select: { physicalExamData: true },
       },
       studies: {
         select: { serviceName: true, extractedData: true },
@@ -274,7 +289,7 @@ export async function renderDictamenGeneralPdfForEvent(
           finalDiagnosis: true,
           recommendations: true,
           signedAt: true,
-          validator: { select: { fullName: true } },
+          validator: { select: { fullName: true, professionalLicense: true } },
         },
       },
     },
@@ -364,6 +379,17 @@ export async function renderDictamenGeneralPdfForEvent(
     ),
   ]
 
+  const ped = (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+  const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
+  const sexo = (ped.sexo ?? dp.sexo) as string | null
+  const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
+  const tipoExamen = (ped.tipo_examen ?? 'INGRESO') as string | null
+  const aptitudLaboral = (ped.aptitud as string | null) ?? null
+  const restrictions = (ped.restricciones as string | null) ?? null
+  const edad = event.worker.dob
+    ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+    : (dp.edad ? Number(dp.edad) : null)
+
   return renderDictamenInputToMemory({
     payload: {
       eventId: event.id,
@@ -374,13 +400,22 @@ export async function renderDictamenGeneralPdfForEvent(
         lastName: event.worker.lastName,
         universalId: event.worker.universalId,
         nationalId: event.worker.nationalId ?? null,
+        sexo,
+        edad,
+        puesto,
+        tipoExamen,
       },
       company: event.worker.company
         ? { name: event.worker.company.name ?? 'Independiente' }
         : null,
       finalDiagnosis: event.verdict.finalDiagnosis,
       recommendations: event.verdict.recommendations ?? null,
-      validator: { fullName: event.verdict.validator.fullName },
+      aptitudLaboral,
+      restrictions,
+      validator: {
+        fullName: event.verdict.validator.fullName,
+        professionalLicense: event.verdict.validator.professionalLicense ?? null,
+      },
       studies: currentBlock.studies,
       labs: currentBlock.labs,
       consolidatedEvents: consolidatedBlocks,
