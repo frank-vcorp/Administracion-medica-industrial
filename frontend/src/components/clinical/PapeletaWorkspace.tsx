@@ -52,7 +52,6 @@ import {
   regenerateStudyAI,
   removeRayosXAttachment,
   updateEventTestStatus,
-  updateRayosXAttachmentLabel,
   uploadEventTestFile,
 } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
@@ -1023,37 +1022,6 @@ export default function PapeletaWorkspace({
     setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: true }))
   }
 
-  const handleUpdateRayosXLabel = async (
-    testId: string,
-    fileUrl: string,
-    projectionLabel: string | null,
-  ) => {
-    if (isUploading || isRegenerating) return
-    setUploadFeedbackTestId(testId)
-    setUploadError('')
-    const res = await updateRayosXAttachmentLabel({
-      eventTestId: testId,
-      eventId,
-      fileUrl,
-      projectionLabel,
-    })
-    if (!res.success) {
-      setUploadError(res.error || 'No se pudo actualizar la proyección.')
-      return
-    }
-    setLocalTests(prev =>
-      prev.map(t =>
-        t.id === testId
-          ? {
-              ...t,
-              clinicalContext: (res.clinicalContext as StudyTest['clinicalContext']) ?? t.clinicalContext,
-            }
-          : t,
-      ),
-    )
-    setRxNeedsReanalysisByTestId(prev => ({ ...prev, [testId]: true }))
-  }
-
   // ARCH-20260518-04: Limpiar archivo activo y análisis vigentes (acción destructiva controlada)
   const handleClearStudy = async (testId: string): Promise<boolean> => {
     setIsClearingStudy(true)
@@ -1262,7 +1230,6 @@ export default function PapeletaWorkspace({
               onRegenerateAI={handleRegenerateAI}
               rxNeedsReanalysis={Boolean(rxNeedsReanalysisByTestId[activeTest.id])}
               onRemoveRayosXPlate={handleRemoveRayosXPlate}
-              onUpdateRayosXLabel={handleUpdateRayosXLabel}
               isClearingStudy={isClearingStudy}
               clearStudyError={clearStudyError}
               onClearStudy={handleClearStudy}
@@ -1721,7 +1688,6 @@ function StudyPanel({
   onRegenerateAI,
   rxNeedsReanalysis = false,
   onRemoveRayosXPlate,
-  onUpdateRayosXLabel,
   isClearingStudy,
   clearStudyError,
   onClearStudy,
@@ -1775,11 +1741,6 @@ function StudyPanel({
   onRegenerateAI: (id: string) => void
   rxNeedsReanalysis?: boolean
   onRemoveRayosXPlate?: (testId: string, fileUrl: string) => void
-  onUpdateRayosXLabel?: (
-    testId: string,
-    fileUrl: string,
-    projectionLabel: string | null,
-  ) => void
   /** ARCH-20260518-04: limpieza de archivo y análisis vigentes */
   isClearingStudy: boolean
   clearStudyError: string
@@ -2604,9 +2565,6 @@ function StudyPanel({
                 }}
                 onRemovePlate={(fileUrl) => {
                   onRemoveRayosXPlate?.(test.id, fileUrl)
-                }}
-                onUpdateLabel={(fileUrl, projectionLabel) => {
-                  onUpdateRayosXLabel?.(test.id, fileUrl, projectionLabel)
                 }}
                 onReanalyze={() => onRegenerateAI(test.id)}
               />

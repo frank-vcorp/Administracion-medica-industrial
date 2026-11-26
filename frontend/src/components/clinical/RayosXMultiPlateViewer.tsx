@@ -5,7 +5,6 @@ import StudyDocumentViewer from '@/components/clinical/StudyDocumentViewer'
 import {
   formatRayosXProjectionsSummary,
   RAYOS_X_MAX_FILES,
-  RAYOS_X_PROJECTION_PRESETS,
   type RayosXAttachmentItem,
 } from '@/lib/clinical/rayos-x-attachments'
 
@@ -19,7 +18,6 @@ export interface RayosXMultiPlateViewerProps {
   needsReanalysis: boolean
   onAddPlates: (files: File[]) => void
   onRemovePlate: (fileUrl: string) => void
-  onUpdateLabel: (fileUrl: string, projectionLabel: string | null) => void
   onReanalyze: () => void
 }
 
@@ -37,7 +35,6 @@ export default function RayosXMultiPlateViewer({
   needsReanalysis,
   onAddPlates,
   onRemovePlate,
-  onUpdateLabel,
   onReanalyze,
 }: RayosXMultiPlateViewerProps) {
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null)
@@ -153,50 +150,10 @@ export default function RayosXMultiPlateViewer({
         })}
       </div>
 
-      {/* Selector rápido de proyección para la placa activa */}
-      {!readonly ? (
-        <div className="flex flex-wrap items-center gap-1.5 bg-white/80 border border-emerald-200/80 rounded-lg px-2.5 py-2">
-          <span className="text-[11px] font-semibold text-slate-600 mr-1">
-            Proyección Placa {activeIdx + 1}:
-          </span>
-          {RAYOS_X_PROJECTION_PRESETS.map((preset) => {
-            const active =
-              (activePlate.projectionLabel ?? '').toUpperCase() === preset.toUpperCase()
-            return (
-              <button
-                key={preset}
-                type="button"
-                disabled={isBusy}
-                onClick={() =>
-                  onUpdateLabel(activePlate.url, active ? null : preset)
-                }
-                className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors disabled:opacity-50 ${
-                  active
-                    ? 'bg-teal-600 text-white border-teal-600'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'
-                }`}
-              >
-                {preset}
-              </button>
-            )
-          })}
-          {activePlate.projectionLabel ? (
-            <button
-              type="button"
-              disabled={isBusy}
-              onClick={() => onUpdateLabel(activePlate.url, null)}
-              className="px-2 py-0.5 rounded text-[11px] font-medium text-slate-500 hover:text-slate-800 border border-transparent hover:border-slate-200 disabled:opacity-50"
-            >
-              Sin etiqueta
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
       {needsReanalysis && !readonly ? (
         <div className="bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
           <p className="text-xs text-amber-900">
-            Cambiaste las placas o etiquetas de proyección. Reanaliza para actualizar el análisis IA conjunto.
+            Cambiaste las placas vinculadas. Reanaliza para actualizar el análisis IA conjunto.
           </p>
           <button
             type="button"
