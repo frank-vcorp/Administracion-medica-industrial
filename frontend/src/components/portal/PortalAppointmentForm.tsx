@@ -32,11 +32,6 @@ type PortalClientWhatsAppStatus = {
   missingPhone?: boolean
 }
 
-type PortalClientEmailStatus = {
-  sent: boolean
-  skipped: boolean
-}
-
 const PORTAL_CLIENT_ERROR_MESSAGES: Record<string, string> = {
   APPOINTMENT_IN_PAST: 'No puede agendar en una fecha u hora pasada.',
   OUTSIDE_HOURS: 'La hora elegida está fuera del horario de atención de la sucursal.',
@@ -108,7 +103,7 @@ export default function PortalAppointmentForm({ context }: Props) {
   const [showBulkRequest, setShowBulkRequest] = useState(false)
   const [successFolio, setSuccessFolio] = useState<string | null>(null)
   const [successWhatsApp, setSuccessWhatsApp] = useState<PortalClientWhatsAppStatus | null>(null)
-  const [successEmail, setSuccessEmail] = useState<PortalClientEmailStatus | null>(null)
+  const [successWorkerPhone, setSuccessWorkerPhone] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const readOnly = context.isPreview
   const showSpecialRequest = showCapacityHelp || showBulkRequest
@@ -215,7 +210,7 @@ export default function PortalAppointmentForm({ context }: Props) {
       if (res.success) {
         setSuccessFolio(res.appointment?.expedientId ?? '—')
         setSuccessWhatsApp(res.whatsApp ?? null)
-        setSuccessEmail(res.email ?? null)
+        setSuccessWorkerPhone(selectedWorker?.phone?.trim() || null)
         return
       }
       if (res.error === 'BRANCH_HOUR_FULL') {
@@ -232,36 +227,26 @@ export default function PortalAppointmentForm({ context }: Props) {
   }
 
   if (successFolio) {
+    const summaryText = successWhatsApp?.sent
+      ? `Se ha enviado el aviso de la cita al número registrado del trabajador${successWorkerPhone ? ` (${successWorkerPhone})` : ''}.`
+      : successWhatsApp?.missingPhone
+        ? 'La cita ha sido agendada. El trabajador no cuenta con número celular registrado para aviso automático.'
+        : 'La cita ha sido agendada correctamente.'
+
     return (
       <div className="bg-white rounded-xl border border-emerald-200 p-6 space-y-4">
-        <p className="text-emerald-800 font-bold">Cita confirmada</p>
+        <p className="text-emerald-800 font-bold">Cita agendada</p>
         <p className="text-sm text-slate-700">
           Folio de papeleta: <span className="font-mono font-bold">{successFolio}</span>
         </p>
-        {successWhatsApp?.sent ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            ✓ Se envió por WhatsApp al colaborador la confirmación de cita, el enlace de prellenado
-            {successWhatsApp.triptychSent ? ' y el tríptico de preparación.' : '.'}
-          </div>
-        ) : successWhatsApp ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-            {successWhatsApp.missingPhone
-              ? 'El colaborador no tiene celular registrado; puede compartirle los datos de su cita o actualizar su teléfono.'
-              : 'Tu cita quedó registrada correctamente. Si el colaborador no recibe el mensaje de WhatsApp en unos minutos, compártele el folio de papeleta o comunícate con nuestro equipo.'}
-          </div>
-        ) : null}
-        {successEmail?.sent ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            ✉️ Se envió también por correo la confirmación de cita, el enlace de prellenado y el tríptico.
-          </div>
-        ) : null}
+        <p className="text-sm text-slate-600">{summaryText}</p>
         <button
           type="button"
           className="text-sm text-blue-600 font-medium"
           onClick={() => {
             setSuccessFolio(null)
             setSuccessWhatsApp(null)
-            setSuccessEmail(null)
+            setSuccessWorkerPhone(null)
           }}
         >
           Agendar otra cita

@@ -23,6 +23,7 @@ export type AppointmentPassEmailTemplateArgs = {
   testNames: string[]
   prefillUrl?: string | null
   triptychUrl: string
+  hasInlineQr?: boolean
 }
 
 export function buildAppointmentPassEmailContent(
@@ -105,6 +106,18 @@ export function buildAppointmentPassEmailContent(
       </table>`
     : ''
 
+  const qrSectionHtml = args.hasInlineQr
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#ffffff;border:1px solid ${SME_BORDER};border-radius:10px;margin:0 0 20px;">
+        <tr>
+          <td align="center" style="padding:18px 20px;">
+            <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:${SME_SECONDARY};">Pase QR de check-in</p>
+            <img src="cid:appointment-qr" width="176" height="176" alt="Código QR de cita" style="display:block;margin:0 auto;border-radius:8px;" />
+            <p style="margin:10px 0 0;font-size:12px;color:#475569;">Muestra este código QR en recepción al llegar.</p>
+          </td>
+        </tr>
+      </table>`
+    : ''
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -160,6 +173,8 @@ export function buildAppointmentPassEmailContent(
                   </td>
                 </tr>
               </table>
+
+              ${qrSectionHtml}
 
               ${prefillSectionHtml}
 

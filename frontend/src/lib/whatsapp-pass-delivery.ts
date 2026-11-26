@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma'
+import { parseDataUrlBase64 } from '@/lib/appointment-qr'
 import { callWhatsAppGateway } from '@/lib/whatsapp-gateway-client'
 import { buildWhatsAppWebUrl, isValidWhatsAppPhone, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone'
 import {
@@ -146,10 +147,13 @@ export async function deliverWhatsAppPassWithTriptych(input: {
   auditContext?: string
   entityId?: string
   attachPatientTriptych?: boolean
+  qrImageDataUrl?: string | null
+  qrCaption?: string
 }): Promise<{
   success: boolean
   sent: boolean
   skipped: boolean
+  qrSent?: boolean
   triptychSent?: boolean
   fallbackWaUrl?: string
   error?: string
@@ -174,6 +178,24 @@ export async function deliverWhatsAppPassWithTriptych(input: {
   })
 
   if (live.ok && live.data && (live.data as { sent?: boolean }).sent) {
+    let qrSent = false
+    const parsedQr = parseDataUrlBase64(input.qrImageDataUrl)
+    if (parsedQr) {
+      const qrLive = await callWhatsAppGateway({
+        path: '/v1/messages/send-image',
+        method: 'POST',
+        role: input.actorRole,
+        userId: input.actorUserId,
+        body: {
+          to: phone,
+          dataBase64: parsedQr.dataBase64,
+          mimetype: parsedQr.mimetype,
+          caption: input.qrCaption,
+        },
+      })
+      qrSent = Boolean(qrLive.ok && qrLive.data && (qrLive.data as { sent?: boolean }).sent)
+    }
+
     let triptychSent = false
     if (input.attachPatientTriptych) {
       const triptych = await deliverPatientPreparationTriptychWhatsApp({
@@ -191,10 +213,10 @@ export async function deliverWhatsAppPassWithTriptych(input: {
         action: 'WHATSAPP_MESSAGE_SENT',
         entity: input.auditContext ?? 'WhatsApp',
         entityId: input.entityId ?? null,
-        details: { phoneSuffix: phone.slice(-4) },
+        details: { phoneSuffix: phone.slice(-4), qrSent, triptychSent },
       },
     })
-    return { success: true, sent: true, skipped: false, triptychSent }
+    return { success: true, sent: true, skipped: false, qrSent, triptychSent }
   }
 
   return {

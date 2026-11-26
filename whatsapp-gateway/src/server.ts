@@ -78,6 +78,34 @@ app.post('/v1/messages/send-document', express.json({ limit: '20mb' }), async (r
   }
 })
 
+app.post('/v1/messages/send-image', express.json({ limit: '5mb' }), async (req, res) => {
+  if (!requireBearer(req, res)) return
+  const to = typeof req.body?.to === 'string' ? req.body.to : ''
+  const dataBase64 = typeof req.body?.dataBase64 === 'string' ? req.body.dataBase64 : ''
+  const mimetype = typeof req.body?.mimetype === 'string' ? req.body.mimetype : 'image/png'
+  const caption = typeof req.body?.caption === 'string' ? req.body.caption : undefined
+  const buffer = Buffer.from(dataBase64, 'base64')
+  if (buffer.length === 0) {
+    res.status(400).json({ ok: false, sent: false, error: 'Imagen vacía' })
+    return
+  }
+  try {
+    await baileysManager.sendImageBuffer({
+      toPhone: to,
+      buffer,
+      mimetype,
+      caption,
+    })
+    res.json({ ok: true, sent: true })
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      sent: false,
+      error: err instanceof Error ? err.message : 'No se pudo enviar imagen',
+    })
+  }
+})
+
 app.use(express.json({ limit: '32kb' }))
 
 app.post('/v1/messages/send', async (req, res) => {

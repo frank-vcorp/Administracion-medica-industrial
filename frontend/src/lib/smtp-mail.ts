@@ -9,8 +9,8 @@ export type SendSmtpMailArgs = {
   /** Cuerpo HTML (multipart/alternative junto con `text`). */
   html?: string
   attachments?: Array<
-    | { filename: string; content: Buffer }
-    | { filename: string; content: string; encoding: 'base64' }
+    | { filename: string; content: Buffer; cid?: string }
+    | { filename: string; content: string; encoding: 'base64'; cid?: string }
   >
   /** Prueba admin: remitente guardado aunque SendGrid esté desactivado en producción. */
   forProbe?: boolean

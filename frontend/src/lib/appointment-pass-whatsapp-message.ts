@@ -55,7 +55,7 @@ export function buildAppointmentPassWhatsAppMessage(input: AppointmentPassMessag
 
   lines.push(
     '',
-    'Presenta este mensaje en recepción. A continuación recibirás el tríptico de preparación (Tips para pacientes).',
+    'Presenta tu código QR en recepción al llegar. A continuación recibirás tu pase QR y el tríptico de preparación (Tips para pacientes).',
   )
 
   return lines.join('\n')

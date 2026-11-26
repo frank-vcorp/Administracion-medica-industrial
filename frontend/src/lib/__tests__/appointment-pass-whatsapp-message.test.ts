@@ -25,6 +25,7 @@ describe('appointment-pass-whatsapp-message', () => {
     expect(text).toContain('Audiometría')
     expect(text).toContain('Espirometría')
     expect(text).toContain('EXP-2026115001')
+    expect(text).toContain('código QR')
     expect(text).toContain('tríptico')
     expect(text).not.toContain('Completa tus antecedentes médicos antes de tu cita')
   })
@@ -38,6 +39,7 @@ describe('appointment-pass-whatsapp-message', () => {
 
     expect(text).toContain('Completa tus antecedentes médicos antes de tu cita en este enlace:')
     expect(text).toContain(prefillUrl)
+    expect(text).toContain('pase QR')
     expect(text).toContain('tríptico')
   })
 

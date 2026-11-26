@@ -32,6 +32,7 @@ const STAFF_ROLES = new Set([
 
 export type AppointmentPassWhatsAppResult = {
   sent: boolean
+  qrSent?: boolean
   triptychSent: boolean
   skipped: boolean
   fallbackWaUrl?: string
@@ -170,10 +171,13 @@ export async function sendAppointmentPassWhatsApp(
     auditContext: 'appointment_pass',
     entityId: appointment.id,
     attachPatientTriptych: true,
+    qrImageDataUrl: appointment.qrCode,
+    qrCaption: `Pase QR de cita${appointment.expedientId ? ` · ${appointment.expedientId}` : ''}. Muéstralo en recepción al llegar.`,
   })
 
   return {
     sent: wa.sent,
+    qrSent: Boolean(wa.qrSent),
     triptychSent: Boolean(wa.triptychSent),
     skipped: wa.skipped,
     fallbackWaUrl: wa.fallbackWaUrl,

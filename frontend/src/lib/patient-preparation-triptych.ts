@@ -27,7 +27,13 @@ export async function readPatientPreparationTriptychPdf(): Promise<Buffer> {
         ? fsErr
         : new Error(`No se pudo descargar el tríptico (${res.status})`)
     }
-    return Buffer.from(await res.arrayBuffer())
+    const contentType = res.headers.get('content-type')?.toLowerCase() ?? ''
+    const buf = Buffer.from(await res.arrayBuffer())
+    const hasPdfHeader = buf.subarray(0, 5).toString('ascii') === '%PDF-'
+    if (!contentType.includes('pdf') && !hasPdfHeader) {
+      throw new Error('La respuesta pública del tríptico no es un PDF válido')
+    }
+    return buf
   }
 }
 

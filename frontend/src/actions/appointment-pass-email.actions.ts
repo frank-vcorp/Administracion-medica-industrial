@@ -11,6 +11,7 @@ import {
   resolvePublicPatientTriptychUrl,
 } from '@/lib/patient-preparation-triptych'
 import { logAudit } from '@/actions/audit.actions'
+import { parseDataUrlBase64 } from '@/lib/appointment-qr'
 import { formatAppointmentAgendaDateString, formatAppointmentAgendaTime } from '@/lib/appointment-scheduling'
 import { createOrReplacePrefilledInvitationForAppointment } from '@/lib/prefilled-invitation-server'
 import { buildAppointmentPassEmailContent } from '@/lib/emails/appointment-pass-email-template'
@@ -107,11 +108,27 @@ export async function sendAppointmentPassEmail(
     }
   }
 
-  let attachments: Array<{ filename: string; content: Buffer }> | undefined
+  const attachments: Array<{ filename: string; content: Buffer; cid?: string }> = []
+  let hasInlineQr = false
+  const parsedQr = parseDataUrlBase64(appointment.qrCode)
+  if (parsedQr) {
+    const qrBuffer = Buffer.from(parsedQr.dataBase64, 'base64')
+    if (qrBuffer.byteLength > 0) {
+      attachments.push({
+        filename: 'pase-qr.png',
+        content: qrBuffer,
+        cid: 'appointment-qr',
+      })
+      hasInlineQr = true
+    }
+  }
+
+  let triptychAttached = false
   try {
     const triptych = await readPatientPreparationTriptychPdf()
     if (triptych.byteLength > 0 && triptych.byteLength <= MAX_EMAIL_PDF_BYTES) {
-      attachments = [{ filename: PATIENT_PREPARATION_TRIPTYCH_FILENAME, content: triptych }]
+      attachments.push({ filename: PATIENT_PREPARATION_TRIPTYCH_FILENAME, content: triptych })
+      triptychAttached = true
     }
   } catch (err) {
     console.warn(
@@ -136,6 +153,7 @@ export async function sendAppointmentPassEmail(
       appointment.serviceProfile?.tests.map((t) => t.test.name).filter(Boolean) ?? [],
     prefillUrl: resolvedPrefillUrl,
     triptychUrl,
+    hasInlineQr,
   })
 
   const mail = await sendSmtpMail({
@@ -144,7 +162,7 @@ export async function sendAppointmentPassEmail(
     subject: content.subject,
     text: content.text,
     html: content.html,
-    attachments,
+    attachments: attachments.length > 0 ? attachments : undefined,
   })
 
   if (mail.skipped) {
@@ -162,7 +180,8 @@ export async function sendAppointmentPassEmail(
   await logAudit('APPOINTMENT_PASS_EMAIL_SENT', 'Appointment', appointment.id, {
     emailDomain: email.split('@')[1] ?? 'unknown',
     hasPrefillUrl: Boolean(resolvedPrefillUrl),
-    triptychAttached: Boolean(attachments?.length),
+    triptychAttached,
+    hasInlineQr,
   })
 
   return { success: true, sent: true, prefillUrl: resolvedPrefillUrl }

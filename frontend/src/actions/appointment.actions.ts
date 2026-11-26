@@ -56,7 +56,8 @@ import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 import { applySentenceCase } from '@/lib/text/sentence-case'
 import { sendAppointmentPassEmail } from '@/actions/appointment-pass-email.actions'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
-import { createOrReplacePrefilledInvitationForAppointment } from '@/lib/prefilled-invitation-server'
+import { buildAppointmentCheckInUrl, parseAppointmentQrExpedientId } from '@/lib/appointment-qr'
+import { createOrReplacePrefilledInvitationForAppointment, resolvePublicAppBaseUrl } from '@/lib/prefilled-invitation-server'
 import {
   createAppointmentInputSchema,
   rescheduleAppointmentBodySchema,
@@ -189,39 +190,10 @@ export async function createAppointment(data: {
     // Generar ID de Papeleta automático (EXP-YYYYNNN)
     const expedientId = await generateExpedientId(prisma)
 
-    // Generar QR Real usando librería 'qrcode'
-    // Almacenamos DataURL (Base64) directamente en DB para evitar hosting externo
-    const qrData = JSON.stringify({
-       exp: expedientId,
-       uid: input.workerId,
-       date: scheduledDate.toISOString()
-    });
-    
-    const qrCode = await QRCode.toDataURL(qrData, {
-      errorCorrectionLevel: 'H',
-      margin: 2,
-      scale: 8,
-      color: {
-        dark: '#000000',
-        light: '#ffffff'
-      }
-    });
-
-    // IMPL-20260519-10: QR operativo mínimo — payload AMI|NOMBRE=...|FN=YYYY-MM-DD
-    // Independiente del QR de check-in; orientado a recaptura en estaciones
-    const workerForQr = await prisma.worker.findUnique({
-      where: { id: input.workerId },
-      select: { firstName: true, lastName: true, dob: true }
-    })
-    const qrOperativoPayload = workerForQr
-      ? `AMI|NOMBRE=${(workerForQr.firstName + ' ' + workerForQr.lastName).toUpperCase()}|FN=${workerForQr.dob ? workerForQr.dob.toISOString().slice(0, 10) : ''}`
-      : `AMI|NOMBRE=SIN_NOMBRE|FN=`
-    const qrOperativo = await QRCode.toDataURL(qrOperativoPayload, {
-      errorCorrectionLevel: 'M',
-      margin: 2,
-      scale: 6,
-      color: { dark: '#1e293b', light: '#ffffff' }
-    })
+    const { qrCode, qrOperativo } = await buildAppointmentQrPayloads(
+      input.workerId,
+      expedientId,
+    )
 
     const appointmentDataBase = {
       workerId: input.workerId,
@@ -384,14 +356,10 @@ export async function getAppointments(date?: string, branchId?: string) {
   }
 }
 
-async function buildAppointmentQrPayloads(workerId: string, scheduledDate: Date, expedientId: string) {
-  const qrData = JSON.stringify({
-    exp: expedientId,
-    uid: workerId,
-    date: scheduledDate.toISOString(),
-  })
+async function buildAppointmentQrPayloads(workerId: string, expedientId: string) {
+  const qrCheckInUrl = buildAppointmentCheckInUrl(expedientId, resolvePublicAppBaseUrl())
 
-  const qrCode = await QRCode.toDataURL(qrData, {
+  const qrCode = await QRCode.toDataURL(qrCheckInUrl, {
     errorCorrectionLevel: 'H',
     margin: 2,
     scale: 8,
@@ -509,7 +477,6 @@ export async function rescheduleAppointment(
     const expedientId = await generateExpedientId(prisma)
     const { qrCode, qrOperativo } = await buildAppointmentQrPayloads(
       existing.workerId,
-      scheduledAt,
       expedientId
     )
 
@@ -919,20 +886,14 @@ export async function processQRCheckIn(qrContent: string) {
       return { success: false, error: 'Sesión expirada o no autorizada.' }
     }
 
-    let data;
-    try {
-      data = JSON.parse(qrContent);
-    } catch {
-      return { success: false, error: 'Código QR inválido o corrupto.' }
-    }
-
-    if (!data.exp) {
-      return { success: false, error: 'El QR no contiene un ID de expediente válido.' }
+    const exp = parseAppointmentQrExpedientId(qrContent)
+    if (!exp) {
+      return { success: false, error: 'Código QR inválido o no corresponde a una cita.' }
     }
 
     // Buscar cita por Expedient ID
     const appointment = await prisma.appointment.findUnique({
-      where: { expedientId: data.exp },
+      where: { expedientId: exp },
       select: { 
         id: true, 
         status: true, 
@@ -1051,6 +1012,63 @@ export async function getAppointmentForCorroboration(appointmentId: string) {
     return { success: true, appointment }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Error' }
+  }
+}
+
+/**
+ * Resuelve un código QR (URL `?checkin=EXP-...`, JSON legado o folio `EXP-...`)
+ * y carga los datos de corroboración para abrir el check-in en clínica.
+ */
+export async function getAppointmentForCorroborationByQr(rawQrContent: string) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.id) {
+      return { success: false, error: 'Sesión expirada o no autorizada.' }
+    }
+    if (session.user.role === 'COMPANY_CLIENT') {
+      return { success: false, error: 'Solo personal clínico puede realizar el ingreso.' }
+    }
+
+    const expedientId = parseAppointmentQrExpedientId(rawQrContent)
+    if (!expedientId) {
+      return { success: false, error: 'Código QR inválido o no corresponde a una cita.' }
+    }
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { expedientId },
+      select: {
+        id: true,
+        status: true,
+        worker: { select: { firstName: true } },
+      },
+    })
+
+    if (!appointment) {
+      return { success: false, error: 'No se encontró ninguna cita asociada a este QR.' }
+    }
+    if (appointment.status === 'COMPLETED') {
+      return {
+        success: false,
+        error: `El trabajador ${appointment.worker.firstName} ya realizó su ingreso.`,
+      }
+    }
+    if (appointment.status === 'CANCELLED') {
+      return { success: false, error: 'Esta cita fue cancelada.' }
+    }
+    if (appointment.status === 'RESCHEDULED') {
+      return {
+        success: false,
+        error: 'Esta cita fue reagendada. Solicite el pase QR actualizado.',
+      }
+    }
+
+    return await getAppointmentForCorroboration(appointment.id)
+  } catch (error) {
+    console.error(
+      '[QR CORROBORATION ERROR]:',
+      error instanceof Error ? error.message : 'unknown',
+    )
+    return { success: false, error: 'Error interno al procesar el QR.' }
   }
 }
 

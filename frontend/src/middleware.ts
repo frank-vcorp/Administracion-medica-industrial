@@ -58,7 +58,8 @@ export async function middleware(request: NextRequest) {
   const isStaticAsset =
     pathname.startsWith('/templates/') ||
     pathname.startsWith('/branding/') ||
-    pathname.startsWith('/clinical/')
+    pathname.startsWith('/clinical/') ||
+    pathname.startsWith('/docs/')
   const isPublicRoute =
     pathname === '/' ||
     pathname.startsWith('/login') ||
@@ -133,6 +134,6 @@ export const config = {
      * - favicon.ico (favicon file)
      * - public folder
      */
-    "/((?!_next/static|_next/image|favicon.ico|templates|branding|clinical|public).*)",
+    "/((?!_next/static|_next/image|favicon.ico|templates|branding|clinical|docs|public).*)",
   ],
 }

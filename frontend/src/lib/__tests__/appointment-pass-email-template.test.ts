@@ -20,8 +20,11 @@ describe('appointment-pass-email-template', () => {
       'https://administracion-medica-industrial.vercel.app/docs/tips-para-pacientes.pdf',
   }
 
-  it('genera asunto SME, enlace de prellenado y descarga de tríptico con clicktracking off', () => {
-    const { subject, text, html } = buildAppointmentPassEmailContent(FIXTURE)
+  it('genera asunto SME, enlace de prellenado, QR inline y descarga de tríptico con clicktracking off', () => {
+    const { subject, text, html } = buildAppointmentPassEmailContent({
+      ...FIXTURE,
+      hasInlineQr: true,
+    })
 
     expect(subject).toBe('Confirmación de cita médica — Soluciones Médico Empresariales')
     expect(text).toContain('Carlos Ramírez')
@@ -32,6 +35,8 @@ describe('appointment-pass-email-template', () => {
     expect(text).toContain(FIXTURE.prefillUrl)
     expect(text).toContain(FIXTURE.triptychUrl)
 
+    expect(html).toContain('Pase QR de check-in')
+    expect(html).toContain('src="cid:appointment-qr"')
     expect(html).toContain('Completar antecedentes previos')
     expect(html).toContain('Descargar tríptico de preparación (PDF)')
     expect(html).toContain(`clicktracking="off" href="${FIXTURE.prefillUrl}"`)

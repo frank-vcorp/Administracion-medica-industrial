@@ -452,6 +452,20 @@ class BaileysManager {
     })
   }
 
+  async sendImageBuffer(input: {
+    toPhone: string
+    buffer: Buffer
+    mimetype: string
+    caption?: string
+  }): Promise<void> {
+    const jid = await this.resolveJid(input.toPhone)
+    await this.sock!.sendMessage(jid, {
+      image: input.buffer,
+      mimetype: input.mimetype || 'image/png',
+      caption: input.caption?.trim().slice(0, 1000) || undefined,
+    })
+  }
+
   /** Restaura sesión existente al arrancar el gateway (sin QR). */
   async warmExistingSession(): Promise<void> {
     if (this.starting || this.pairingActive || this.sock) return

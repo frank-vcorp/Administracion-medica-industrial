@@ -6,8 +6,8 @@ import Image from 'next/image'
  * @description Agenda diaria con expedientes EXP, QR y acceso a Portal de Prellenado
  * @id IMPL-20260325-01
  */
-import { useEffect, useState, useMemo, Suspense } from 'react'
-import { getAppointmentsForOverview, getAppointmentForCorroboration, getPendingStudyPatientsForDay, getAttendedAppointmentsCount, type PendingStudyPatientRow } from '@/actions/appointment.actions'
+import { useEffect, useState, useMemo, useCallback, useRef, Suspense } from 'react'
+import { getAppointmentsForOverview, getAppointmentForCorroboration, getAppointmentForCorroborationByQr, getPendingStudyPatientsForDay, getAttendedAppointmentsCount, type PendingStudyPatientRow } from '@/actions/appointment.actions'
 import AttendedAppointmentsCalendar from '@/components/appointments/AttendedAppointmentsCalendar'
 import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
 import { getBranches } from '@/actions/admin.actions'
@@ -16,7 +16,7 @@ import {
     sendPrefillLinkOnlyWhatsApp,
     type AppointmentPassWhatsAppResult,
 } from '@/actions/appointment-pass-whatsapp.actions'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
 import CorroborationModal from '@/components/CorroborationModal'
 import RescheduleAppointmentModal from '@/components/RescheduleAppointmentModal'
@@ -172,8 +172,23 @@ export default function AppointmentsPage() {
     const [pendingModalOpen, setPendingModalOpen] = useState(false)
     const [pendingStudyRows, setPendingStudyRows] = useState<PendingStudyPatientRow[]>([])
     const [agendaPatientSearch, setAgendaPatientSearch] = useState('')
-    const _router = useRouter()
-    void _router
+    const router = useRouter()
+
+    const handleOpenCheckInFromQr = useCallback(
+        (checkinExpedient: string) => {
+            router.replace('/appointments')
+            void getAppointmentForCorroborationByQr(checkinExpedient).then((res) => {
+                if (res.success && 'appointment' in res && res.appointment) {
+                    setCheckInError(null)
+                    setSelectedApt(null)
+                    setCorroborationData(res.appointment as Parameters<typeof CorroborationModal>[0]['appointment'])
+                    return
+                }
+                setCheckInError(res.error || 'No se pudo iniciar el check-in desde el código QR.')
+            })
+        },
+        [router],
+    )
 
     useEffect(() => {
         // Cargar sucursales al inicio
@@ -353,6 +368,9 @@ export default function AppointmentsPage() {
 
     return (
         <div className="max-w-[90rem] mx-auto space-y-8 animate-in fade-in duration-500">
+            <Suspense fallback={null}>
+                <CheckInQueryOpener onResolve={handleOpenCheckInFromQr} />
+            </Suspense>
             {/* Header Area */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -951,4 +969,22 @@ function StatusBadge({ status }: { status: string }) {
             {current.label}
         </span>
     )
+}
+
+function CheckInQueryOpener({
+    onResolve,
+}: {
+    onResolve: (checkinExpedient: string) => void
+}) {
+    const searchParams = useSearchParams()
+    const processedRef = useRef<string | null>(null)
+    const checkinParam = searchParams.get('checkin')?.trim() ?? ''
+
+    useEffect(() => {
+        if (!checkinParam || processedRef.current === checkinParam) return
+        processedRef.current = checkinParam
+        onResolve(checkinParam)
+    }, [checkinParam, onResolve])
+
+    return null
 }
