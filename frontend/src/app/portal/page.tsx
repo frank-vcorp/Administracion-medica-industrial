@@ -2,6 +2,7 @@ import {
   getCompanyDashboardStats,
   getCompanyMonthlyAttendedStats,
   getPortalAppointmentSummary,
+  getPortalUpcomingAppointments,
 } from '@/actions/portal.actions'
 import { getPortalPageCompany } from '@/lib/portal-access'
 import PortalHomeDashboard from '@/components/portal/PortalHomeDashboard'
@@ -14,10 +15,11 @@ export default async function PortalRootPage() {
     return <div className="p-8 text-red-600">Error: No hay sesión válida.</div>
   }
 
-  const [monthlyResult, statsResult, appointmentSummary] = await Promise.all([
+  const [monthlyResult, statsResult, appointmentSummary, upcomingResult] = await Promise.all([
     getCompanyMonthlyAttendedStats(),
     getCompanyDashboardStats(),
     getPortalAppointmentSummary(),
+    getPortalUpcomingAppointments(5),
   ])
 
   if (!monthlyResult.success) {
@@ -41,6 +43,9 @@ export default async function PortalRootPage() {
       canceladas12m={canceladas}
       completedEvents={stats?.completed ?? null}
       inProgressEvents={stats?.inProgress ?? null}
+      aptos={stats?.aptos ?? null}
+      noAptos={stats?.noAptos ?? null}
+      upcomingAppointments={upcomingResult.success ? upcomingResult.appointments : []}
       months={monthlyResult.months}
     />
   )

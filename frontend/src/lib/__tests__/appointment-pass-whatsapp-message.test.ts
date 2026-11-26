@@ -1,4 +1,7 @@
-import { buildAppointmentPassWhatsAppMessage } from '@/lib/appointment-pass-whatsapp-message'
+import {
+  buildAppointmentPassWhatsAppMessage,
+  buildPrefillLinkOnlyWhatsAppMessage,
+} from '@/lib/appointment-pass-whatsapp-message'
 
 describe('appointment-pass-whatsapp-message', () => {
   const baseInput = {
@@ -36,5 +39,19 @@ describe('appointment-pass-whatsapp-message', () => {
     expect(text).toContain('Completa tus antecedentes médicos antes de tu cita en este enlace:')
     expect(text).toContain(prefillUrl)
     expect(text).toContain('tríptico')
+  })
+
+  it('buildPrefillLinkOnlyWhatsAppMessage envía únicamente saludo y enlace sin cita ni tríptico', () => {
+    const prefillUrl = 'https://app.medicaindustrial.com/prefill/clinica123'
+    const text = buildPrefillLinkOnlyWhatsAppMessage({
+      firstName: 'Ana',
+      prefillUrl,
+    })
+
+    expect(text).toContain('Hola Ana,')
+    expect(text).toContain(prefillUrl)
+    expect(text).not.toContain('tríptico')
+    expect(text).not.toContain('Sucursal:')
+    expect(text).not.toContain('Fecha:')
   })
 })

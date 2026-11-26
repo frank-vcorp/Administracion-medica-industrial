@@ -2,7 +2,10 @@
 
 import { UserRole } from '@prisma/client'
 import { createAppointment } from '@/actions/appointment.actions'
-import { getAssignableMedicalProfilesForCompany } from '@/actions/medical-profiles'
+import {
+  getOwnMedicalProfilesForCompany,
+  isMedicalProfileOwnedByCompany,
+} from '@/actions/medical-profiles'
 import {
   appointmentCapacityUserMessage,
   checkBranchHourCapacity,
@@ -73,7 +76,11 @@ async function resolveEffectivePortalProfileId(
   serviceProfileId?: string | null,
   workerId?: string | null,
 ): Promise<string | null> {
-  if (serviceProfileId) return serviceProfileId
+  if (serviceProfileId) {
+    return (await isMedicalProfileOwnedByCompany(serviceProfileId, companyId))
+      ? serviceProfileId
+      : null
+  }
   if (!workerId) return null
   const w = await prisma.worker.findFirst({
     where: { id: workerId, companyId },
@@ -153,7 +160,7 @@ export async function getPortalAppointmentBookingContext() {
     }))
   })
 
-  const profiles = await getAssignableMedicalProfilesForCompany(gate.companyId)
+  const profiles = await getOwnMedicalProfilesForCompany(gate.companyId)
 
   return {
     success: true as const,
@@ -366,6 +373,16 @@ export async function createPortalClientAppointment(input: {
     return { success: false as const, error: 'Sucursal no autorizada.' }
   }
 
+  if (input.serviceProfileId) {
+    const owned = await isMedicalProfileOwnedByCompany(input.serviceProfileId, gate.companyId)
+    if (!owned) {
+      return {
+        success: false as const,
+        error: 'El perfil seleccionado no pertenece a su empresa.',
+      }
+    }
+  }
+
   const effectiveProfileId = input.serviceProfileId || worker.medicalProfileId || null
   const scheduledAt = parseAppointmentLocalDateTime(input.date, input.time)
   const capacityCheck = await checkBranchHourCapacity(prisma, input.branchId, scheduledAt, {
@@ -389,6 +406,7 @@ export async function createPortalClientAppointment(input: {
         capacityCheck.reason === 'INSUFFICIENT_MINUTES' ||
         capacityCheck.reason === 'OUTSIDE_HOURS' ||
         capacityCheck.reason === 'BRANCH_CLOSED' ||
+        capacityCheck.reason === 'BRANCH_INACTIVE' ||
         capacityCheck.reason === 'APPOINTMENT_IN_PAST'
           ? appointmentCapacityUserMessage(capacityCheck)
           : fallbackMessage,
@@ -433,7 +451,20 @@ export async function createPortalClientAppointment(input: {
           scheduledTimeLabel: formatAppointmentAgendaTime(apt.scheduledAt),
         }
       : null,
-    whatsApp: result.whatsApp ?? null,
+    whatsApp: result.whatsApp
+      ? {
+          sent: Boolean(result.whatsApp.sent),
+          triptychSent: Boolean(result.whatsApp.triptychSent),
+          skipped: Boolean(result.whatsApp.skipped),
+          missingPhone: result.whatsApp.error === 'Sin teléfono del paciente',
+        }
+      : null,
+    email: result.email
+      ? {
+          sent: Boolean(result.email.sent),
+          skipped: Boolean(result.email.skipped),
+        }
+      : null,
   }
 }
 
@@ -508,6 +539,7 @@ export async function submitPortalSpecialRequestContact(input: {
   const routing = await getPortalSpecialRequestRouting()
 
   let anyLogisticsSent = false
+  let lastWaError: string | undefined
   for (const to of routing.logisticsPhones) {
     const r = await sendInstitutionalWhatsAppMessage({
       toPhone: to,
@@ -515,19 +547,22 @@ export async function submitPortalSpecialRequestContact(input: {
       ...actor,
     })
     if (r.sent) anyLogisticsSent = true
+    else if (r.error) lastWaError = r.error
   }
 
   const sellerPhone = company.seller?.phone?.trim() || null
-  let seller = { sent: false }
+  let seller: { sent: boolean; error?: string } = { sent: false }
   if (routing.copyToSeller && sellerPhone) {
     seller = await sendInstitutionalWhatsAppMessage({
       toPhone: sellerPhone,
       text: message,
       ...actor,
     })
+    if (!seller.sent && seller.error) lastWaError = seller.error
   }
 
   if (!anyLogisticsSent && !seller.sent) {
+    console.error('[submitPortalSpecialRequestContact] WhatsApp no entregado:', lastWaError ?? 'unknown')
     return {
       success: false as const,
       error:

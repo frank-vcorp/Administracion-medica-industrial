@@ -54,7 +54,9 @@ import {
 } from '@/lib/appointment-capacity'
 import { isPrismaMissingColumnError } from '@/lib/prisma/missing-column-error'
 import { applySentenceCase } from '@/lib/text/sentence-case'
+import { sendAppointmentPassEmail } from '@/actions/appointment-pass-email.actions'
 import { sendAppointmentPassWhatsApp } from '@/actions/appointment-pass-whatsapp.actions'
+import { createOrReplacePrefilledInvitationForAppointment } from '@/lib/prefilled-invitation-server'
 import {
   createAppointmentInputSchema,
   rescheduleAppointmentBodySchema,
@@ -236,7 +238,7 @@ export async function createAppointment(data: {
     }
     const appointmentInclude = {
       worker: {
-        select: { id: true, firstName: true, lastName: true, universalId: true, phone: true },
+        select: { id: true, firstName: true, lastName: true, universalId: true, phone: true, email: true },
       },
       company: {
         select: { id: true, name: true },
@@ -275,12 +277,36 @@ export async function createAppointment(data: {
     revalidatePath('/appointments')
     revalidatePath('/dashboard')
 
-    const whatsApp = await sendAppointmentPassWhatsApp(appointment.id)
+    const hasPhone = (appointment.worker.phone?.replace(/\D/g, '').length ?? 0) >= 10
+    const hasEmail = Boolean(appointment.worker.email?.trim())
+    let sharedPrefillUrl: string | undefined
+    if (hasPhone || hasEmail) {
+      try {
+        const invite = await createOrReplacePrefilledInvitationForAppointment({
+          appointmentId: appointment.id,
+          generatedById: session.user.id,
+          scheduledAt: appointment.scheduledAt,
+          channel: hasPhone ? 'WHATSAPP' : 'LINK',
+        })
+        sharedPrefillUrl = invite.prefillUrl
+      } catch (inviteErr) {
+        console.error(
+          '[createAppointment] Error generando enlace de prellenado:',
+          inviteErr instanceof Error ? inviteErr.message : 'unknown',
+        )
+      }
+    }
+
+    const [whatsApp, email] = await Promise.all([
+      sendAppointmentPassWhatsApp(appointment.id, { prefillUrl: sharedPrefillUrl }),
+      sendAppointmentPassEmail(appointment.id, { prefillUrl: sharedPrefillUrl }),
+    ])
 
     return {
       success: true,
       appointment,
       whatsApp,
+      email,
     }
   } catch (error) {
     console.error(

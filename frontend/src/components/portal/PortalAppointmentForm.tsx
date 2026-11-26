@@ -9,7 +9,6 @@ import {
 import PortalAppointmentDateCalendar from '@/components/portal/PortalAppointmentDateCalendar'
 import PortalQuickWorkerRegister from '@/components/portal/PortalQuickWorkerRegister'
 import PortalSpecialRequestPanel from '@/components/portal/PortalSpecialRequestPanel'
-import type { AppointmentPassWhatsAppResult } from '@/actions/appointment-pass-whatsapp.actions'
 import type { PortalWorkerListItem } from '@/actions/portal-worker.actions'
 import { formatAgendaDayHeading } from '@/lib/appointment-scheduling'
 import type { BranchHourSlotAvailability } from '@/lib/appointment-capacity'
@@ -25,6 +24,47 @@ type Props = {
 }
 
 type WorkerOption = BookingContext['workers'][number]
+
+type PortalClientWhatsAppStatus = {
+  sent: boolean
+  triptychSent: boolean
+  skipped: boolean
+  missingPhone?: boolean
+}
+
+type PortalClientEmailStatus = {
+  sent: boolean
+  skipped: boolean
+}
+
+const PORTAL_CLIENT_ERROR_MESSAGES: Record<string, string> = {
+  APPOINTMENT_IN_PAST: 'No puede agendar en una fecha u hora pasada.',
+  OUTSIDE_HOURS: 'La hora elegida está fuera del horario de atención de la sucursal.',
+  BRANCH_CLOSED: 'La sucursal no atiende en la fecha seleccionada.',
+  BRANCH_INACTIVE: 'La sucursal seleccionada no está disponible.',
+  EXCEEDS_CLOSING_TIME:
+    'La duración de los estudios rebasa la hora de cierre. Elija un horario más temprano.',
+  INSUFFICIENT_MINUTES:
+    'No hay tiempo suficiente en el horario elegido. Seleccione otra hora.',
+  BRANCH_HOUR_FULL:
+    'Este horario ya no tiene cupo. Elija otra hora o solicite atención personalizada.',
+  CLIENTE_DESHABILITADO:
+    'Su empresa no tiene habilitado el agendamiento en este momento; contacte a nuestro equipo.',
+}
+
+function formatPortalClientError(raw?: string | null): string {
+  const trimmed = raw?.trim()
+  if (!trimmed) {
+    return 'No se pudo agendar la cita. Verifique la fecha y hora e intente de nuevo.'
+  }
+  if (PORTAL_CLIENT_ERROR_MESSAGES[trimmed]) {
+    return PORTAL_CLIENT_ERROR_MESSAGES[trimmed]
+  }
+  if (/^[A-Z0-9_]+$/.test(trimmed)) {
+    return 'No se pudo agendar la cita. Verifique la fecha y hora e intente de nuevo.'
+  }
+  return trimmed
+}
 
 function mergeWorkers(existing: WorkerOption[], incoming: PortalWorkerListItem[]): WorkerOption[] {
   const map = new Map(existing.map((w) => [w.id, w]))
@@ -60,13 +100,15 @@ export default function PortalAppointmentForm({ context }: Props) {
   const [time, setTime] = useState('09:00')
   const [serviceProfileId, setServiceProfileId] = useState('')
   const [slots, setSlots] = useState<BranchHourSlotAvailability[]>([])
+  const [slotsLoading, setSlotsLoading] = useState(true)
   const [capacityMode, setCapacityMode] = useState<'HOURLY_COUNT' | 'DURATION_MINUTES'>('HOURLY_COUNT')
   const [requiredDurationMinutes, setRequiredDurationMinutes] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCapacityHelp, setShowCapacityHelp] = useState(false)
   const [showBulkRequest, setShowBulkRequest] = useState(false)
   const [successFolio, setSuccessFolio] = useState<string | null>(null)
-  const [successWhatsApp, setSuccessWhatsApp] = useState<AppointmentPassWhatsAppResult | null>(null)
+  const [successWhatsApp, setSuccessWhatsApp] = useState<PortalClientWhatsAppStatus | null>(null)
+  const [successEmail, setSuccessEmail] = useState<PortalClientEmailStatus | null>(null)
   const [pending, startTransition] = useTransition()
   const readOnly = context.isPreview
   const showSpecialRequest = showCapacityHelp || showBulkRequest
@@ -89,18 +131,44 @@ export default function PortalAppointmentForm({ context }: Props) {
 
   useEffect(() => {
     if (!branchId || !date) return
-    void getPortalBranchHourAvailability({
-      branchId,
-      date,
-      serviceProfileId: effectiveProfileId,
-      workerId: workerId || null,
-    }).then((res) => {
-      if (res.success) {
-        setSlots(res.slots)
-        setCapacityMode(res.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT')
-        setRequiredDurationMinutes(res.requiredDurationMinutes ?? null)
+    let cancelled = false
+    void Promise.resolve().then(async () => {
+      if (cancelled) return
+      setSlotsLoading(true)
+      try {
+        const res = await getPortalBranchHourAvailability({
+          branchId,
+          date,
+          serviceProfileId: effectiveProfileId,
+          workerId: workerId || null,
+        })
+        if (cancelled) return
+        if (res.success) {
+          setSlots(res.slots)
+          setCapacityMode(
+            res.capacityMode === 'DURATION_MINUTES' ? 'DURATION_MINUTES' : 'HOURLY_COUNT',
+          )
+          setRequiredDurationMinutes(res.requiredDurationMinutes ?? null)
+          setTime((prevTime) => {
+            const current = res.slots.find(
+              (s) => `${s.hour.toString().padStart(2, '0')}:00` === prevTime,
+            )
+            if (!current || current.full) {
+              const firstOpen = res.slots.find((s) => !s.full)
+              if (firstOpen) {
+                return `${firstOpen.hour.toString().padStart(2, '0')}:00`
+              }
+            }
+            return prevTime
+          })
+        }
+      } finally {
+        if (!cancelled) setSlotsLoading(false)
       }
     })
+    return () => {
+      cancelled = true
+    }
   }, [branchId, date, effectiveProfileId, workerId])
 
   const timeOptions = useMemo(() => {
@@ -131,14 +199,6 @@ export default function PortalAppointmentForm({ context }: Props) {
     })
   }, [slots])
 
-  useEffect(() => {
-    const current = timeOptions.find((t) => t.value === time)
-    if (current?.full) {
-      const firstOpen = timeOptions.find((t) => !t.full)
-      if (firstOpen) setTime(firstOpen.value)
-    }
-  }, [timeOptions, time])
-
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (readOnly) return
@@ -155,6 +215,7 @@ export default function PortalAppointmentForm({ context }: Props) {
       if (res.success) {
         setSuccessFolio(res.appointment?.expedientId ?? '—')
         setSuccessWhatsApp(res.whatsApp ?? null)
+        setSuccessEmail(res.email ?? null)
         return
       }
       if (res.error === 'BRANCH_HOUR_FULL') {
@@ -165,7 +226,8 @@ export default function PortalAppointmentForm({ context }: Props) {
         )
         return
       }
-      setError(res.error ?? 'No se pudo agendar')
+      const rawError = 'userMessage' in res && res.userMessage ? res.userMessage : res.error
+      setError(formatPortalClientError(rawError))
     })
   }
 
@@ -182,10 +244,15 @@ export default function PortalAppointmentForm({ context }: Props) {
             {successWhatsApp.triptychSent ? ' y el tríptico de preparación.' : '.'}
           </div>
         ) : successWhatsApp ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-            {successWhatsApp.skipped
-              ? 'No se envió el WhatsApp automático (el colaborador no tiene un teléfono celular válido o WhatsApp automático está desactivado).'
-              : (successWhatsApp.error ?? 'El pase automático por WhatsApp quedó pendiente.')}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+            {successWhatsApp.missingPhone
+              ? 'El colaborador no tiene celular registrado; puede compartirle los datos de su cita o actualizar su teléfono.'
+              : 'Tu cita quedó registrada correctamente. Si el colaborador no recibe el mensaje de WhatsApp en unos minutos, compártele el folio de papeleta o comunícate con nuestro equipo.'}
+          </div>
+        ) : null}
+        {successEmail?.sent ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            ✉️ Se envió también por correo la confirmación de cita, el enlace de prellenado y el tríptico.
           </div>
         ) : null}
         <button
@@ -194,6 +261,7 @@ export default function PortalAppointmentForm({ context }: Props) {
           onClick={() => {
             setSuccessFolio(null)
             setSuccessWhatsApp(null)
+            setSuccessEmail(null)
           }}
         >
           Agendar otra cita
@@ -254,6 +322,11 @@ export default function PortalAppointmentForm({ context }: Props) {
                 <strong>
                   {formatMinutesLabel(effectiveProfileDuration ?? requiredDurationMinutes)}
                 </strong>
+              </p>
+            )}
+            {context.profiles.length === 0 && (
+              <p className="mt-1 text-xs text-slate-500">
+                Su empresa aún no tiene perfiles propios configurados; contacte a SME si requiere uno.
               </p>
             )}
           </label>
@@ -322,6 +395,7 @@ export default function PortalAppointmentForm({ context }: Props) {
               time={time}
               serviceProfileId={effectiveProfileId}
               slots={slots}
+              slotsLoading={slotsLoading}
               readOnly={readOnly}
               defaultOpen={workers.length === 0}
               onSelectTime={setTime}

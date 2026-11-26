@@ -214,7 +214,8 @@ function ShellNavigation({
 
       {showPortalItems && (
         <>
-          <NavSection label="B2B Cliente" collapsed={collapsed} />
+          <NavSection label="Portal Empresa" collapsed={collapsed} />
+          <NavItem href="/portal" icon={LayoutDashboard} label="Inicio" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/portal/events" icon={Globe} label="Expedientes B2B" collapsed={collapsed} onNavigate={onNavigate} />
           <NavItem href="/portal/appointments/new" icon={Calendar} label="Agendar cita" collapsed={collapsed} onNavigate={onNavigate} />
         </>
@@ -413,7 +414,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {!isEventWorkspace && (
           <header className="relative z-[1] hidden h-16 flex-shrink-0 items-center justify-between border-b-[3px] border-b-[#00afaa] bg-white px-8 md:flex">
             <div>
-              <h2 className="text-lg font-semibold text-sme-secondary">Panel de Control</h2>
+              <h2 className="text-lg font-semibold text-sme-secondary">
+                {pathname?.startsWith('/portal') ? 'Portal Empresarial' : 'Panel de Control'}
+              </h2>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-sme-gray">

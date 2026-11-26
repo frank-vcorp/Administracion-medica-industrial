@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { logAudit } from '@/actions/audit.actions'
+import { isMedicalProfileOwnedByCompany } from '@/actions/medical-profiles'
 import {
   appointmentCapacityUserMessage,
   checkBranchHourCapacity,
@@ -133,14 +134,19 @@ export async function quickRegisterPortalWorkers(input: {
     return { success: false as const, error: 'Sucursal no autorizada.' }
   }
 
+  const validProfileId =
+    serviceProfileId && (await isMedicalProfileOwnedByCompany(serviceProfileId, gate.companyId))
+      ? serviceProfileId
+      : null
+
   const scheduledAt = parseAppointmentLocalDateTime(date, time)
   const [capacityCheck, daySlots] = await Promise.all([
     checkBranchHourCapacity(prisma, branchId, scheduledAt, {
-      serviceProfileId: serviceProfileId ?? null,
+      serviceProfileId: validProfileId,
       partySize: rows.length,
     }),
     computeBranchHourSlotsForDay(prisma, branchId, date, {
-      serviceProfileId: serviceProfileId ?? null,
+      serviceProfileId: validProfileId,
     }),
   ])
 
@@ -225,6 +231,7 @@ export async function quickRegisterPortalWorkers(input: {
         companyId: gate.companyId,
         branchId,
         intakeSource: 'APPOINTMENT',
+        ...(validProfileId ? { medicalProfileId: validProfileId } : {}),
       },
       select: {
         id: true,

@@ -4,12 +4,20 @@ import { getServerSession } from 'next-auth/next'
 import { z } from 'zod'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
-import { buildAppointmentPassWhatsAppMessage } from '@/lib/appointment-pass-whatsapp-message'
+import {
+  buildAppointmentPassWhatsAppMessage,
+  buildPrefillLinkOnlyWhatsAppMessage,
+} from '@/lib/appointment-pass-whatsapp-message'
 import { createOrReplacePrefilledInvitationForAppointment } from '@/lib/prefilled-invitation-server'
 import { deliverWhatsAppPassWithTriptych } from '@/lib/whatsapp-pass-delivery'
 
 const AppointmentIdSchema = z.object({
   appointmentId: z.string().uuid(),
+})
+
+const PrefillLinkOnlySchema = z.object({
+  appointmentId: z.string().uuid(),
+  prefillUrl: z.string().trim().url('Enlace de prellenado inválido'),
 })
 
 const STAFF_ROLES = new Set([
@@ -34,27 +42,17 @@ export type AppointmentPassWhatsAppResult = {
   prefillUrl?: string
 }
 
-/**
- * Dispara Baileys al crear o reenviar el pase de cita: mensaje con datos de la cita,
- * enlace de prellenado y tríptico PDF (`tips-para-pacientes.pdf`).
- * Autoriza staff o usuarios `COMPANY_CLIENT` dueños de la cita/trabajador.
- */
-export async function sendAppointmentPassWhatsApp(
-  appointmentId: string,
-  options?: { prefillUrl?: string | null; includePrefillLink?: boolean },
-): Promise<AppointmentPassWhatsAppResult> {
+async function authorizeAppointmentWhatsApp(appointmentId: string) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
-    return { sent: false, triptychSent: false, skipped: false, error: 'No autenticado' }
-  }
-
-  const parsed = AppointmentIdSchema.safeParse({ appointmentId })
-  if (!parsed.success) {
-    return { sent: false, triptychSent: false, skipped: false, error: 'Cita no válida' }
+    return {
+      ok: false as const,
+      result: { sent: false, triptychSent: false, skipped: false, error: 'No autenticado' },
+    }
   }
 
   const appointment = await prisma.appointment.findUnique({
-    where: { id: parsed.data.appointmentId },
+    where: { id: appointmentId },
     include: {
       worker: {
         select: { firstName: true, lastName: true, phone: true, companyId: true },
@@ -70,7 +68,10 @@ export async function sendAppointmentPassWhatsApp(
   })
 
   if (!appointment) {
-    return { sent: false, triptychSent: false, skipped: false, error: 'Cita no encontrada' }
+    return {
+      ok: false as const,
+      result: { sent: false, triptychSent: false, skipped: false, error: 'Cita no encontrada' },
+    }
   }
 
   const role = String(session.user.role ?? '')
@@ -84,24 +85,58 @@ export async function sendAppointmentPassWhatsApp(
 
   if (!isStaff && !isOwnerCompanyClient) {
     return {
-      sent: false,
-      triptychSent: false,
-      skipped: false,
-      error: 'Sin permiso para enviar pase de esta cita',
+      ok: false as const,
+      result: {
+        sent: false,
+        triptychSent: false,
+        skipped: false,
+        error: 'Sin permiso para enviar pase de esta cita',
+      },
     }
   }
 
   const rawPhone = appointment.worker.phone?.trim() ?? ''
   if (rawPhone.replace(/\D/g, '').length < 10) {
-    return { sent: false, triptychSent: false, skipped: true, error: 'Sin teléfono del paciente' }
+    return {
+      ok: false as const,
+      result: { sent: false, triptychSent: false, skipped: true, error: 'Sin teléfono del paciente' },
+    }
   }
+
+  return {
+    ok: true as const,
+    actorUserId: session.user.id,
+    actorRole: role,
+    appointment,
+    rawPhone,
+  }
+}
+
+/**
+ * Dispara Baileys al crear o reenviar el pase de cita: mensaje con datos de la cita,
+ * enlace de prellenado y tríptico PDF (`tips-para-pacientes.pdf`).
+ * Autoriza staff o usuarios `COMPANY_CLIENT` dueños de la cita/trabajador.
+ */
+export async function sendAppointmentPassWhatsApp(
+  appointmentId: string,
+  options?: { prefillUrl?: string | null; includePrefillLink?: boolean },
+): Promise<AppointmentPassWhatsAppResult> {
+  const parsed = AppointmentIdSchema.safeParse({ appointmentId })
+  if (!parsed.success) {
+    return { sent: false, triptychSent: false, skipped: false, error: 'Cita no válida' }
+  }
+
+  const auth = await authorizeAppointmentWhatsApp(parsed.data.appointmentId)
+  if (!auth.ok) return auth.result
+
+  const { actorUserId, actorRole, appointment, rawPhone } = auth
 
   let resolvedPrefillUrl: string | undefined = options?.prefillUrl?.trim() || undefined
   if (!resolvedPrefillUrl && options?.includePrefillLink !== false) {
     try {
       const invite = await createOrReplacePrefilledInvitationForAppointment({
         appointmentId: appointment.id,
-        generatedById: session.user.id,
+        generatedById: actorUserId,
         scheduledAt: appointment.scheduledAt,
         channel: 'WHATSAPP',
       })
@@ -130,8 +165,8 @@ export async function sendAppointmentPassWhatsApp(
   const wa = await deliverWhatsAppPassWithTriptych({
     phone: rawPhone,
     text: messageText,
-    actorUserId: session.user.id,
-    actorRole: role,
+    actorUserId,
+    actorRole,
     auditContext: 'appointment_pass',
     entityId: appointment.id,
     attachPatientTriptych: true,
@@ -145,5 +180,52 @@ export async function sendAppointmentPassWhatsApp(
     error: wa.error,
     messageText,
     prefillUrl: resolvedPrefillUrl,
+  }
+}
+
+/**
+ * Envía únicamente el enlace de prellenado vía Baileys (para pacientes que ya están en clínica).
+ */
+export async function sendPrefillLinkOnlyWhatsApp(
+  appointmentId: string,
+  prefillUrl: string,
+): Promise<AppointmentPassWhatsAppResult> {
+  const parsed = PrefillLinkOnlySchema.safeParse({ appointmentId, prefillUrl })
+  if (!parsed.success) {
+    return {
+      sent: false,
+      triptychSent: false,
+      skipped: false,
+      error: parsed.error.issues[0]?.message ?? 'Datos inválidos',
+    }
+  }
+
+  const auth = await authorizeAppointmentWhatsApp(parsed.data.appointmentId)
+  if (!auth.ok) return auth.result
+
+  const { actorUserId, actorRole, appointment, rawPhone } = auth
+  const messageText = buildPrefillLinkOnlyWhatsAppMessage({
+    firstName: appointment.worker.firstName,
+    prefillUrl: parsed.data.prefillUrl,
+  })
+
+  const wa = await deliverWhatsAppPassWithTriptych({
+    phone: rawPhone,
+    text: messageText,
+    actorUserId,
+    actorRole,
+    auditContext: 'prefill_invitation_link',
+    entityId: appointment.id,
+    attachPatientTriptych: false,
+  })
+
+  return {
+    sent: wa.sent,
+    triptychSent: false,
+    skipped: wa.skipped,
+    fallbackWaUrl: wa.fallbackWaUrl,
+    error: wa.error,
+    messageText,
+    prefillUrl: parsed.data.prefillUrl,
   }
 }

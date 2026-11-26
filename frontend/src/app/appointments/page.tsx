@@ -13,7 +13,7 @@ import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton
 import { getBranches } from '@/actions/admin.actions'
 import { generateInvitation } from '@/actions/prefilled-invitation.actions'
 import {
-    sendAppointmentPassWhatsApp,
+    sendPrefillLinkOnlyWhatsApp,
     type AppointmentPassWhatsAppResult,
 } from '@/actions/appointment-pass-whatsapp.actions'
 import { useRouter } from 'next/navigation'
@@ -303,7 +303,7 @@ export default function AppointmentsPage() {
         setInviteWaBusy(true)
         setInviteWaResult(null)
         try {
-            const res = await sendAppointmentPassWhatsApp(inviteAptId, { prefillUrl: inviteLink })
+            const res = await sendPrefillLinkOnlyWhatsApp(inviteAptId, inviteLink)
             setInviteWaResult(res)
         } catch {
             setInviteWaResult({
@@ -578,7 +578,7 @@ export default function AppointmentsPage() {
                             {inviteLink && (
                                 <>
                                     <p className="text-xs text-slate-500">
-                                        Comparte este enlace con el trabajador para que complete sus antecedentes médicos antes de la cita. Vigente hasta la hora de su cita.
+                                        Comparte este enlace con el trabajador para que complete sus antecedentes médicos.
                                     </p>
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-mono text-slate-700 break-all">
                                         {inviteLink}
@@ -610,19 +610,14 @@ export default function AppointmentsPage() {
                                         className="w-full bg-[#25D366] hover:bg-[#128C7E] disabled:opacity-65 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
                                     >
                                         {inviteWaResult?.sent
-                                            ? '✓ Enviado por WhatsApp'
+                                            ? '✓ Enlace enviado por WhatsApp'
                                             : inviteWaBusy
                                                 ? 'Enviando por WhatsApp…'
-                                                : '📱 Enviar por WhatsApp (cita + enlace + tríptico)'}
+                                                : '📱 Enviar enlace por WhatsApp'}
                                     </button>
                                     {inviteWaResult?.sent && (
-                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 space-y-1">
-                                            <p className="font-bold">✓ Enviado por WhatsApp al trabajador</p>
-                                            <p>
-                                                {inviteWaResult.triptychSent
-                                                    ? 'Tríptico de preparación adjunto.'
-                                                    : 'Se envió el pase con el enlace de prellenado (tríptico enviado como enlace o pendiente en gateway).'}
-                                            </p>
+                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+                                            <p className="font-bold">✓ Enlace de prellenado enviado por WhatsApp al trabajador</p>
                                         </div>
                                     )}
                                     {inviteWaResult && !inviteWaResult.sent && (

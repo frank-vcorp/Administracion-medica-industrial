@@ -456,13 +456,8 @@ async function findPublicGeneralCompanyId(): Promise<string | null> {
   return row?.id ?? null
 }
 
-/** Perfiles que se pueden asignar a pacientes/citas de una empresa: propios + Público General. */
-export async function getAssignableMedicalProfilesForCompany(companyId: string) {
-  const publicGeneralId = await findPublicGeneralCompanyId()
-  const companyIds = [companyId]
-  if (publicGeneralId && publicGeneralId !== companyId) {
-    companyIds.push(publicGeneralId)
-  }
+async function queryMedicalProfilesByCompanyIds(companyIds: string[]) {
+  if (companyIds.length === 0) return []
   try {
     return await prisma.medicalProfile.findMany({
       where: { companyId: { in: companyIds } },
@@ -488,6 +483,32 @@ export async function getAssignableMedicalProfilesForCompany(companyId: string) 
       durationOverrideMinutes: null,
     }))
   }
+}
+
+/** Perfiles propios de una empresa (sin Público General ni otras empresas). */
+export async function getOwnMedicalProfilesForCompany(companyId: string) {
+  return queryMedicalProfilesByCompanyIds([companyId])
+}
+
+export async function isMedicalProfileOwnedByCompany(
+  medicalProfileId: string,
+  companyId: string,
+): Promise<boolean> {
+  const row = await prisma.medicalProfile.findFirst({
+    where: { id: medicalProfileId, companyId },
+    select: { id: true },
+  })
+  return Boolean(row)
+}
+
+/** Perfiles que se pueden asignar a pacientes/citas de una empresa: propios + Público General. */
+export async function getAssignableMedicalProfilesForCompany(companyId: string) {
+  const publicGeneralId = await findPublicGeneralCompanyId()
+  const companyIds = [companyId]
+  if (publicGeneralId && publicGeneralId !== companyId) {
+    companyIds.push(publicGeneralId)
+  }
+  return queryMedicalProfilesByCompanyIds(companyIds)
 }
 
 export async function isMedicalProfileAssignableToCompany(

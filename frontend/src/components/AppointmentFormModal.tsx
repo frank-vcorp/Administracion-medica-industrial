@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useMemo } from 'react'
 import { createAppointment } from '@/actions/appointment.actions'
 import { formatMinutesLabel, resolveEffectiveProfileDuration } from '@/lib/profile-duration'
-import { sendAppointmentPassEmail } from '@/actions/appointment-pass-email.actions'
+import type { AppointmentPassEmailResult } from '@/actions/appointment-pass-email.actions'
 import { getWorkersByCompany, searchWorkersByCompany } from '@/actions/worker.actions'
 import { getBranches, getCompanies } from '@/actions/admin.actions'
 import {
@@ -69,6 +69,7 @@ interface AppointmentResult {
     }
     error?: string
     whatsApp?: AppointmentPassWhatsAppResult
+    email?: AppointmentPassEmailResult
 }
 
 export default function AppointmentFormModal({
@@ -373,9 +374,6 @@ export default function AppointmentFormModal({
 
                 if (result.success) {
                     setSuccessData(result)
-                    if (result.appointment?.id) {
-                        void sendAppointmentPassEmail(result.appointment.id)
-                    }
                     router.refresh()
                     onSuccess?.({ branchId, date })
                 } else if ('error' in result && result.error) {
@@ -454,6 +452,15 @@ export default function AppointmentFormModal({
                                 ⚠️ El trabajador no tiene número de celular registrado.
                             </div>
                         )}
+                        {successData.email?.sent ? (
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                                ✉️ Confirmación, enlace de prellenado y tríptico enviados por correo.
+                            </div>
+                        ) : successData.email && !successData.email.skipped && successData.email.error ? (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                ✉️ Correo: {successData.email.error}
+                            </div>
+                        ) : null}
                         <button
                             onClick={() => { setSuccessData(null); setIsOpen(false); }}
                             className="block w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"

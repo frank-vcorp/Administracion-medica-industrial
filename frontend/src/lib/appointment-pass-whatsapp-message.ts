@@ -60,3 +60,16 @@ export function buildAppointmentPassWhatsAppMessage(input: AppointmentPassMessag
 
   return lines.join('\n')
 }
+
+/** Mensaje directo para paciente que ya está en clínica: únicamente enlace de prellenado. */
+export function buildPrefillLinkOnlyWhatsAppMessage(input: {
+  firstName: string
+  prefillUrl: string
+}): string {
+  return [
+    `Hola ${input.firstName},`,
+    '',
+    'Completa tus antecedentes médicos en este enlace:',
+    input.prefillUrl.trim(),
+  ].join('\n')
+}

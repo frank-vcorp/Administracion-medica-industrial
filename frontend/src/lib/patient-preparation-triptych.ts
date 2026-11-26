@@ -13,7 +13,22 @@ export async function readPatientPreparationTriptychPdf(): Promise<Buffer> {
     'docs',
     PATIENT_PREPARATION_TRIPTYCH_FILENAME,
   )
-  return readFile(absolute)
+  try {
+    return await readFile(absolute)
+  } catch (fsErr) {
+    // En despliegues serverless (Vercel), `public/` puede no quedar en `process.cwd()`.
+    const publicUrl = resolvePublicPatientTriptychUrl()
+    const res = await fetch(publicUrl, {
+      signal: AbortSignal.timeout(8000),
+      cache: 'no-store',
+    })
+    if (!res.ok) {
+      throw fsErr instanceof Error
+        ? fsErr
+        : new Error(`No se pudo descargar el tríptico (${res.status})`)
+    }
+    return Buffer.from(await res.arrayBuffer())
+  }
 }
 
 /** URL pública del tríptico (fallback si el gateway aún no tiene send-document-key). */

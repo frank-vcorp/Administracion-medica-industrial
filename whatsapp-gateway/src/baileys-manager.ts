@@ -351,7 +351,35 @@ class BaileysManager {
     return this.getSnapshot()
   }
 
+  private hasPersistedSession(
+    creds: { registered?: boolean; me?: { id?: string } } | undefined,
+  ): boolean {
+    return Boolean(creds?.registered || creds?.me?.id)
+  }
+
+  private async waitForConnectedSocket(timeoutMs: number): Promise<boolean> {
+    const started = Date.now()
+    while (Date.now() - started < timeoutMs) {
+      if (this.status === 'connected' && this.sock) return true
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    return this.status === 'connected' && Boolean(this.sock)
+  }
+
   private async resolveJid(toPhone: string): Promise<string> {
+    if (this.status !== 'connected' || !this.sock) {
+      try {
+        const { state } = await useMultiFileAuthState(this.authDir())
+        if (this.hasPersistedSession(state.creds)) {
+          if (!this.starting) {
+            void this.warmExistingSession()
+          }
+          await this.waitForConnectedSocket(8000)
+        }
+      } catch (err) {
+        logger.warn({ err }, 'No se pudo verificar sesión persistida al enviar')
+      }
+    }
     if (this.status !== 'connected' || !this.sock) {
       throw new Error('WhatsApp no conectado. Escanee el QR en Configuración.')
     }
@@ -427,9 +455,24 @@ class BaileysManager {
   /** Restaura sesión existente al arrancar el gateway (sin QR). */
   async warmExistingSession(): Promise<void> {
     if (this.starting || this.pairingActive || this.sock) return
-    const { state } = await useMultiFileAuthState(this.authDir())
-    if (!state.creds?.registered) return
-    await this.openSocket()
+    this.starting = true
+    try {
+      const { state } = await useMultiFileAuthState(this.authDir())
+      if (!this.hasPersistedSession(state.creds)) {
+        logger.info('Sin sesión WhatsApp persistida al arrancar')
+        await syncWhatsAppRow({ status: 'disconnected', lastError: null })
+        return
+      }
+      logger.info(
+        { registered: Boolean(state.creds?.registered), hasMe: Boolean(state.creds?.me?.id) },
+        'Restaurando sesión WhatsApp persistida',
+      )
+      await this.openSocket()
+    } catch (err) {
+      logger.error({ err }, 'Error restaurando sesión WhatsApp persistida')
+    } finally {
+      this.starting = false
+    }
   }
 }
 

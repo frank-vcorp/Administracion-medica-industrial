@@ -24,6 +24,7 @@ type Props = {
   time: string
   serviceProfileId?: string | null
   slots: Slot[]
+  slotsLoading?: boolean
   readOnly?: boolean
   defaultOpen?: boolean
   onWorkersCreated: (workers: PortalWorkerListItem[], firstNewId?: string) => void
@@ -40,6 +41,7 @@ export default function PortalQuickWorkerRegister({
   time,
   serviceProfileId,
   slots,
+  slotsLoading = false,
   readOnly = false,
   defaultOpen = false,
   onWorkersCreated,
@@ -73,6 +75,7 @@ export default function PortalQuickWorkerRegister({
   }, [slots, time])
 
   const maxRows = slotsRemaining ?? 0
+  const hourFull = !slotsLoading && maxRows === 0
 
   const addRow = () => {
     if (rows.length >= maxRows) return
@@ -87,9 +90,8 @@ export default function PortalQuickWorkerRegister({
     setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)))
   }
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (readOnly) return
+  const handleRegister = () => {
+    if (readOnly || pending || slotsLoading || hourFull) return
     setError(null)
     setInfo(null)
 
@@ -115,18 +117,26 @@ export default function PortalQuickWorkerRegister({
         setError(res.userMessage ?? res.error ?? 'No se pudo registrar')
         return
       }
-      setInfo(res.message)
+      const baseMsg = `${res.message} El trabajador quedó seleccionado para confirmar su cita.`
       if (res.skipped.length > 0) {
         setInfo(
-          `${res.message} ${res.skipped.length} coincidencia(s) con registros existentes.`,
+          `✓ ${baseMsg} (${res.skipped.length} coincidencia(s) con registros existentes.)`,
         )
+      } else {
+        setInfo(`✓ ${baseMsg}`)
       }
       setRows([emptyRow()])
       onWorkersCreated(res.workers, res.workers[0]?.id)
     })
   }
 
-  const hourFull = maxRows === 0
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      handleRegister()
+    }
+  }
 
   return (
     <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-4 space-y-3">
@@ -136,7 +146,9 @@ export default function PortalQuickWorkerRegister({
             Alta rápida de trabajadores
           </p>
           <p className="text-sm text-sky-950 mt-1">
-            {hourFull ? (
+            {slotsLoading ? (
+              <>Consultando cupo del horario <strong>{time}</strong>…</>
+            ) : hourFull ? (
               <>El horario <strong>{time}</strong> no tiene cupo.</>
             ) : (
               <>
@@ -198,7 +210,11 @@ export default function PortalQuickWorkerRegister({
       )}
 
       {open && (
-        <form onSubmit={onSubmit} className="space-y-3 bg-white rounded-lg border border-sky-100 p-3">
+        <div
+          role="region"
+          aria-label="Registro rápido de trabajadores"
+          className="space-y-3 bg-white rounded-lg border border-sky-100 p-3"
+        >
           {rows.map((row, index) => (
             <div key={index} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] items-end">
               <label className="block text-xs">
@@ -208,6 +224,7 @@ export default function PortalQuickWorkerRegister({
                   data-sentence-case="proper-name"
                   value={row.firstName}
                   onChange={(e) => updateRow(index, { firstName: e.target.value })}
+                  onKeyDown={handleInputKeyDown}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
                   maxLength={120}
                 />
@@ -219,6 +236,7 @@ export default function PortalQuickWorkerRegister({
                   data-sentence-case="proper-name"
                   value={row.lastName}
                   onChange={(e) => updateRow(index, { lastName: e.target.value })}
+                  onKeyDown={handleInputKeyDown}
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
                   maxLength={120}
                 />
@@ -230,6 +248,7 @@ export default function PortalQuickWorkerRegister({
                   type="tel"
                   value={row.phone}
                   onChange={(e) => updateRow(index, { phone: e.target.value })}
+                  onKeyDown={handleInputKeyDown}
                   placeholder="4424532415"
                   className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
                 />
@@ -260,13 +279,14 @@ export default function PortalQuickWorkerRegister({
           {info && <p className="text-sm text-emerald-800">{info}</p>}
 
           <button
-            type="submit"
-            disabled={readOnly || pending || hourFull}
+            type="button"
+            onClick={handleRegister}
+            disabled={readOnly || pending || slotsLoading || hourFull}
             className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-800 disabled:opacity-50"
           >
             {readOnly ? 'Solo lectura (vista previa)' : pending ? 'Guardando…' : 'Guardar trabajadores'}
           </button>
-        </form>
+        </div>
       )}
     </div>
   )

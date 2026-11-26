@@ -420,3 +420,70 @@ export async function getPortalWorkerDetail(workerId: string) {
   }
 }
 
+export type PortalUpcomingAppointmentItem = {
+  id: string
+  expedientId: string | null
+  scheduledAt: string
+  status: string
+  workerId: string
+  workerName: string
+  branchName: string
+  profileName: string | null
+  prefillStatus: string | null
+}
+
+/** Próximas citas agendadas para vista operativa del portal B2B (multi-tenant estricto). */
+export async function getPortalUpcomingAppointments(limit = 5): Promise<{
+  success: boolean
+  appointments: PortalUpcomingAppointmentItem[]
+  error?: string
+}> {
+  try {
+    const { companyId } = await resolvePortalCompanyAccess()
+    const take = Math.min(Math.max(1, limit), 10)
+    const rows = await prisma.appointment.findMany({
+      where: {
+        companyId,
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        scheduledAt: { gte: new Date() },
+      },
+      orderBy: { scheduledAt: 'asc' },
+      take,
+      select: {
+        id: true,
+        expedientId: true,
+        scheduledAt: true,
+        status: true,
+        worker: { select: { id: true, firstName: true, lastName: true } },
+        branch: { select: { name: true } },
+        serviceProfile: { select: { name: true } },
+        prefilledInvitation: { select: { status: true } },
+      },
+    })
+
+    const appointments: PortalUpcomingAppointmentItem[] = rows.map((a) => ({
+      id: a.id,
+      expedientId: a.expedientId,
+      scheduledAt: a.scheduledAt.toISOString(),
+      status: a.status,
+      workerId: a.worker.id,
+      workerName: `${a.worker.firstName} ${a.worker.lastName}`.trim(),
+      branchName: a.branch.name,
+      profileName: a.serviceProfile?.name ?? null,
+      prefillStatus: a.prefilledInvitation?.status ?? null,
+    }))
+
+    return { success: true as const, appointments }
+  } catch (error) {
+    console.error(
+      'Error fetching portal upcoming appointments:',
+      error instanceof Error ? error.message : 'Unknown error',
+    )
+    return {
+      success: false as const,
+      error: 'No se pudieron cargar las próximas citas.',
+      appointments: [],
+    }
+  }
+}
+
