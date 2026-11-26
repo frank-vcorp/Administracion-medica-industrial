@@ -319,15 +319,31 @@ export async function renderDictamenGeneralPdfForEvent(
     applyEventDictamenLabFilters,
     groupEventTestsByEventId,
   } = await import('@/lib/clinical/dictamen-lab-papeleta')
+  const { resolveStudiesFromEvent } = await import('@/lib/dictamen-summary')
+
   const eventTestsForDictamenFilter = await prisma.eventTest.findMany({
     where: { eventId: { in: atencionResolution.eventIds } },
     select: {
+      id: true,
       eventId: true,
       testNameSnapshot: true,
+      status: true,
+      selectedOption: true,
+      resultNotes: true,
       clinicalContext: true,
+      test: { select: { name: true } },
+      extractionSnapshots: {
+        select: { structuredData: true },
+      },
     },
   })
-  const eventTestsByEventId = groupEventTestsByEventId(eventTestsForDictamenFilter)
+  const eventTestsByEventId = groupEventTestsByEventId(
+    eventTestsForDictamenFilter.map((et) => ({
+      eventId: et.eventId,
+      testNameSnapshot: et.testNameSnapshot,
+      clinicalContext: et.clinicalContext,
+    })),
+  )
 
   const mapStudiesLabs = (
     studies: typeof event.studies,
@@ -343,15 +359,16 @@ export async function renderDictamenGeneralPdfForEvent(
     })),
   })
 
-  const currentMapped = mapStudiesLabs(event.studies, event.labs)
-  if (currentMapped.studies.length === 0) {
-    const testsHere = eventTestsForDictamenFilter.filter((row) => row.eventId === event.id)
-    currentMapped.studies = testsHere
-      .filter((row) => (row.testNameSnapshot ?? '').trim().length > 0)
-      .map((row) => ({
-        serviceName: row.testNameSnapshot as string,
-        extractedData: { aplicado: true },
-      }))
+  const ped = (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+  const testsHere = eventTestsForDictamenFilter.filter((row) => row.eventId === event.id)
+  const resolvedCurrentStudies = resolveStudiesFromEvent(event.studies, testsHere, ped)
+
+  const currentMapped = {
+    studies: resolvedCurrentStudies,
+    labs: event.labs.map((lb) => ({
+      serviceName: lb.serviceName,
+      extractedData: lb.extractedData,
+    })),
   }
 
   const currentBlock = applyEventDictamenLabFilters(
@@ -379,7 +396,6 @@ export async function renderDictamenGeneralPdfForEvent(
     ),
   ]
 
-  const ped = (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
   const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
   const sexo = (ped.sexo ?? dp.sexo) as string | null
   const puesto = (dp.puesto_actual ?? dp.puesto) as string | null

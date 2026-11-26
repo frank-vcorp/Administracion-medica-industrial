@@ -29,7 +29,7 @@ function sanitizeFilenamePart(value: string): string {
   return value.replace(/[^\w.\-áéíóúñÁÉÍÓÚÑ ]+/gi, '_').slice(0, 80)
 }
 
-async function readPersistedPdfBytes(relativePath: string): Promise<Uint8Array | null> {
+export async function readPersistedPdfBytes(relativePath: string): Promise<Uint8Array | null> {
   const rel = relativePath.replace(/^\/+/, '')
   const abs = path.join(REPO_UPLOAD_DIR, rel)
   try {

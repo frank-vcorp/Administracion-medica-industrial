@@ -18,6 +18,7 @@ import { buildVerdictFromExam } from '@/lib/clinical/verdict.builder'
 import { buildRecommendationsFromExam } from '@/lib/clinical/recommendations'
 import { isAdminLike } from '@/lib/auth/roles'
 import { sendCierreClinico } from '@/actions/cierre-clinico-send.actions'
+import { CierreSendModal } from '@/components/clinical/CierreSendModal'
 import {
   Stethoscope,
   CheckCircle2,
@@ -66,6 +67,7 @@ export default function EventFlowController({
     const [isPending, startTransition] = useTransition()
     const [error, setError] = useState<string | null>(null)
     const [sendNote, setSendNote] = useState<string | null>(null)
+    const [modalChannel, setModalChannel] = useState<'email' | 'whatsapp' | null>(null)
     const [sending, setSending] = useState<'email' | 'whatsapp' | null>(null)
     // IMPL-20260826-08: estado para mostrar al usuario que la versión
     // firmada anterior fue sustituida por la nueva re-emisión. NO
@@ -364,42 +366,40 @@ export default function EventFlowController({
                             <div className="flex flex-col sm:flex-row gap-3 justify-center">
                                 <button
                                     type="button"
-                                    disabled={sending !== null}
                                     onClick={() => {
                                         setSendNote(null)
-                                        setSending('email')
-                                        startTransition(async () => {
-                                            const res = await sendCierreClinico({ eventId, channel: 'email' })
-                                            setSending(null)
-                                            setSendNote(res.success ? 'Cierre enviado por correo.' : (res.error ?? 'No se pudo enviar el correo.'))
-                                        })
+                                        setModalChannel('email')
                                     }}
-                                    className="bg-white border border-slate-300 text-slate-800 px-6 py-3 rounded-xl font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                                    className="bg-white border border-slate-300 text-slate-800 hover:bg-slate-50 px-6 py-3 rounded-xl font-bold shadow-sm transition-all inline-flex items-center justify-center gap-2"
                                 >
-                                    <Mail className="w-4 h-4 text-slate-600" />
-                                    {sending === 'email' ? 'Enviando correo…' : 'Enviar por correo'}
+                                    <Mail className="w-4 h-4 text-sky-600" />
+                                    Enviar por correo
                                 </button>
                                 <button
                                     type="button"
-                                    disabled={sending !== null}
                                     onClick={() => {
                                         setSendNote(null)
-                                        setSending('whatsapp')
-                                        startTransition(async () => {
-                                            const res = await sendCierreClinico({ eventId, channel: 'whatsapp' })
-                                            setSending(null)
-                                            setSendNote(res.success ? 'Cierre enviado por WhatsApp (Baileys).' : (res.error ?? 'Baileys no pudo enviar el archivo.'))
-                                        })
+                                        setModalChannel('whatsapp')
                                     }}
-                                    className="bg-[#128C7E] hover:bg-[#0f7a6e] text-white px-6 py-3 rounded-xl font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                                    className="bg-[#128C7E] hover:bg-[#0f7a6e] text-white px-6 py-3 rounded-xl font-bold shadow-md shadow-emerald-100 transition-all inline-flex items-center justify-center gap-2"
                                 >
                                     <MessageSquare className="w-4 h-4 text-white" />
-                                    {sending === 'whatsapp' ? 'Enviando por Baileys…' : 'Enviar por WhatsApp'}
+                                    Enviar por WhatsApp
                                 </button>
                             </div>
                         )}
                         {sendNote && (
-                            <p className="text-sm text-slate-600">{sendNote}</p>
+                            <p className="text-sm font-medium text-slate-700 bg-slate-100 py-2 px-4 rounded-xl inline-block mx-auto">{sendNote}</p>
+                        )}
+
+                        {modalChannel && (
+                            <CierreSendModal
+                                isOpen={modalChannel !== null}
+                                onClose={() => setModalChannel(null)}
+                                eventId={eventId}
+                                channel={modalChannel}
+                                onSent={(msg) => setSendNote(msg)}
+                            />
                         )}
 
                         <p className="mx-auto mt-6 max-w-md rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">

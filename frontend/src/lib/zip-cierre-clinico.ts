@@ -38,9 +38,12 @@ import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
 import {
   type EventTestForZipPdf,
   resolveEventTestFilesForZip,
+  readPersistedPdfBytes,
 } from '@/lib/clinical/study-pdf-for-zip'
 import { renderPatientHealthDictamenToMemory } from '@/lib/patient-dictamen-pdf'
 import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
+import { resolveStudiesFromEvent, summarizeExtractedData } from '@/lib/dictamen-summary'
+import { resolveSmeLogoDataUrl } from '@/lib/sme-brand'
 
 export {
   resolveBackendFileUrl,
@@ -213,6 +216,8 @@ const eventTestsForZipSelect = {
   id: true,
   status: true,
   testNameSnapshot: true,
+  selectedOption: true,
+  resultNotes: true,
   fileUrl: true,
   clinicalContext: true,
   extractionSnapshots: {
@@ -328,6 +333,7 @@ export async function buildCierreClinicoZip(
           recommendations: true,
           signedAt: true,
           pdfUrl: true,
+          patientPdfUrl: true,
           signatureHash: true,
           validator: {
             select: {
@@ -400,12 +406,17 @@ export async function buildCierreClinicoZip(
     throw new CierreClinicoError('validator_identity_incomplete', 410)
   }
 
-  // Resumen / dictamen de aptitud (`MedicalDictamenPDF`), no el formulario
-  // largo de examen médico (`ExamenMedicoValidatedPDF`).
-  const dictamenGeneralBuffer = await renderDictamenGeneralPdfForEvent(
-    event.id,
-    prisma,
-  )
+  // Resumen / dictamen de aptitud (`MedicalDictamenPDF`), preferir versión firmada si existe
+  let dictamenGeneralBuffer: Uint8Array | Buffer | null = null
+  if (event.verdict.pdfUrl) {
+    dictamenGeneralBuffer = await readPersistedPdfBytes(event.verdict.pdfUrl)
+  }
+  if (!dictamenGeneralBuffer) {
+    dictamenGeneralBuffer = await renderDictamenGeneralPdfForEvent(
+      event.id,
+      prisma,
+    )
+  }
 
   const examenMedicoPdfByEvent = new Map<string, Uint8Array | null>()
   async function examenMedicoPdfForEvent(evId: string): Promise<Uint8Array | null> {
@@ -503,26 +514,64 @@ export async function buildCierreClinicoZip(
   })
 
   // ── 3.5) Recomendaciones / Reporte para el Paciente ───────────────────
+  const ped = (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
   const patientRecs =
-    readPatientHealthRecommendations(event.exam?.physicalExamData as Record<string, unknown> | null) ||
+    readPatientHealthRecommendations(ped) ||
     event.verdict.recommendations
   if (patientRecs && patientRecs.trim().length > 0) {
     try {
-      const patientPdfBuffer = await renderPatientHealthDictamenToMemory({
-        signedAt: event.verdict.signedAt ?? new Date(),
-        eventId: event.id,
-        worker: {
-          firstName: event.worker.firstName,
-          lastName: event.worker.lastName,
-          universalId: event.worker.universalId,
-        },
-        healthRecommendations: patientRecs,
-        validator: { fullName: validator.fullName },
-        verdictId: event.verdict.id,
-      })
+      let patientPdfBytes: Uint8Array | null = null
+      if (event.verdict.patientPdfUrl) {
+        patientPdfBytes = await readPersistedPdfBytes(event.verdict.patientPdfUrl)
+      }
+
+      if (!patientPdfBytes) {
+        const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
+        const sexo = (ped.sexo ?? dp.sexo) as string | null
+        const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
+        const edad = event.worker.dob
+          ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+          : (dp.edad ? Number(dp.edad) : null)
+
+        const resolved = resolveStudiesFromEvent(
+          [],
+          event.eventTests as unknown as import('@/lib/dictamen-summary').RawEventTestForDictamen[],
+          ped,
+        )
+        const studiesForPatient = resolved.map((s) => ({
+          serviceName: s.serviceName,
+          findings: summarizeExtractedData(s.extractedData),
+        }))
+
+        const logoUrl = await resolveSmeLogoDataUrl()
+
+        const rendered = await renderPatientHealthDictamenToMemory({
+          signedAt: event.verdict.signedAt ?? new Date(),
+          eventId: event.id,
+          worker: {
+            firstName: event.worker.firstName,
+            lastName: event.worker.lastName,
+            universalId: event.worker.universalId,
+            companyName: event.worker.company?.name ?? null,
+            age: edad,
+            gender: sexo,
+            position: puesto,
+          },
+          healthRecommendations: patientRecs,
+          validator: {
+            fullName: validator.fullName,
+            professionalLicense: validator.professionalLicense ?? null,
+          },
+          verdictId: event.verdict.id,
+          studies: studiesForPatient,
+          logoUrl,
+        })
+        patientPdfBytes = new Uint8Array(rendered)
+      }
+
       entries.splice(1, 0, {
         path: '02_Reporte_Paciente/recomendaciones-paciente.pdf',
-        data: new Uint8Array(patientPdfBuffer),
+        data: patientPdfBytes,
       })
     } catch (e) {
       console.warn('[zip-cierre] No se pudo generar reporte de paciente para el ZIP:', e)

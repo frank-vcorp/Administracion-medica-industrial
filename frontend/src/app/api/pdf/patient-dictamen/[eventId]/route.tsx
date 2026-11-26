@@ -5,6 +5,8 @@ import prisma from '@/lib/prisma'
 import { renderToStream } from '@react-pdf/renderer'
 import { PatientHealthDictamenPDF } from '@/components/pdf/PatientHealthDictamenPDF'
 import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
+import { resolveStudiesFromEvent, summarizeExtractedData } from '@/lib/dictamen-summary'
+import { resolveSmeLogoDataUrl } from '@/lib/sme-brand'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -21,7 +23,7 @@ function basenameSafe(input: string): string {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> },
 ) {
   const session = await getServerSession(authOptions)
@@ -42,11 +44,33 @@ export async function GET(
     include: {
       event: {
         include: {
-          worker: { select: { firstName: true, lastName: true, universalId: true } },
+          worker: {
+            select: {
+              firstName: true,
+              lastName: true,
+              universalId: true,
+              dob: true,
+              company: { select: { name: true } },
+            },
+          },
           exam: { select: { physicalExamData: true } },
+          studies: { select: { serviceName: true, extractedData: true } },
+          eventTests: {
+            select: {
+              testNameSnapshot: true,
+              status: true,
+              selectedOption: true,
+              resultNotes: true,
+              clinicalContext: true,
+              test: { select: { name: true } },
+              extractionSnapshots: {
+                select: { structuredData: true },
+              },
+            },
+          },
         },
       },
-      validator: { select: { fullName: true } },
+      validator: { select: { fullName: true, professionalLicense: true } },
     },
   })
 
@@ -54,7 +78,11 @@ export async function GET(
     return new NextResponse('El dictamen aún no ha sido emitido.', { status: 404 })
   }
 
-  if (verdict.patientPdfUrl) {
+  const forceFresh =
+    request.nextUrl.searchParams.get('fresh') === '1' ||
+    request.nextUrl.searchParams.get('regenerate') === 'true'
+
+  if (verdict.patientPdfUrl && !forceFresh) {
     const signedKey = basenameSafe(verdict.patientPdfUrl)
     const backendFileUrl = `${BACKEND_URL}/api/files/${encodeURIComponent(signedKey)}`
 
@@ -80,12 +108,32 @@ export async function GET(
     }
   }
 
-  // Fallback: Regenerar en línea si no hay patientPdfUrl o el backend falló
-  const ped = (verdict.event.exam?.physicalExamData as Record<string, unknown> | null) ?? null
+  // Regenerar en línea con diseño enriquecido
+  const ped = (verdict.event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
+  const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
+  const sexo = (ped.sexo ?? dp.sexo) as string | null
+  const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
+  const edad = verdict.event.worker.dob
+    ? Math.floor((Date.now() - new Date(verdict.event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
+    : (dp.edad ? Number(dp.edad) : null)
+
   const healthRecommendations =
     readPatientHealthRecommendations(ped) ||
     verdict.recommendations ||
     'Mantener estilos de vida saludables, alimentación balanceada y seguimiento médico preventivo.'
+
+  const resolvedStudies = resolveStudiesFromEvent(
+    verdict.event.studies,
+    verdict.event.eventTests,
+    ped,
+  )
+
+  const studiesForPatient = resolvedStudies.map((s) => ({
+    serviceName: s.serviceName,
+    findings: summarizeExtractedData(s.extractedData),
+  }))
+
+  const logoUrl = await resolveSmeLogoDataUrl()
 
   const stream = await renderToStream(
     <PatientHealthDictamenPDF
@@ -96,12 +144,19 @@ export async function GET(
           firstName: verdict.event.worker.firstName,
           lastName: verdict.event.worker.lastName,
           universalId: verdict.event.worker.universalId,
+          companyName: verdict.event.worker.company?.name ?? null,
+          age: edad,
+          gender: sexo,
+          position: puesto,
         },
         healthRecommendations,
         validator: {
           fullName: verdict.validator?.fullName || 'Médico Validador',
+          professionalLicense: verdict.validator?.professionalLicense || null,
         },
         verdictId: verdict.id,
+        studies: studiesForPatient,
+        logoUrl,
       }}
     />,
   )
