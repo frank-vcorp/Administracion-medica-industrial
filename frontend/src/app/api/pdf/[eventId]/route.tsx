@@ -6,6 +6,7 @@ import { resolveSmeLogoDataUrl } from "@/lib/ami-brand"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
 import { canAccessPortalCompanyData } from "@/lib/portal-event-access"
+import { resolveStudiesFromEvent } from "@/lib/dictamen-summary"
 
 /**
  * @fileoverview Endpoint autenticado para descargar el PDF de dictamen
@@ -67,8 +68,13 @@ export async function GET(
             role === 'SUPERADMIN' ||
             role === 'DOCTOR_GENERAL' ||
             role === 'DOCTOR_VALIDATOR'
+        const isCompanyClient = role === 'COMPANY_CLIENT'
 
-        // Fetch verdict and fully linked entities (worker, company, validator, exam)
+        if (!isClinical && !isCompanyClient) {
+            return new NextResponse('Sin permisos para descargar este dictamen.', { status: 403 })
+        }
+
+        // Fetch verdict and fully linked entities (worker, company, validator, exam, eventTests)
         const verdict = await prisma.medicalVerdict.findUnique({
             where: { eventId },
             include: {
@@ -77,7 +83,16 @@ export async function GET(
                         worker: { include: { company: true } },
                         exam: true,
                         studies: true,
-                        labs: true
+                        labs: true,
+                        eventTests: {
+                            include: {
+                                test: true,
+                                extractionSnapshots: {
+                                    take: 1,
+                                    orderBy: { createdAt: 'desc' }
+                                }
+                            }
+                        }
                     }
                 },
                 validator: true
@@ -89,8 +104,10 @@ export async function GET(
         }
 
         const workerCompanyId = verdict.event.worker.companyId ?? null
-        if (!isClinical) {
-            const portalOk = await canAccessPortalCompanyData(workerCompanyId)
+        if (isCompanyClient) {
+            const sessionCompanyId = session.user.companyId ?? null
+            const directMatch = Boolean(sessionCompanyId && workerCompanyId && sessionCompanyId === workerCompanyId)
+            const portalOk = directMatch || (await canAccessPortalCompanyData(workerCompanyId))
             if (!portalOk) {
                 return new NextResponse(
                     'Sin permisos para descargar este dictamen.',
@@ -203,10 +220,11 @@ export async function GET(
                 fullName: verdict.validator?.fullName || 'Médico Validador',
                 professionalLicense: verdict.validator?.professionalLicense ?? undefined,
             },
-            studies: verdict.event.studies.map(s => ({
-                serviceName: s.serviceName,
-                extractedData: s.extractedData
-            })),
+            studies: resolveStudiesFromEvent(
+                verdict.event.studies,
+                verdict.event.eventTests,
+                ped,
+            ),
             labs: verdict.event.labs.map(l => ({
                 serviceName: l.serviceName,
                 extractedData: l.extractedData

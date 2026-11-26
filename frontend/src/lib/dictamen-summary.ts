@@ -29,7 +29,7 @@
 
 export interface DictamenStudyEntry {
   serviceName: string
-  extractedData?: unknown | null
+  extractedData: unknown
 }
 
 export type StudyStatus = 'APLICADO' | 'PENDIENTE' | 'NO_APLICADO'
@@ -124,11 +124,129 @@ export function amiBaselineStudiesNotApplied(
   const applied = new Set<string>()
   for (const n of snapshotNames) {
     const norm = normalizeStudyName(n)
-    if (norm) applied.add(norm)
+    if (norm) {
+      applied.add(norm)
+      if (norm.includes('examen medico') || norm.includes('medicina del trabajo')) {
+        applied.add('valoracion por medicina del trabajo')
+        applied.add('somatometria')
+        applied.add('agudeza visual')
+      }
+      if (norm.includes('campimetria') || norm.includes('optometria')) {
+        applied.add('agudeza visual')
+      }
+      if (norm.includes('somatometria') || norm.includes('signos vitales')) {
+        applied.add('somatometria')
+      }
+      if (norm.includes('audiometr')) {
+        applied.add('audiometria')
+      }
+      if (norm.includes('espirometr')) {
+        applied.add('espirometria')
+      }
+      if (norm.includes('torax') || norm.includes('tele de torax')) {
+        applied.add('radiografia de torax')
+      }
+      if (norm.includes('laboratorio') || norm.includes('quimica') || norm.includes('biometria')) {
+        applied.add('laboratorio clinico')
+      }
+      if (norm.includes('electrocardiograma') || norm.includes('ekg') || norm.includes('ecg')) {
+        applied.add('electrocardiograma')
+      }
+    }
   }
   return AMI_STUDIES_BASELINE.filter(
     (baseline) => !applied.has(normalizeStudyName(baseline)),
   )
+}
+
+export interface RawEventTestForDictamen {
+  testNameSnapshot?: string | null
+  status?: string | null
+  selectedOption?: string | null
+  resultNotes?: string | null
+  clinicalContext?: unknown | null
+  test?: { name: string } | null
+  extractionSnapshots?: Array<{ structuredData?: unknown; extractedData?: unknown }> | null
+}
+
+/**
+ * Resuelve la lista de estudios para el dictamen consolidado a partir de:
+ *  1. Tabla legacy `studies` (si ya contiene datos).
+ *  2. Tabla activa `eventTests` (con mapeo tolerante a extractionSnapshots,
+ *     clinicalContext, examen físico o estado completado).
+ */
+export function resolveStudiesFromEvent(
+  studies: Array<{ serviceName: string; extractedData: unknown }> | null | undefined,
+  eventTests: RawEventTestForDictamen[] | null | undefined,
+  physicalExamData?: Record<string, unknown> | null,
+): DictamenStudyEntry[] {
+  if (studies && studies.length > 0) {
+    return studies.map((s) => ({
+      serviceName: s.serviceName,
+      extractedData: s.extractedData ?? null,
+    }))
+  }
+
+  if (!eventTests || eventTests.length === 0) {
+    return []
+  }
+
+  return eventTests
+    .filter((et) => (et.testNameSnapshot || et.test?.name || '').trim().length > 0)
+    .map((et) => {
+      const serviceName = (et.testNameSnapshot || et.test?.name || 'Estudio').trim()
+      const isCompleted =
+        et.status === 'COMPLETED' ||
+        et.status === 'RESULT_REGISTERED' ||
+        Boolean(et.resultNotes)
+
+      // 1. Try extraction snapshots if it has keys
+      const rawFirst = et.extractionSnapshots?.[0]
+      const rawStructured = rawFirst?.structuredData as Record<string, unknown> | null
+      const snapData = (rawStructured?.extracted_data || rawStructured || rawFirst?.extractedData) as Record<string, unknown> | null
+      if (
+        snapData &&
+        typeof snapData === 'object' &&
+        !Array.isArray(snapData) &&
+        Object.keys(snapData).length > 0
+      ) {
+        return { serviceName, extractedData: snapData }
+      }
+
+      // 2. Try clinicalContext if it has keys
+      if (
+        et.clinicalContext &&
+        typeof et.clinicalContext === 'object' &&
+        !Array.isArray(et.clinicalContext) &&
+        Object.keys(et.clinicalContext).length > 0
+      ) {
+        return { serviceName, extractedData: et.clinicalContext }
+      }
+
+      // 3. If Examen Médico and physicalExamData has fields
+      if (
+        (serviceName.toLowerCase().includes('examen') || serviceName.toLowerCase().includes('medico')) &&
+        physicalExamData &&
+        typeof physicalExamData === 'object' &&
+        Object.keys(physicalExamData).length > 0
+      ) {
+        return { serviceName, extractedData: physicalExamData }
+      }
+
+      // 4. If completed or has results
+      if (isCompleted) {
+        return {
+          serviceName,
+          extractedData: {
+            estado: 'Completado',
+            ...(et.selectedOption ? { opcion: et.selectedOption } : {}),
+            ...(et.resultNotes ? { interpretacion: 'Registrada' } : {}),
+          },
+        }
+      }
+
+      return { serviceName, extractedData: null }
+    })
 }
 
 /**

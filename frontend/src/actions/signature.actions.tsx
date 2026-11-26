@@ -23,6 +23,7 @@ import {
   patientDictamenHasRequiredContent,
 } from '@/lib/clinical/dictamen-audience'
 import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
+import { resolveStudiesFromEvent } from '@/lib/dictamen-summary'
 import {
   buildDictamenGeneralAmiConsolidado,
   hasConsolidation,
@@ -116,6 +117,28 @@ export async function signMedicalDictamPDF(eventId: string) {
             extractedData: true,
           },
         },
+        eventTests: {
+          select: {
+            id: true,
+            testNameSnapshot: true,
+            status: true,
+            selectedOption: true,
+            resultNotes: true,
+            clinicalContext: true,
+            test: {
+              select: {
+                name: true,
+              },
+            },
+            extractionSnapshots: {
+              select: {
+                structuredData: true,
+              },
+              take: 1,
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
         labs: {
           select: {
             serviceName: true,
@@ -195,6 +218,28 @@ export async function signMedicalDictamPDF(eventId: string) {
                 extractedData: true,
               },
             },
+            eventTests: {
+              select: {
+                id: true,
+                testNameSnapshot: true,
+                status: true,
+                selectedOption: true,
+                resultNotes: true,
+                clinicalContext: true,
+                test: {
+                  select: {
+                    name: true,
+                  },
+                },
+                extractionSnapshots: {
+                  select: {
+                    structuredData: true,
+                  },
+                  take: 1,
+                  orderBy: { createdAt: 'desc' },
+                },
+              },
+            },
             labs: {
               select: {
                 serviceName: true,
@@ -205,36 +250,6 @@ export async function signMedicalDictamPDF(eventId: string) {
           orderBy: { createdAt: 'asc' },
         })
       : []
-    // Bloques para el renderer: primero el actual, luego los hermanos
-    // en orden cronológico.
-    const consolidatedBlocks = [
-      {
-        eventId: event.id,
-        eventShortId: deriveEventShortId(event.id),
-        isCurrent: true,
-        studies: (event.studies ?? []).map((s) => ({
-          serviceName: s.serviceName,
-          extractedData: s.extractedData,
-        })),
-        labs: (event.labs ?? []).map((l) => ({
-          serviceName: l.serviceName,
-          extractedData: l.extractedData,
-        })),
-      },
-      ...siblingEventsData.map((s) => ({
-        eventId: s.id,
-        eventShortId: deriveEventShortId(s.id),
-        isCurrent: false,
-        studies: (s.studies ?? []).map((st) => ({
-          serviceName: st.serviceName,
-          extractedData: st.extractedData,
-        })),
-        labs: (s.labs ?? []).map((lb) => ({
-          serviceName: lb.serviceName,
-          extractedData: lb.extractedData,
-        })),
-      })),
-    ]
 
     const physicalExamData =
       (event.exam?.physicalExamData as Record<string, unknown> | null) ?? null
@@ -248,6 +263,37 @@ export async function signMedicalDictamPDF(eventId: string) {
     const edad = event.worker.dob
       ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
       : (dp.edad ? Number(dp.edad) : null)
+
+    const currentStudies = resolveStudiesFromEvent(
+      event.studies,
+      event.eventTests,
+      physicalExamData,
+    )
+
+    // Bloques para el renderer: primero el actual, luego los hermanos
+    // en orden cronológico.
+    const consolidatedBlocks = [
+      {
+        eventId: event.id,
+        eventShortId: deriveEventShortId(event.id),
+        isCurrent: true,
+        studies: currentStudies,
+        labs: (event.labs ?? []).map((l) => ({
+          serviceName: l.serviceName,
+          extractedData: l.extractedData,
+        })),
+      },
+      ...siblingEventsData.map((s) => ({
+        eventId: s.id,
+        eventShortId: deriveEventShortId(s.id),
+        isCurrent: false,
+        studies: resolveStudiesFromEvent(s.studies, s.eventTests, null),
+        labs: (s.labs ?? []).map((lb) => ({
+          serviceName: lb.serviceName,
+          extractedData: lb.extractedData,
+        })),
+      })),
+    ]
 
     // 3. Renderizar el dictamen en MEMORIA (sin disco). Si el render
     // falla, NO seguimos (sería pasarle al firmador un buffer vacío).
@@ -283,10 +329,7 @@ export async function signMedicalDictamPDF(eventId: string) {
             fullName: event.verdict.validator.fullName,
             professionalLicense: event.verdict.validator.professionalLicense ?? null,
           },
-          studies: (event.studies ?? []).map((s) => ({
-            serviceName: s.serviceName,
-            extractedData: s.extractedData,
-          })),
+          studies: currentStudies,
           labs: (event.labs ?? []).map((l) => ({
             serviceName: l.serviceName,
             extractedData: l.extractedData,

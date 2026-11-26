@@ -24,6 +24,7 @@ import {
   buildDictamenStudySummary,
   classifyStudyStatus,
   isAmiBaselineStudy,
+  resolveStudiesFromEvent,
   summarizeExtractedData,
   type DictamenStudyEntry,
 } from '../dictamen-summary'
@@ -212,5 +213,65 @@ describe('IMPL-20260826-04: dictamen-summary helpers', () => {
     // `amiBaselineStudiesNotApplied`, NO este builder.
     const summaries = buildDictamenStudySummary([])
     expect(summaries).toEqual([])
+  })
+
+  // ─── resolveStudiesFromEvent ───────────────────────────────────────────
+  it('resolveStudiesFromEvent: mapea eventTests cuando studies está vacío', () => {
+    const rawTests = [
+      {
+        testNameSnapshot: 'RX DE COLUMNA CERVICAL AP Y LAT',
+        status: 'RESULT_REGISTERED',
+        clinicalContext: { files: [{ url: '/foo.jpg' }] },
+      },
+      {
+        testNameSnapshot: 'AUDIOMETRIA',
+        status: 'RESULT_REGISTERED',
+        resultNotes: 'Audición normal',
+      },
+      {
+        testNameSnapshot: 'Examen Médico AMI',
+        status: 'RESULT_REGISTERED',
+      },
+    ]
+
+    const physicalExam = { ojos: 'normal', corazon: 'ritmico' }
+    const resolved = resolveStudiesFromEvent([], rawTests, physicalExam)
+
+    expect(resolved).toHaveLength(3)
+    expect(resolved[0].serviceName).toBe('RX DE COLUMNA CERVICAL AP Y LAT')
+    expect(resolved[0].extractedData).toEqual({ files: [{ url: '/foo.jpg' }] })
+    expect(resolved[1].serviceName).toBe('AUDIOMETRIA')
+    expect(resolved[1].extractedData).toEqual({ estado: 'Completado', interpretacion: 'Registrada' })
+    expect(resolved[2].serviceName).toBe('Examen Médico AMI')
+    expect(resolved[2].extractedData).toEqual(physicalExam)
+  })
+
+  it('resolveStudiesFromEvent: prioriza legacy studies si existen', () => {
+    const legacy = [{ serviceName: 'Legacy Test', extractedData: { ok: true } }]
+    const rawTests = [{ testNameSnapshot: 'New Test', status: 'COMPLETED' }]
+    const resolved = resolveStudiesFromEvent(legacy, rawTests, null)
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0].serviceName).toBe('Legacy Test')
+  })
+
+  it('amiBaselineStudiesNotApplied: mapea examen medico a valoracion, somatometria y agudeza', () => {
+    const applied = [
+      'RX DE COLUMNA CERVICAL AP Y LAT',
+      'AUDIOMETRIA',
+      'ESPIROMETRIA',
+      'Examen Médico AMI',
+      'CAMPIMETRIA',
+    ]
+    const notApplied = amiBaselineStudiesNotApplied(applied)
+    // Audiometría, Espirometría y Valoración/Somatometría/Agudeza no deben estar en notApplied
+    expect(notApplied).not.toContain('Audiometría')
+    expect(notApplied).not.toContain('Espirometría')
+    expect(notApplied).not.toContain('Somatometría')
+    expect(notApplied).not.toContain('Agudeza Visual')
+    expect(notApplied).not.toContain('Valoración por Medicina del Trabajo')
+    // Solo deben quedar los que verdaderamente no se hicieron
+    expect(notApplied).toContain('Radiografía de Tórax')
+    expect(notApplied).toContain('Laboratorio Clínico')
+    expect(notApplied).toContain('Electrocardiograma')
   })
 })
