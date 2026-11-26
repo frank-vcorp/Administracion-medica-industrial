@@ -1235,6 +1235,22 @@ export default function PapeletaWorkspace({
               onClearStudy={handleClearStudy}
               onExamenMedicoStatusChange={(status, options) => {
                 updateLocalStatus(activeTest.id, status as StudyStatus)
+                if (options?.advanceToNextStudy) {
+                  const currentIdx = localTests.findIndex(t => t.id === activeTest.id)
+                  const ordered =
+                    currentIdx >= 0
+                      ? [...localTests.slice(currentIdx + 1), ...localTests.slice(0, currentIdx)]
+                      : localTests
+                  const nextStudy = ordered.find(
+                    t =>
+                      t.id !== activeTest.id &&
+                      t.status !== 'COMPLETED' &&
+                      t.status !== 'CANCELLED',
+                  )
+                  if (nextStudy) {
+                    navigateToStudy(nextStudy.id, { skipGuard: true })
+                  }
+                }
                 if (!options?.skipRefresh) router.refresh()
               }}
               // IMPL-FEATURE-20260824-02: abrir el modal del cuestionario
@@ -1747,7 +1763,7 @@ function StudyPanel({
   onClearStudy: (id: string) => Promise<boolean>
   onExamenMedicoStatusChange: (
     status: string,
-    options?: { skipRefresh?: boolean },
+    options?: { skipRefresh?: boolean; advanceToNextStudy?: boolean },
   ) => void
   // IMPL-FEATURE-20260824-02: callback para abrir el modal del
   // cuestionario de Espirometría (gestionado en el padre).
@@ -1936,11 +1952,13 @@ function StudyPanel({
       {/* Sección: Somatometría (IMPL-20260325-05 — ARCH-20260325-05) */}
       {isSomato && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
-            <span className="text-teal-600 text-base">⚖️</span>
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+            <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
+              ⚖️
+            </span>
             <div>
-              <p className="text-sm font-bold text-teal-800">Somatometría — Formulario de Captura</p>
-              <p className="text-xs text-teal-600">Registra peso, talla, signos vitales y calcula IMC.</p>
+              <p className="text-sm font-bold text-slate-800">Somatometría — Formulario de Captura</p>
+              <p className="text-xs text-slate-500">Registra peso, talla, signos vitales y calcula IMC.</p>
             </div>
           </div>
           <SomatometriaStudy
@@ -1948,7 +1966,9 @@ function StudyPanel({
             eventTestId={test.id}
             initialData={(examData?.somatometryData as Record<string, unknown>) ?? null}
             readonly={readonly}
-            onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+            onStatusChange={(status) =>
+              onExamenMedicoStatusChange(status, { advanceToNextStudy: status === 'COMPLETED' })
+            }
             registerLeaveGuard={registerStudyLeaveGuard}
           />
         </div>
@@ -1957,11 +1977,13 @@ function StudyPanel({
       {/* Sección: Agudeza Visual (IMPL-20260325-05 — ARCH-20260325-05) */}
       {isAgudeza && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
-            <span className="text-indigo-600 text-base">👁️</span>
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+            <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
+              👁️
+            </span>
             <div>
-              <p className="text-sm font-bold text-indigo-800">Agudeza Visual — Formulario de Captura</p>
-              <p className="text-xs text-indigo-600">Registra visión lejana, cercana, corregida y pruebas complementarias.</p>
+              <p className="text-sm font-bold text-slate-800">Agudeza Visual — Formulario de Captura</p>
+              <p className="text-xs text-slate-500">Registra visión lejana, cercana, corregida y pruebas complementarias.</p>
             </div>
           </div>
           <AgudezaVisualStudy
@@ -1969,7 +1991,9 @@ function StudyPanel({
             eventTestId={test.id}
             initialData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
             readonly={readonly}
-            onStatusChange={(status) => onExamenMedicoStatusChange(status)}
+            onStatusChange={(status) =>
+              onExamenMedicoStatusChange(status, { advanceToNextStudy: status === 'COMPLETED' })
+            }
             registerLeaveGuard={registerStudyLeaveGuard}
           />
         </div>
@@ -2064,14 +2088,16 @@ function StudyPanel({
       {/* Sección: Examen Médico — layout 2 columnas (paridad audio/espiro/campi) */}
       {isMedico && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
-            <span className="text-blue-600 text-base">📋</span>
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+            <span className="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center text-base shrink-0">
+              📋
+            </span>
             <div>
-              <p className="text-sm font-bold text-blue-800">
+              <p className="text-sm font-bold text-slate-800">
                 {formatPapeletaStudyTitle(test.testNameSnapshot)} — Formulario Clínico
               </p>
-              <p className="text-xs text-blue-600">
-                Pestañas: Somatometría, Signos vitales, Agudeza (campimetría) y bloque clínico (Antecedentes → Impresión).
+              <p className="text-xs text-slate-500">
+                Flujo secuencial: Somatometría, Signos Vitales, Agudeza Visual, Antecedentes, Exploración Física e Impresión clínica.
               </p>
             </div>
           </div>

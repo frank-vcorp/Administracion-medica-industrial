@@ -88,10 +88,9 @@ import {
   type ExamenMedicoSaveNavigation,
 } from '@/lib/clinical/examen-medico-save-errors'
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
-import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
 import { useExamenMedicoAutosave } from "@/lib/hooks/useExamenMedicoAutosave"
-import { mapMedicalExamActionFailure, parseMedicalExamZodIssues } from "@/lib/medical-exam-action-errors"
-import { splitUserFacingMessageLines, type UserFacingError } from "@/lib/user-facing-error"
+import { mapMedicalExamActionFailure } from "@/lib/medical-exam-action-errors"
+import { splitUserFacingMessageLines } from "@/lib/user-facing-error"
 import {
   deriveAgudezaVisualResumen,
   VISION_SNELLEN_NO_APLICA,
@@ -99,6 +98,16 @@ import {
 } from "@/lib/clinical/agudeza-visual"
 import { FlowserveExtension } from "@/components/clinical/examen-medico/FlowserveExtension"
 import { SodexoExtension } from "@/components/clinical/examen-medico/SodexoExtension"
+import {
+  EXAM_CARD_CLASS,
+  EXAM_CARD_TITLE_CLASS,
+  EXAM_INPUT_CLASS,
+  EXAM_LABEL_CLASS,
+  EXAM_NUMERIC_INPUT_CLASS,
+  EXAM_TEXTAREA_CLASS,
+  ExamSectionFooter,
+  ExamSectionHeader,
+} from '@/components/clinical/examen-medico/ExamSectionLayout'
 import {
   StudyCaptureFieldLabel,
   StudyCaptureMissingBanner,
@@ -278,7 +287,7 @@ interface ExamenMedicoEstudioProps {
   longitudinalData?: Record<string, unknown> | null
   readonly?: boolean
   /** Callback para actualizar estado local en el workspace padre */
-  onStatusChange?: (status: string) => void
+  onStatusChange?: (status: string, options?: { skipRefresh?: boolean }) => void
   /**
    * IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / BR-20260825-20):
    * `true` si ya existe `MedicalVerdict` emitido para el Event. Cuando
@@ -395,6 +404,41 @@ const APTITUD_OPTIONS: AptitudOption[] = [
   { value: 'PENDIENTE DE RESULTADOS', label: '⏳ Pendiente de Resultados', color: 'border-slate-300 bg-slate-50 text-slate-700' },
 ]
 
+const SOMA_ONLY_KEYS = ['peso_kg', 'talla_m'] as const
+const VITALS_ONLY_KEYS = [
+  'ta_sistolica',
+  'ta_diastolica',
+  'fc_min',
+  'fr_min',
+  'temperatura',
+  'saturacion_oxigeno',
+] as const
+
+function pickExamStringKeys(
+  source: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const k of keys) {
+    const val = source[k]
+    if (val !== undefined && val !== null) {
+      result[k] = String(val)
+    }
+  }
+  return result
+}
+
+const ANTECEDENTES_PROVENANCE_BADGE: Record<
+  string,
+  { label: string; color: string }
+> = {
+  captured: { label: '✏️ Capturado en consulta', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  portal: { label: '📋 Del portal', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  longitudinal: { label: '📋 Historial maestro', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  mixed: { label: '📋 Mixto (portal + consulta)', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  none: { label: '🆕 Sin datos previos', color: 'bg-white text-slate-600 border-slate-200' },
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ExamenMedicoEstudio({
@@ -424,8 +468,14 @@ export default function ExamenMedicoEstudio({
   )
   const variantExtensionsStored =
     (physicalExamData.variant_extensions as Record<string, unknown> | undefined) ?? {}
-  const initSomatometryData = (examData?.somatometryData ?? {}) as Record<string, unknown>
-  const initEyeAcuityData = (examData?.eyeAcuityData ?? {}) as Record<string, unknown>
+  const initSomatometryData = useMemo(
+    () => (examData?.somatometryData ?? {}) as Record<string, unknown>,
+    [examData?.somatometryData],
+  )
+  const initEyeAcuityData = useMemo(
+    () => (examData?.eyeAcuityData ?? {}) as Record<string, unknown>,
+    [examData?.eyeAcuityData],
+  )
 
   // ── Estado Examen Médico (pestaña 4 — existente) ──────────────────────────
   // IMPL-20260809-01 rework (QA-20260809-01 I-1): excluir del `form` plano
@@ -564,9 +614,19 @@ export default function ExamenMedicoEstudio({
   const [saveMsg, setSaveMsg] = useState('')
   const [saveError, setSaveError] = useState('')
   const [saveFieldErrors, setSaveFieldErrors] = useState<Record<string, string[]>>({})
+  const [incompleteJumpTabs, setIncompleteJumpTabs] = useState<
+    { kind: 'outer' | 'inner'; id: string; label: string }[]
+  >([])
   const [tabNavBlockMessage, setTabNavBlockMessage] = useState('')
   const [tabFieldErrors, setTabFieldErrors] = useState<Record<string, string[]>>({})
+  const [stepTransitionNotice, setStepTransitionNotice] = useState('')
   const [aiWarning, setAiWarning] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollSectionToTop = useCallback(() => {
+    if (typeof containerRef.current?.scrollIntoView === 'function') {
+      containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [])
   /** DA-2: no sobrescribir impresión diagnóstica tras edición manual del médico. */
   const impresionDiagnosticaManualRef = useRef(
     !isImpresionDiagnosticaPlaceholder(physicalExamData.impresion_diagnostica),
@@ -644,9 +704,7 @@ export default function ExamenMedicoEstudio({
 
   // ── Estado Somatometría (pestaña 1) ───────────────────────────────────────
   const [somaForm, setSomaForm] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      Object.entries(initSomatometryData).map(([k, v]) => [k, String(v ?? '')])
-    )
+    pickExamStringKeys(initSomatometryData, SOMA_ONLY_KEYS),
   )
   const [isSavingSoma, setIsSavingSoma] = useState(false)
   const [somaSaveMsg, setSomaSaveMsg] = useState('')
@@ -656,11 +714,9 @@ export default function ExamenMedicoEstudio({
   )
 
   // ── Estado Signos Vitales (pestaña 2) ─────────────────────────────────────
-  // Los campos de vitales viven en somatometryData — se inician desde los mismos datos
+  // Claves disjuntas respecto a somaForm para evitar sobreescribir peso/talla al editar vitales o viceversa
   const [vitalsForm, setVitalsForm] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      Object.entries(initSomatometryData).map(([k, v]) => [k, String(v ?? '')])
-    )
+    pickExamStringKeys(initSomatometryData, VITALS_ONLY_KEYS),
   )
   const [isSavingVitals, setIsSavingVitals] = useState(false)
   const [vitalsSaveMsg, setVitalsSaveMsg] = useState('')
@@ -700,6 +756,7 @@ export default function ExamenMedicoEstudio({
   )
 
   function updateSomaField(name: string, value: string) {
+    clearFieldSaveError(name)
     setSomaForm(prev => {
       const next = { ...prev, [name]: value }
       if (name === 'peso_kg' || name === 'talla_m') {
@@ -717,6 +774,7 @@ export default function ExamenMedicoEstudio({
   }
 
   function updateVitalsField(name: string, value: string) {
+    clearFieldSaveError(name)
     setVitalsForm(prev => {
       const next = { ...prev, [name]: value }
       if (name === 'ta_sistolica' || name === 'ta_diastolica') {
@@ -737,6 +795,7 @@ export default function ExamenMedicoEstudio({
   }
 
   function handleAgudezaField(name: string, value: string) {
+    clearFieldSaveError(name)
     setAgudezaForm(prev => {
       const next = { ...prev, [name]: value }
       if (VISUAL_FIELDS_NAMES.includes(name)) {
@@ -760,15 +819,6 @@ export default function ExamenMedicoEstudio({
   const [outerTab, setOuterTab] = useState<OuterTab>(
     () => emNavFromUrl?.outerTab ?? 'somatometria',
   )
-
-  // ── Bloqueo de pestaña 4 ─────────────────────────────────────────────────
-  const canAccessExamen = somaCompleted && vitalsCompleted && agudezaCompleted
-
-  useEffect(() => {
-    if (outerTab === 'examen_medico' && !canAccessExamen) {
-      setOuterTab('somatometria')
-    }
-  }, [canAccessExamen, outerTab])
 
   useEffect(() => {
     if (activeInnerTab === 'extension' && isDefaultExamenMedicoVariant(examVariant)) {
@@ -917,24 +967,7 @@ export default function ExamenMedicoEstudio({
         ? Boolean(sodexoExt.tipo_examen || sodexoExt.contacto_emergencia || sodexoExt.matriz_riesgos_observaciones)
         : false
 
-  const innerTabs: { id: InnerTab; label: string; icon: string; done: boolean }[] = [
-    { id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: hasAntecedentes },
-    { id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: hasPhysicalExam },
-    ...( !isDefaultExamenMedicoVariant(examVariant)
-      ? [{
-          id: 'extension' as const,
-          label: examenMedicoVariantLabel(examVariant),
-          icon: examVariant === 'FLOWSERVE' ? '🏭' : '🍽️',
-          done: hasExtension,
-        }]
-      : []),
-    { id: 'impresion', label: 'Impresión clínica', icon: '✅', done: hasImpresionCapturada },
-  ]
-
   // ── Handlers ──────────────────────────────────────────────────────────────
-  function setM1Field(key: string, value: string) {
-    setModulo1(prev => ({ ...prev, [key]: value }))
-  }
   function clearFieldSaveError(fieldKey: string) {
     setSaveFieldErrors(prev => {
       if (!prev[fieldKey]) return prev
@@ -1097,6 +1130,9 @@ export default function ExamenMedicoEstudio({
     ],
   )
 
+  // Permitir navegar libremente entre estudios de la papeleta sin quedar atrapado
+  // cuando el Examen Médico está en borrador; el cierre definitivo sigue validado
+  // por `validateExamenMedicoForClinicalClose` en `executeSaveExam(true)`.
   useStudyLeaveGuard(
     registerLeaveGuard,
     () =>
@@ -1105,13 +1141,72 @@ export default function ExamenMedicoEstudio({
         activeInnerTab as ExamenMedicoTabId,
         validationInput,
       ),
-    !formReadonly,
+    false,
   )
 
-  const activeSectionTabId = useCallback((): ExamenMedicoTabId => {
-    if (outerTab === 'examen_medico') return activeInnerTab
-    return outerTab
-  }, [outerTab, activeInnerTab])
+  const hasVariantExtension = !isDefaultExamenMedicoVariant(examVariant)
+  const somaDone =
+    somaCompleted || validateExamenMedicoTab('somatometria', validationInput).ok
+  const vitalsDone =
+    vitalsCompleted || validateExamenMedicoTab('signos_vitales', validationInput).ok
+  const agudezaDone =
+    agudezaCompleted || validateExamenMedicoTab('agudeza_visual', validationInput).ok
+  const antecedentesDone =
+    hasAntecedentes || validateExamenMedicoTab('antecedentes', validationInput).ok
+  const exploracionDone = hasPhysicalExam
+  const impresionDone =
+    hasImpresionCapturada || Boolean((form.impresion_diagnostica ?? '').trim())
+
+  type WizardStep =
+    | {
+        kind: 'outer'
+        id: 'somatometria' | 'signos_vitales' | 'agudeza_visual'
+        label: string
+        icon: string
+        done: boolean
+      }
+    | {
+        kind: 'inner'
+        id: InnerTab
+        label: string
+        icon: string
+        done: boolean
+      }
+
+  const wizardSteps: WizardStep[] = [
+    { kind: 'outer', id: 'somatometria', label: 'Somatometría', icon: '⚖️', done: somaDone },
+    { kind: 'outer', id: 'signos_vitales', label: 'Signos Vitales', icon: '💓', done: vitalsDone },
+    { kind: 'outer', id: 'agudeza_visual', label: 'Agudeza Visual', icon: '👁️', done: agudezaDone },
+    { kind: 'inner', id: 'antecedentes', label: 'Antecedentes', icon: '🩺', done: antecedentesDone },
+    { kind: 'inner', id: 'exploracion', label: 'Exploración Física', icon: '🩻', done: exploracionDone },
+    ...(hasVariantExtension
+      ? [
+          {
+            kind: 'inner' as const,
+            id: 'extension' as const,
+            label: examenMedicoVariantLabel(examVariant),
+            icon: examVariant === 'FLOWSERVE' ? '🏭' : '🍽️',
+            done: hasExtension,
+          },
+        ]
+      : []),
+    { kind: 'inner', id: 'impresion', label: 'Impresión clínica', icon: '✅', done: impresionDone },
+  ]
+  const totalSteps = wizardSteps.length
+  const stepNumberFor = (id: ExamenMedicoTabId) => {
+    const idx = wizardSteps.findIndex((s) => s.id === id)
+    return idx >= 0 ? idx + 1 : 1
+  }
+
+  const antecedentesProvenance = (
+    antecedentesCaptured._provenance ??
+    (physicalExamData.antecedentes_captured as
+      | { _provenance?: Record<string, unknown> }
+      | undefined)?._provenance
+  ) as Parameters<typeof AntecedentesCaptura>[0]['initialProvenance'] | undefined
+  const antecedentesProvenanceBadge =
+    ANTECEDENTES_PROVENANCE_BADGE[antecedentesProvenance?.source ?? 'none'] ??
+    ANTECEDENTES_PROVENANCE_BADGE.none
 
   function applyTabValidationErrors(tab: ExamenMedicoTabId) {
     const gate = validateExamenMedicoTab(tab, validationInput)
@@ -1125,23 +1220,21 @@ export default function ExamenMedicoEstudio({
     return true
   }
 
-  function requestOuterTabChange(next: OuterTab, options?: { skipGuard?: boolean }) {
-    if (!options?.skipGuard && next !== outerTab && !formReadonly) {
-      const currentTab = activeSectionTabId()
-      if (!applyTabValidationErrors(currentTab)) return
-    }
-    if (next === 'examen_medico' && !canAccessExamen) return
+  function requestOuterTabChange(next: OuterTab, _options?: { skipGuard?: boolean }) {
     setOuterTab(next)
     setTabNavBlockMessage('')
+    setTabFieldErrors({})
+    setStepTransitionNotice('')
+    setIncompleteJumpTabs([])
   }
 
-  function requestInnerTabChange(next: InnerTab, options?: { skipGuard?: boolean }) {
-    if (!options?.skipGuard && next !== activeInnerTab && !formReadonly) {
-      if (!applyTabValidationErrors(activeInnerTab)) return
-    }
+  function requestInnerTabChange(next: InnerTab, _options?: { skipGuard?: boolean }) {
     setActiveInnerTab(next)
     setOuterTab('examen_medico')
     setTabNavBlockMessage('')
+    setTabFieldErrors({})
+    setStepTransitionNotice('')
+    setIncompleteJumpTabs([])
   }
 
   function tabErr(fieldKey: string): string | undefined {
@@ -1149,12 +1242,6 @@ export default function ExamenMedicoEstudio({
   }
 
   function buildPayload() {
-    // IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-1. `antecedentes_captured`
-    // ahora es estado levantado al padre y SE INCLUYE en el payload (objeto, no
-    // string). La persistencia es vía `saveExamenMedicoPapeleta` (full-replace),
-    // igual que `modulo1`. El estado `form` plano sigue filtrando no-primitivos
-    // (defensa contra `String({...})` = `"[object Object]"`); `antecedentesCaptured`
-    // vive en estado separado y se inyecta directamente.
     const variant_extensions: Record<string, unknown> = {}
     if (examVariant === 'FLOWSERVE') {
       variant_extensions.FLOWSERVE = flowserveExt
@@ -1173,16 +1260,27 @@ export default function ExamenMedicoEstudio({
     }
   }
 
+  const somaAutosavePayload = useMemo(
+    () => ({
+      ...initSomatometryData,
+      ...vitalsForm,
+      ...somaForm,
+      imc: parseFloat(imc),
+      complexion,
+    }),
+    [initSomatometryData, somaForm, vitalsForm, imc, complexion],
+  )
+
   async function handleSaveSoma(markComplete: boolean) {
     setIsSavingSoma(true)
     setSomaSaveMsg('')
+    setStepTransitionNotice('')
     if (markComplete && !applyTabValidationErrors('somatometria')) {
-      setSomaSaveMsg('❌ Completa los campos obligatorios antes de cerrar la pestaña.')
+      setSomaSaveMsg('❌ Completa los campos obligatorios antes de continuar.')
       setIsSavingSoma(false)
       return
     }
-    const payload = { ...somaForm, ...vitalsForm, imc: parseFloat(imc), complexion }
-    const res = await updateSomatometria(eventId, payload)
+    const res = await updateSomatometria(eventId, somaAutosavePayload)
     if (res.success) {
       const derivedNutri = deriveEstadoNutricionalFromSoma(somaForm.peso_kg, somaForm.talla_m)
       if (derivedNutri) {
@@ -1192,15 +1290,25 @@ export default function ExamenMedicoEstudio({
             : prev,
         )
       }
-      setSomaSaveMsg(markComplete ? '🏁 Somatometría completada.' : '✅ Datos guardados.')
-      setSomaCompleted(true)
+      const stepOk = markComplete || validateExamenMedicoTab('somatometria', validationInput).ok
+      if (stepOk) setSomaCompleted(true)
       if (somatometryEventTestId) {
         const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
         await updateEventTestStatus(
           somatometryEventTestId,
           newStatus as Parameters<typeof updateEventTestStatus>[1],
-          eventId
+          eventId,
         )
+      }
+      if (markComplete) {
+        setSomaSaveMsg('')
+        setTabFieldErrors({})
+        setTabNavBlockMessage('')
+        setStepTransitionNotice('Somatometría guardada. Continúa con Signos Vitales.')
+        setOuterTab('signos_vitales')
+        scrollSectionToTop()
+      } else {
+        setSomaSaveMsg('✅ Borrador guardado.')
       }
     } else {
       const mapped = mapMedicalExamActionFailure(
@@ -1220,15 +1328,13 @@ export default function ExamenMedicoEstudio({
   async function handleSaveVitals(markComplete: boolean) {
     setIsSavingVitals(true)
     setVitalsSaveMsg('')
+    setStepTransitionNotice('')
     if (markComplete && !applyTabValidationErrors('signos_vitales')) {
-      setVitalsSaveMsg('❌ Completa los campos obligatorios antes de cerrar la pestaña.')
+      setVitalsSaveMsg('❌ Completa los campos obligatorios antes de continuar.')
       setIsSavingVitals(false)
       return
     }
-    // Vitales se guardan junto con datos de soma (merge en somatometryData)
-    const currentSoma = { ...somaForm }
-    const payload = { ...currentSoma, ...vitalsForm, imc: parseFloat(imc), complexion }
-    const res = await updateSomatometria(eventId, payload)
+    const res = await updateSomatometria(eventId, somaAutosavePayload)
     if (res.success) {
       const derivedPresion = derivePresionArterialResumenFromVitals(
         vitalsForm.ta_sistolica,
@@ -1241,15 +1347,25 @@ export default function ExamenMedicoEstudio({
             : prev,
         )
       }
-      setVitalsSaveMsg(markComplete ? '🏁 Signos Vitales completados.' : '✅ Datos guardados.')
-      setVitalsCompleted(true)
+      const stepOk = markComplete || validateExamenMedicoTab('signos_vitales', validationInput).ok
+      if (stepOk) setVitalsCompleted(true)
       if (somatometryEventTestId) {
         const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
         await updateEventTestStatus(
           somatometryEventTestId,
           newStatus as Parameters<typeof updateEventTestStatus>[1],
-          eventId
+          eventId,
         )
+      }
+      if (markComplete) {
+        setVitalsSaveMsg('')
+        setTabFieldErrors({})
+        setTabNavBlockMessage('')
+        setStepTransitionNotice('Signos Vitales guardados. Continúa con Agudeza Visual.')
+        setOuterTab('agudeza_visual')
+        scrollSectionToTop()
+      } else {
+        setVitalsSaveMsg('✅ Borrador guardado.')
       }
     } else {
       const mapped = mapMedicalExamActionFailure(
@@ -1269,8 +1385,9 @@ export default function ExamenMedicoEstudio({
   async function handleSaveAgudeza(markComplete: boolean) {
     setIsSavingAgudeza(true)
     setAgudezaSaveMsg('')
+    setStepTransitionNotice('')
     if (markComplete && !applyTabValidationErrors('agudeza_visual')) {
-      setAgudezaSaveMsg('❌ Completa los campos obligatorios antes de cerrar la pestaña.')
+      setAgudezaSaveMsg('❌ Completa los campos obligatorios antes de continuar.')
       setIsSavingAgudeza(false)
       return
     }
@@ -1283,15 +1400,26 @@ export default function ExamenMedicoEstudio({
             : prev,
         )
       }
-      setAgudezaSaveMsg(markComplete ? '🏁 Agudeza Visual completada.' : '✅ Datos guardados.')
-      setAgudezaCompleted(true)
+      const stepOk = markComplete || validateExamenMedicoTab('agudeza_visual', validationInput).ok
+      if (stepOk) setAgudezaCompleted(true)
       if (agudezaEventTestId) {
         const newStatus = markComplete ? 'COMPLETED' : 'RESULT_REGISTERED'
         await updateEventTestStatus(
           agudezaEventTestId,
           newStatus as Parameters<typeof updateEventTestStatus>[1],
-          eventId
+          eventId,
         )
+      }
+      if (markComplete) {
+        setAgudezaSaveMsg('')
+        setTabFieldErrors({})
+        setTabNavBlockMessage('')
+        setStepTransitionNotice('Agudeza Visual guardada. Continúa con Antecedentes.')
+        setActiveInnerTab('antecedentes')
+        setOuterTab('examen_medico')
+        scrollSectionToTop()
+      } else {
+        setAgudezaSaveMsg('✅ Borrador guardado.')
       }
     } else {
       const mapped = mapMedicalExamActionFailure(
@@ -1326,59 +1454,72 @@ export default function ExamenMedicoEstudio({
     return patch
   }
 
-  function handleSave(markComplete: boolean) {
+  async function executeSaveExam(
+    markComplete: boolean,
+    advanceTo?: { innerTab: InnerTab; notice: string },
+  ) {
     setSaveMsg('')
     setSaveError('')
     setSaveFieldErrors({})
+    setIncompleteJumpTabs([])
     setTabNavBlockMessage('')
     setTabFieldErrors({})
     setAiWarning('')
-    startTransition(async () => {
+    setStepTransitionNotice('')
+
+    if (markComplete) {
+      const gate = validateExamenMedicoForClinicalClose(validationInput)
+      if (!gate.ok) {
+        const missingTabs = wizardSteps
+          .filter((step) => !validateExamenMedicoTab(step.id, validationInput).ok)
+          .map((step) => ({ kind: step.kind, id: step.id, label: step.label }))
+        setIncompleteJumpTabs(missingTabs)
+        setTabNavBlockMessage(formatStudyMissingFieldsSpanish(gate.missing))
+        setSaveFieldErrors(studyValidationToFieldErrors(gate))
+        setSaveError('No se puede cerrar la captura: faltan campos obligatorios.')
+        return
+      }
+    }
+
+    const profileRes = await getCurrentDoctorProfile()
+    const medicoLine = profileRes.success
+      ? medicoLineFromProfile(
+          profileRes.profile.fullName,
+          profileRes.profile.professionalLicense,
+        )
+      : sessionMedicoLine
+
+    const rawPayload = buildPayload()
+    const prepared = prepareExamenMedicoPayloadForSave(rawPayload, { medicoLine })
+
+    const formPatch: Record<string, string> = {}
+    for (const [key, value] of Object.entries(prepared)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        formPatch[key] = String(value)
+      }
+    }
+    if (Object.keys(formPatch).length > 0) {
+      setForm(prev => ({ ...prev, ...formPatch }))
+    }
+
+    const res = await saveExamenMedicoPapeleta(
+      eventId,
+      eventTestId,
+      prepared,
+      markComplete,
+    )
+    if (res.success) {
+      setSaveFieldErrors({})
       if (markComplete) {
-        const gate = validateExamenMedicoForClinicalClose(validationInput)
-        if (!gate.ok) {
-          setTabNavBlockMessage(formatStudyMissingFieldsSpanish(gate.missing))
-          setSaveFieldErrors(studyValidationToFieldErrors(gate))
-          setSaveError('No se puede cerrar la captura: faltan campos obligatorios.')
-          return
-        }
+        setCaptureClosed(true)
       }
-      const profileRes = await getCurrentDoctorProfile()
-      const medicoLine = profileRes.success
-        ? medicoLineFromProfile(
-            profileRes.profile.fullName,
-            profileRes.profile.professionalLicense,
-          )
-        : sessionMedicoLine
-
-      const rawPayload = buildPayload()
-      const prepared = prepareExamenMedicoPayloadForSave(rawPayload, { medicoLine })
-
-      const formPatch: Record<string, string> = {}
-      for (const [key, value] of Object.entries(prepared)) {
-        if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-          formPatch[key] = String(value)
-        }
-      }
-      if (Object.keys(formPatch).length > 0) {
-        setForm(prev => ({ ...prev, ...formPatch }))
-      }
-
-      const res = await saveExamenMedicoPapeleta(
-        eventId,
-        eventTestId,
-        prepared,
-        markComplete,
-      )
-      if (res.success) {
-        setSaveFieldErrors({})
-        if (markComplete) {
-          setCaptureClosed(true)
-        }
-        // IMPL-FEATURE-20260825-03 ronda 4 (DEC-20260825-19 / FND-20260825-22):
-        // cuando se marca como completado, el Event pasa a `VALIDATING` y
-        // se muestra el flujo "Firmar y Emitir Dictamen" en el workspace.
-        // Cuando es sólo borrador, NO tocamos el Event (res.status === null).
+      if (advanceTo) {
+        setStepTransitionNotice(advanceTo.notice)
+        setActiveInnerTab(advanceTo.innerTab)
+        setOuterTab('examen_medico')
+        onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED', { skipRefresh: true })
+        scrollSectionToTop()
+      } else {
         setSaveMsg(
           markComplete
             ? '🏁 Captura del examen médico cerrada. El estudio queda pendiente de interpretación/diagnóstico; la aptitud laboral se define al emitir el dictamen en Validación.'
@@ -1387,28 +1528,27 @@ export default function ExamenMedicoEstudio({
         if (res.aiWarning) {
           setAiWarning(`La captura clínica se guardó, pero la IA no pudo generar prediagnóstico: ${res.aiWarning}`)
         }
-        // Notificamos al padre el nuevo studyStatus siempre (el Event
-        // status sólo si cambió — null en borrador).
-        onStatusChange?.(res.studyStatus ?? 'RESULT_REGISTERED')
-      } else {
-        applySaveFailure(
-          res.error ?? 'Error al guardar',
-          'fieldErrors' in res ? res.fieldErrors : undefined,
-          'navigation' in res ? res.navigation : undefined,
+        onStatusChange?.(
+          res.studyStatus ?? 'RESULT_REGISTERED',
+          markComplete ? undefined : { skipRefresh: true },
         )
       }
-    })
+    } else {
+      applySaveFailure(
+        res.error ?? 'Error al guardar',
+        'fieldErrors' in res ? res.fieldErrors : undefined,
+        'navigation' in res ? res.navigation : undefined,
+      )
+    }
   }
 
-  const somaAutosavePayload = useMemo(
-    () => ({
-      ...somaForm,
-      ...vitalsForm,
-      imc: parseFloat(imc),
-      complexion,
-    }),
-    [somaForm, vitalsForm, imc, complexion],
-  )
+  function handleSave(markComplete: boolean) {
+    startTransition(() => executeSaveExam(markComplete))
+  }
+
+  function handleSaveAndAdvanceInner(nextInner: InnerTab, notice: string) {
+    startTransition(() => executeSaveExam(false, { innerTab: nextInner, notice }))
+  }
 
   const examSnapshotKey = useMemo(
     () => JSON.stringify(buildPayload()),
@@ -1502,117 +1642,53 @@ export default function ExamenMedicoEstudio({
     },
   })
 
-  // ── Pestañas externas ─────────────────────────────────────────────────────
-  // IMPL-20260809-02 (ARCH-20260809-01 v2): revert. outerTabs vuelve a 4 entradas
-  // (estado pre-v1). 'antecedentes' ahora vive como sub-pestaña dentro de
-  // "Examen Médico" (innerTabs, no outerTabs).
-  const outerTabs: { id: OuterTab; label: string; icon: string; done: boolean; locked: boolean }[] = [
-    { id: 'somatometria', label: 'Somatometría', icon: '⚖️', done: somaCompleted, locked: false },
-    { id: 'signos_vitales', label: 'Signos Vitales', icon: '💓', done: vitalsCompleted, locked: false },
-    { id: 'agudeza_visual', label: 'Agudeza Visual', icon: '👁️', done: agudezaCompleted, locked: false },
-    {
-      id: 'examen_medico',
-      label: 'Examen Médico',
-      icon: '🩺',
-      done: captureClosed,
-      locked: !canAccessExamen,
-    },
-  ]
   // ─── Render ────────────────────────────────────────────────────────────────
-
   const showExamenMedicoPanel = outerTab === 'examen_medico'
 
-  const renderTabChipClass = (active: boolean, locked?: boolean) =>
-    `flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-lg transition-colors justify-center ${
-      papeletaLayout ? 'flex-1 min-w-[calc(33%-0.25rem)] sm:min-w-0 sm:flex-initial' : 'flex-1'
-    } ${
-      active
-        ? 'bg-white shadow text-teal-700'
-        : locked
-          ? 'text-slate-300 cursor-not-allowed'
-          : 'text-slate-500 hover:text-slate-700'
-    }`
-
   return (
-    <div className="space-y-4">
+    <div ref={containerRef} className="space-y-4">
       <StudyCaptureMissingBanner message={tabNavBlockMessage} />
-      {/* Papeleta: una sola fila Somatometría → Agudeza → Antecedentes → … */}
-      {papeletaLayout && (
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-          {outerTabs
-            .filter(tab => tab.id !== 'examen_medico')
-            .map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => requestOuterTabChange(tab.id)}
-                className={renderTabChipClass(outerTab === tab.id)}
-              >
-                <span>{tab.icon}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-                {tab.done && <span className="text-emerald-500 text-[10px]">●</span>}
-              </button>
-            ))}
-          {innerTabs.map(tab => {
-            const locked = !canAccessExamen
-            const active =
-              outerTab === 'examen_medico' && activeInnerTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                disabled={locked}
-                title={
-                  locked
-                    ? 'Completa Somatometría, Signos Vitales y Agudeza Visual primero'
-                    : undefined
-                }
-                onClick={() => {
-                  if (locked) return
-                  requestInnerTabChange(tab.id)
-                }}
-                className={renderTabChipClass(active, locked)}
-              >
-                <span>{tab.icon}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-                {tab.done && !locked && (
-                  <span className="text-emerald-500 text-[10px]">●</span>
-                )}
-                {locked && <span className="text-slate-300 text-[10px]">🔒</span>}
-              </button>
-            )
-          })}
-        </div>
-      )}
 
-      {/* ── Pestañas externas (1-4) — vista clásica sin papeleta */}
-      {!papeletaLayout && (
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-        {outerTabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              if (tab.locked) return
-              requestOuterTabChange(tab.id)
-            }}
-            disabled={tab.locked}
-            title={tab.locked ? 'Completa Somatometría, Signos Vitales y Agudeza Visual primero' : undefined}
-            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg transition-colors flex-1 justify-center ${
-              outerTab === tab.id
-                ? 'bg-white shadow text-teal-700'
-                : tab.locked
-                  ? 'text-slate-300 cursor-not-allowed'
-                  : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <span>{tab.icon}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
-            {tab.done && !tab.locked && <span className="text-emerald-500 text-[10px]">●</span>}
-            {tab.locked && <span className="text-slate-300 text-[10px]">🔒</span>}
-          </button>
-        ))}
+      {/* Stepper unificado de todo el Examen Médico */}
+      <div className="flex flex-wrap gap-1.5 bg-slate-100 border border-slate-200 rounded-xl p-1.5">
+        {wizardSteps.map((step, idx) => {
+          const active =
+            step.kind === 'outer'
+              ? outerTab === step.id
+              : outerTab === 'examen_medico' && activeInnerTab === step.id
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => {
+                if (step.kind === 'outer') {
+                  requestOuterTabChange(step.id)
+                } else {
+                  requestInnerTabChange(step.id)
+                }
+              }}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-lg transition-colors justify-center flex-1 min-w-[115px] ${
+                active
+                  ? 'bg-white shadow-sm ring-1 ring-slate-200 text-teal-700'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                  step.done
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : active
+                      ? 'bg-teal-100 text-teal-700'
+                      : 'bg-slate-200/80 text-slate-600'
+                }`}
+              >
+                {step.done ? '✓' : idx + 1}
+              </span>
+              <span className="truncate">{step.label}</span>
+            </button>
+          )
+        })}
       </div>
-      )}
 
       {!formReadonly && (
         <ClinicalAutosaveIndicator
@@ -1622,208 +1698,233 @@ export default function ExamenMedicoEstudio({
         />
       )}
 
-      {/* Banner de bloqueo visible cuando el médico intenta ir a Examen Médico sin completar prereqs.
-          IMPL-20260809-02 (ARCH-20260809-01 v2): revert I-4. La condición vuelve
-          a la original — ya no hay outer-tab 'antecedentes' que excluir. */}
-      {!papeletaLayout && outerTab !== 'examen_medico' && !canAccessExamen && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-start gap-2">
-          <span className="text-amber-500 text-sm mt-0.5">🔒</span>
-          <p className="text-xs text-amber-800">
-            <strong>Examen Médico bloqueado.</strong> Completa y guarda{' '}
-            {[!somaCompleted && 'Somatometría', !vitalsCompleted && 'Signos Vitales', !agudezaCompleted && 'Agudeza Visual']
-              .filter(Boolean)
-              .join(', ')}{' '}
-            para habilitar la pestaña 4.
-          </p>
+      {stepTransitionNotice && (
+        <div
+          role="status"
+          className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl px-4 py-2 text-xs font-semibold flex items-center gap-2"
+        >
+          <span>✓</span>
+          <span>{stepTransitionNotice}</span>
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* PESTAÑA 1: SOMATOMETRÍA                                       */}
+      {/* PASO 1: SOMATOMETRÍA                                          */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {outerTab === 'somatometria' && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5">
-            <span className="text-teal-600">⚖️</span>
-            <p className="text-xs font-bold text-teal-800">Somatometría — Peso, Talla e IMC</p>
-          </div>
+        <div className="space-y-4">
+          <ExamSectionHeader
+            icon="⚖️"
+            title="Somatometría"
+            subtitle="Registro de peso, talla y cálculo automático de IMC."
+            stepNumber={stepNumberFor('somatometria')}
+            totalSteps={totalSteps}
+          />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div>
-              <StudyCaptureFieldLabel required={isExamenMedicoRequiredField('somatometria', 'peso_kg')}>
-                Peso (KG)
-              </StudyCaptureFieldLabel>
-              <input
-                type="number" step="0.1" min={0} max={500}
-                value={somaForm.peso_kg || ''}
-                onChange={e => {
-                  clearFieldSaveError('peso_kg')
-                  updateSomaField('peso_kg', e.target.value)
-                }}
-                disabled={formReadonly}
-                className={examFieldRingClass(
-                  Boolean(tabErr('peso_kg')),
-                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
-                )}
-                placeholder="Ej: 75.5"
-              />
-              {tabErr('peso_kg') && (
-                <p className="text-[10px] text-red-600 mt-1">{tabErr('peso_kg')}</p>
-              )}
-            </div>
-            <div>
-              <StudyCaptureFieldLabel required={isExamenMedicoRequiredField('somatometria', 'talla_m')}>
-                Talla (metros)
-              </StudyCaptureFieldLabel>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={somaForm.talla_m || ''}
-                onChange={e => {
-                  clearFieldSaveError('talla_m')
-                  const v = e.target.value
-                  const next =
-                    v.includes('.') || v.includes(',')
-                      ? v.replace(',', '.')
-                      : formatTallaMetersWhileTyping(v)
-                  updateSomaField('talla_m', next)
-                }}
-                onBlur={e => {
-                  const formatted = formatTallaMetersForDisplay(e.target.value)
-                  if (formatted !== e.target.value.trim()) {
-                    updateSomaField('talla_m', formatted)
-                  }
-                }}
-                disabled={formReadonly}
-                className={examFieldRingClass(
-                  Boolean(tabErr('talla_m')),
-                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-teal-500 text-lg font-mono placeholder-slate-300 disabled:opacity-60',
-                )}
-                placeholder="Ej: 1,75 o 175"
-              />
-              {tabErr('talla_m') && (
-                <p className="text-[10px] text-red-600 mt-1">{tabErr('talla_m')}</p>
-              )}
-            </div>
-            <div className="col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
+          <div className={EXAM_CARD_CLASS}>
+            <p className={EXAM_CARD_TITLE_CLASS}>Antropometría</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <p className="text-xs font-semibold text-slate-500">IMC Calculado</p>
-                <div className="text-3xl font-black text-slate-700">{imc}</div>
+                <StudyCaptureFieldLabel required={isExamenMedicoRequiredField('somatometria', 'peso_kg')}>
+                  Peso (KG)
+                </StudyCaptureFieldLabel>
+                <input
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  max={500}
+                  value={somaForm.peso_kg || ''}
+                  onChange={e => updateSomaField('peso_kg', e.target.value)}
+                  disabled={formReadonly}
+                  className={examFieldRingClass(
+                    Boolean(tabErr('peso_kg')),
+                    EXAM_NUMERIC_INPUT_CLASS,
+                  )}
+                  placeholder="Ej: 75.5"
+                />
+                {tabErr('peso_kg') && (
+                  <p className="text-[11px] text-red-600 mt-1">{tabErr('peso_kg')}</p>
+                )}
               </div>
-              <div className={`px-4 py-2 rounded-lg font-bold text-sm ${
-                complexion === 'NORMAL' ? 'bg-green-100 text-green-700' :
-                complexion === 'SOBREPESO' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-              }`}>
-                {complexion}
+
+              <div>
+                <StudyCaptureFieldLabel required={isExamenMedicoRequiredField('somatometria', 'talla_m')}>
+                  Talla (metros)
+                </StudyCaptureFieldLabel>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={somaForm.talla_m || ''}
+                  onChange={e => {
+                    const v = e.target.value
+                    const next =
+                      v.includes('.') || v.includes(',')
+                        ? v.replace(',', '.')
+                        : formatTallaMetersWhileTyping(v)
+                    updateSomaField('talla_m', next)
+                  }}
+                  onBlur={e => {
+                    const formatted = formatTallaMetersForDisplay(e.target.value)
+                    if (formatted !== e.target.value.trim()) {
+                      updateSomaField('talla_m', formatted)
+                    }
+                  }}
+                  disabled={formReadonly}
+                  className={examFieldRingClass(
+                    Boolean(tabErr('talla_m')),
+                    EXAM_NUMERIC_INPUT_CLASS,
+                  )}
+                  placeholder="Ej: 1,75 o 175"
+                />
+                {tabErr('talla_m') && (
+                  <p className="text-[11px] text-red-600 mt-1">{tabErr('talla_m')}</p>
+                )}
+              </div>
+
+              <div className="sm:col-span-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-500">IMC calculado</p>
+                  <div className="text-2xl font-black text-slate-800 font-mono tabular-nums">
+                    {imc}
+                  </div>
+                </div>
+                <span
+                  className={`px-3 py-1.5 rounded-lg font-bold text-xs ${
+                    complexion === 'NORMAL'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : complexion === 'SOBREPESO'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-red-100 text-red-700'
+                  }`}
+                >
+                  {complexion}
+                </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
-            <p className="text-sm font-medium text-slate-500">{somaSaveMsg}</p>
-            {!formReadonly && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveSoma(false)}
-                  disabled={isSavingSoma}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-5 rounded-xl transition-all disabled:opacity-50 text-sm"
-                >
-                  {isSavingSoma ? 'Guardando...' : 'Guardar borrador'}
-                </button>
-                <button
-                  onClick={() => handleSaveSoma(true)}
-                  disabled={isSavingSoma}
-                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-teal-200 transition-all disabled:opacity-50 text-sm"
-                >
-                  {isSavingSoma ? 'Guardando...' : '✓ Completar Somatometría'}
-                </button>
-              </div>
-            )}
-          </div>
+          <ExamSectionFooter
+            readonly={formReadonly}
+            isBusy={isSavingSoma}
+            statusMessage={somaSaveMsg}
+            onSaveDraft={() => handleSaveSoma(false)}
+            onPrimary={() => handleSaveSoma(true)}
+            primaryLabel="Guardar y continuar → Signos Vitales"
+          />
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* PESTAÑA 2: SIGNOS VITALES                                     */}
+      {/* PASO 2: SIGNOS VITALES                                        */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {outerTab === 'signos_vitales' && (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 bg-rose-50 border border-rose-200 rounded-xl px-4 py-2.5">
-            <span className="text-rose-600">💓</span>
-            <p className="text-xs font-bold text-rose-800">Signos Vitales — Tensión Arterial, FC, Temperatura y Perímetros</p>
-          </div>
+          <ExamSectionHeader
+            icon="💓"
+            title="Signos Vitales"
+            subtitle="Tensión arterial, frecuencia cardiaca, temperatura, respiración y saturación."
+            stepNumber={stepNumberFor('signos_vitales')}
+            totalSteps={totalSteps}
+          />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="col-span-2">
-              <StudyCaptureFieldLabel required>
-                TENSIÓN ARTERIAL (Sist / Diast)
-              </StudyCaptureFieldLabel>
-              <div className="flex items-center gap-2">
+          <div className={EXAM_CARD_CLASS}>
+            <p className={EXAM_CARD_TITLE_CLASS}>Parámetros vitales</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="sm:col-span-2">
+                <StudyCaptureFieldLabel required>
+                  Tensión arterial (Sist / Diast)
+                </StudyCaptureFieldLabel>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={300}
+                    value={vitalsForm.ta_sistolica || ''}
+                    onChange={e => updateVitalsField('ta_sistolica', e.target.value)}
+                    disabled={formReadonly}
+                    className={examFieldRingClass(
+                      Boolean(tabErr('ta_sistolica') || tabErr('_vitals')),
+                      `${EXAM_NUMERIC_INPUT_CLASS} text-center`,
+                    )}
+                    placeholder="120"
+                  />
+                  <span className="text-slate-400 font-bold text-lg">/</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={200}
+                    value={vitalsForm.ta_diastolica || ''}
+                    onChange={e => updateVitalsField('ta_diastolica', e.target.value)}
+                    disabled={formReadonly}
+                    className={`${EXAM_NUMERIC_INPUT_CLASS} text-center`}
+                    placeholder="80"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <StudyCaptureFieldLabel required>Frec. cardiaca (lpm)</StudyCaptureFieldLabel>
                 <input
-                  type="number" min={0} max={300}
-                  value={vitalsForm.ta_sistolica || ''}
-                  onChange={e => updateVitalsField('ta_sistolica', e.target.value)}
+                  type="number"
+                  min={0}
+                  max={300}
+                  value={vitalsForm.fc_min || ''}
+                  onChange={e => updateVitalsField('fc_min', e.target.value)}
                   disabled={formReadonly}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 font-mono text-center disabled:opacity-60"
-                  placeholder="120"
+                  className={examFieldRingClass(
+                    Boolean(tabErr('fc_min') || tabErr('_vitals')),
+                    `${EXAM_NUMERIC_INPUT_CLASS} text-center`,
+                  )}
+                  placeholder="BPM"
                 />
-                <span className="text-slate-400 font-bold text-xl">/</span>
+              </div>
+
+              <div>
+                <label className={EXAM_LABEL_CLASS}>Temperatura (°C)</label>
                 <input
-                  type="number" min={0} max={200}
-                  value={vitalsForm.ta_diastolica || ''}
-                  onChange={e => updateVitalsField('ta_diastolica', e.target.value)}
+                  type="number"
+                  step="0.1"
+                  min={30}
+                  max={45}
+                  value={vitalsForm.temperatura || ''}
+                  onChange={e => updateVitalsField('temperatura', e.target.value)}
                   disabled={formReadonly}
-                  className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 font-mono text-center disabled:opacity-60"
-                  placeholder="80"
+                  className={`${EXAM_NUMERIC_INPUT_CLASS} text-center`}
+                  placeholder="°C"
+                />
+              </div>
+
+              <div>
+                <label className={EXAM_LABEL_CLASS}>Frec. respiratoria (rpm)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={80}
+                  value={vitalsForm.fr_min || ''}
+                  onChange={e => updateVitalsField('fr_min', e.target.value)}
+                  disabled={formReadonly}
+                  className={`${EXAM_NUMERIC_INPUT_CLASS} text-center`}
+                  placeholder="RPM"
+                />
+              </div>
+
+              <div>
+                <label className={EXAM_LABEL_CLASS}>Sat. oxígeno (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={vitalsForm.saturacion_oxigeno || ''}
+                  onChange={e => updateVitalsField('saturacion_oxigeno', e.target.value)}
+                  disabled={formReadonly}
+                  className={`${EXAM_NUMERIC_INPUT_CLASS} text-center`}
+                  placeholder="%"
                 />
               </div>
             </div>
-            <div>
-              <StudyCaptureFieldLabel required>
-                Frec. Cardiaca
-              </StudyCaptureFieldLabel>
-              <input
-                type="number" min={0} max={300}
-                value={vitalsForm.fc_min || ''}
-                onChange={e => setVitalsForm(prev => ({ ...prev, fc_min: e.target.value }))}
-                disabled={formReadonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 text-center font-mono disabled:opacity-60"
-                placeholder="BPM"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Temperatura</label>
-              <input
-                type="number" step="0.1" min={30} max={45}
-                value={vitalsForm.temperatura || ''}
-                onChange={e => setVitalsForm(prev => ({ ...prev, temperatura: e.target.value }))}
-                disabled={formReadonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 text-center font-mono disabled:opacity-60"
-                placeholder="°C"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Frec. Respiratoria</label>
-              <input
-                type="number" min={0} max={80}
-                value={vitalsForm.fr_min || ''}
-                onChange={e => setVitalsForm(prev => ({ ...prev, fr_min: e.target.value }))}
-                disabled={formReadonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 text-center font-mono disabled:opacity-60"
-                placeholder="RPM"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-2">Sat. Oxígeno (%)</label>
-              <input
-                type="number" min={0} max={100}
-                value={vitalsForm.saturacion_oxigeno || ''}
-                onChange={e => setVitalsForm(prev => ({ ...prev, saturacion_oxigeno: e.target.value }))}
-                disabled={formReadonly}
-                className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-rose-500 text-center font-mono disabled:opacity-60"
-                placeholder="%"
-              />
-            </div>
+            {tabErr('_vitals') && (
+              <p className="text-[11px] text-red-600">{tabErr('_vitals')}</p>
+            )}
           </div>
 
           <VitalSignsPrediagnosisPanel
@@ -1831,44 +1932,35 @@ export default function ExamenMedicoEstudio({
             sexo={modulo1['m1_sexo'] || String(form.sexo ?? '') || undefined}
           />
 
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
-            <p className="text-sm font-medium text-slate-500">{vitalsSaveMsg}</p>
-            {!formReadonly && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveVitals(false)}
-                  disabled={isSavingVitals}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-5 rounded-xl transition-all disabled:opacity-50 text-sm"
-                >
-                  {isSavingVitals ? 'Guardando...' : 'Guardar borrador'}
-                </button>
-                <button
-                  onClick={() => handleSaveVitals(true)}
-                  disabled={isSavingVitals}
-                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-rose-200 transition-all disabled:opacity-50 text-sm"
-                >
-                  {isSavingVitals ? 'Guardando...' : '✓ Completar Signos Vitales'}
-                </button>
-              </div>
-            )}
-          </div>
+          <ExamSectionFooter
+            readonly={formReadonly}
+            isBusy={isSavingVitals}
+            statusMessage={vitalsSaveMsg}
+            onPrev={() => requestOuterTabChange('somatometria')}
+            onSaveDraft={() => handleSaveVitals(false)}
+            onPrimary={() => handleSaveVitals(true)}
+            primaryLabel="Guardar y continuar → Agudeza Visual"
+          />
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════ */}
-      {/* PESTAÑA 3: AGUDEZA VISUAL                                     */}
+      {/* PASO 3: AGUDEZA VISUAL                                        */}
       {/* ══════════════════════════════════════════════════════════════ */}
       {outerTab === 'agudeza_visual' && (
-        <div className="space-y-5">
-          <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
-            <span className="text-indigo-600">👁️</span>
-            <p className="text-xs font-bold text-indigo-800">Agudeza Visual — Campo Visual y Pruebas Complementarias</p>
-          </div>
+        <div className="space-y-4">
+          <ExamSectionHeader
+            icon="👁️"
+            title="Agudeza Visual"
+            subtitle="Campo visual (Snellen), pruebas complementarias y clasificación automática."
+            stepNumber={stepNumberFor('agudeza_visual')}
+            totalSteps={totalSteps}
+          />
 
           {/* Campo Visual — lejana Snellen; cercana decimal legacy AMI */}
-          <div>
-            <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Campo Visual</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={EXAM_CARD_CLASS}>
+            <p className={EXAM_CARD_TITLE_CLASS}>Campo Visual</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {VISUAL_FIELDS.map(f => (
                 <div key={f.name}>
                   <StudyCaptureFieldLabel
@@ -1880,86 +1972,81 @@ export default function ExamenMedicoEstudio({
                   </StudyCaptureFieldLabel>
                   <select
                     value={agudezaForm[f.name] || NO_APLICA}
-                    onChange={e => {
-                      clearFieldSaveError(f.name)
-                      handleAgudezaField(f.name, e.target.value)
-                    }}
+                    onChange={e => handleAgudezaField(f.name, e.target.value)}
                     disabled={formReadonly}
                     className={examFieldRingClass(
                       Boolean(tabErr(f.name)),
-                      'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 font-mono text-sm disabled:opacity-60',
+                      `${EXAM_INPUT_CLASS} font-mono`,
                     )}
                   >
                     {visionFieldSelectOptions(f.name, agudezaForm[f.name]).map(v => (
-                      <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
+                      <option key={v} value={v}>
+                        {getCatalogEnumDisplayLabel(v)}
+                      </option>
                     ))}
                   </select>
+                  {tabErr(f.name) && (
+                    <p className="text-[11px] text-red-600 mt-1">{tabErr(f.name)}</p>
+                  )}
                 </div>
               ))}
             </div>
-            <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3">
-              <p className="text-[10px] font-bold text-indigo-500">
+
+            <div className="rounded-xl border border-teal-200 bg-teal-50/60 px-4 py-3">
+              <p className="text-[11px] font-bold text-teal-700">
                 Clasificación agudeza visual (automática)
               </p>
-              <p className="mt-1 text-sm font-semibold text-indigo-900">
+              <p className="mt-1 text-sm font-semibold text-slate-800">
                 {derivedAgudezaResumen || 'Complete visión lejana OD/OI para clasificar'}
               </p>
-              <p className="mt-1 text-xs text-indigo-700/80">
+              <p className="mt-0.5 text-xs text-teal-700/90">
                 Se sincroniza al resumen clínico y al PDF del examen médico.
               </p>
             </div>
           </div>
 
           {/* Pruebas Complementarias */}
-          <div>
-            <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Pruebas Complementarias</h4>
+          <div className={EXAM_CARD_CLASS}>
+            <p className={EXAM_CARD_TITLE_CLASS}>Pruebas Complementarias</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {([
                 { name: 'campimetria', label: 'Campimetría', options: CAMPIMETRIA_VALUES },
                 { name: 'test_ishihara', label: 'Test Ishihara', options: TEST_ISHIHARA_VALUES },
                 { name: 'reflejos', label: 'Reflejos', options: REFLEJOS_VALUES },
-              ] as { name: string; label: string; options: readonly string[] }[]).map(({ name, label, options }) => (
-                <div key={name}>
-                  <label className="block text-xs font-semibold text-slate-500 mb-2">{label}</label>
-                  <select
-                    value={agudezaForm[name] || options[0]}
-                    onChange={e => handleAgudezaField(name, e.target.value)}
-                    disabled={formReadonly}
-                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-60"
-                  >
-                    {options.map(v => (
-                      <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+              ] as { name: string; label: string; options: readonly string[] }[]).map(
+                ({ name, label, options }) => (
+                  <div key={name}>
+                    <label className={EXAM_LABEL_CLASS}>{label}</label>
+                    <select
+                      value={agudezaForm[name] || options[0]}
+                      onChange={e => handleAgudezaField(name, e.target.value)}
+                      disabled={formReadonly}
+                      className={EXAM_INPUT_CLASS}
+                    >
+                      {options.map(v => (
+                        <option key={v} value={v}>
+                          {getCatalogEnumDisplayLabel(v)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ),
+              )}
             </div>
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="text-xs text-slate-500">
               Campimetría resumida para papeletas sin estudio CAMPIMETRIA completo.
             </p>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
-            <p className="text-sm font-medium text-slate-500">{agudezaSaveMsg}</p>
-            {!formReadonly && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveAgudeza(false)}
-                  disabled={isSavingAgudeza}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-5 rounded-xl transition-all disabled:opacity-50 text-sm"
-                >
-                  {isSavingAgudeza ? 'Guardando...' : 'Guardar borrador'}
-                </button>
-                <button
-                  onClick={() => handleSaveAgudeza(true)}
-                  disabled={isSavingAgudeza}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-indigo-200 transition-all disabled:opacity-50 text-sm"
-                >
-                  {isSavingAgudeza ? 'Guardando...' : '✓ Completar Agudeza Visual'}
-                </button>
-              </div>
-            )}
-          </div>
+          <ExamSectionFooter
+            readonly={formReadonly}
+            isBusy={isSavingAgudeza}
+            statusMessage={agudezaSaveMsg}
+            onPrev={() => requestOuterTabChange('signos_vitales')}
+            onSaveDraft={() => handleSaveAgudeza(false)}
+            onPrimary={() => handleSaveAgudeza(true)}
+            primaryLabel="Guardar y continuar → Antecedentes"
+          />
         </div>
       )}
 
@@ -1968,822 +2055,806 @@ export default function ExamenMedicoEstudio({
       {/* IMPL-20260809-02 (ARCH-20260809-01 v2): 'antecedentes' ya no es */}
       {/* outer-tab; ahora es primera inner-tab dentro de esta pestaña.   */}
       {/* ══════════════════════════════════════════════════════════════ */}
-      {showExamenMedicoPanel && !canAccessExamen && (
-        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-5 text-center space-y-3">
-          <div className="text-3xl">🔒</div>
-          <p className="text-sm font-bold text-amber-800">Completa los prerrequisitos</p>
-          <p className="text-xs text-amber-700">
-            Para acceder a Antecedentes y el resto del examen debes completar primero:
-          </p>
-          <ul className="text-xs text-amber-800 space-y-1 font-medium">
-            {!somaCompleted && <li>⚖️ Somatometría (peso, talla y signos vitales)</li>}
-            {!vitalsCompleted && <li>💓 Signos Vitales</li>}
-            {!agudezaCompleted && <li>👁️ Agudeza Visual (incl. campimetría)</li>}
-          </ul>
-          <ul className="text-sm text-amber-700 space-y-1">
-            {!somaCompleted && (
-              <li>
-                <button type="button" onClick={() => requestOuterTabChange('somatometria', { skipGuard: true })} className="underline font-semibold hover:text-amber-900">
-                  Ir a Somatometría
-                </button>
-              </li>
-            )}
-            {!vitalsCompleted && (
-              <li>
-                <button type="button" onClick={() => requestOuterTabChange('signos_vitales', { skipGuard: true })} className="underline font-semibold hover:text-amber-900">
-                  Ir a Signos Vitales
-                </button>
-              </li>
-            )}
-            {!agudezaCompleted && (
-              <li>
-                <button type="button" onClick={() => requestOuterTabChange('agudeza_visual', { skipGuard: true })} className="underline font-semibold hover:text-amber-900">
-                  Ir a Agudeza Visual
-                </button>
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
+      {showExamenMedicoPanel && (
+        <div className="space-y-4">
+          {/* ── Sub-tab 1: Antecedentes (snapshot por cita — IMPL-20260809-02) ── */}
+          {activeInnerTab === 'antecedentes' && (
+            <div className="space-y-4">
+              <ExamSectionHeader
+                icon="🩺"
+                title="Antecedentes — Captura por cita"
+                subtitle="Cuestionario del paciente, antecedentes gineco/reproductivos e inmunizaciones."
+                stepNumber={stepNumberFor('antecedentes')}
+                totalSteps={totalSteps}
+                rightSlot={
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${antecedentesProvenanceBadge.color}`}
+                  >
+                    {antecedentesProvenanceBadge.label}
+                  </span>
+                }
+              />
 
-      {showExamenMedicoPanel && canAccessExamen && (
-        <div className="space-y-3">
-          {!papeletaLayout && (
-            <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-              {innerTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => requestInnerTabChange(tab.id)}
-                  className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-2 rounded-lg transition-colors justify-center flex-1 ${
-                    activeInnerTab === tab.id
-                      ? 'bg-white shadow text-teal-700'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <span>{tab.icon}</span>
-                  <span className="hidden sm:inline">{tab.label}</span>
-                  {tab.done && <span className="text-emerald-500 text-[10px]">●</span>}
-                </button>
-              ))}
+              <AntecedentesCaptura
+                value={antecedentesCaptured}
+                onChange={setAntecedentesCaptured}
+                initialProvenance={antecedentesProvenance}
+                workerId={workerId}
+                readonly={formReadonly}
+                modulo1={modulo1}
+                onModulo1Change={setModulo1}
+                antecedentesMedico={form.antecedentes_medico ?? ''}
+                onAntecedentesMedicoChange={v => handleField('antecedentes_medico', v)}
+                portalPrefillHint={Boolean(prefilledData || longitudinalData)}
+                hideHeader
+                hideFooter
+              />
+
+              <ExamSectionFooter
+                readonly={formReadonly}
+                isBusy={isPending}
+                statusMessage={saveError ? `❌ ${saveError}` : saveMsg}
+                onPrev={() => requestOuterTabChange('agudeza_visual')}
+                onSaveDraft={() => handleSave(false)}
+                onPrimary={() =>
+                  handleSaveAndAdvanceInner(
+                    'exploracion',
+                    'Antecedentes guardados. Continúa con Exploración Física.',
+                  )
+                }
+                primaryLabel="Guardar y continuar → Exploración"
+              />
             </div>
           )}
 
-          {/* ── Sub-tab 1: Antecedentes (snapshot por cita — IMPL-20260809-02) ── */}
-          {activeInnerTab === 'antecedentes' && (
-            <AntecedentesCaptura
-              value={antecedentesCaptured}
-              onChange={setAntecedentesCaptured}
-              initialProvenance={
-                (antecedentesCaptured._provenance ??
-                  (physicalExamData.antecedentes_captured as
-                    | { _provenance?: Record<string, unknown> }
-                    | undefined)?._provenance) as
-                  | Parameters<typeof AntecedentesCaptura>[0]['initialProvenance']
-                  | undefined
-              }
-              workerId={workerId}
-              readonly={formReadonly}
-              modulo1={modulo1}
-              onModulo1Change={setModulo1}
-              antecedentesMedico={form.antecedentes_medico ?? ''}
-              onAntecedentesMedicoChange={v => handleField('antecedentes_medico', v)}
-              portalPrefillHint={Boolean(prefilledData || longitudinalData)}
-              onContinue={() => requestInnerTabChange('exploracion')}
-            />
-          )}
-
-      {/* ── Sub-tab 2: Exploración Física ──────────────────────────────── */}
+          {/* ── Sub-tab 2: Exploración Física ──────────────────────────────── */}
           {activeInnerTab === 'exploracion' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <p className="text-xs font-bold text-slate-500 mb-4">
-              Hallazgos por aparato y sistema
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {EXPLORACION_FIELDS.map(field => {
-                if (field.name === 'boca_alineacion') return null
+            <div className="space-y-4">
+              <ExamSectionHeader
+                icon="🩻"
+                title="Exploración Física"
+                subtitle="Hallazgos por aparato, sistema y maniobras osteomusculares."
+                stepNumber={stepNumberFor('exploracion')}
+                totalSteps={totalSteps}
+              />
 
-                // Cavidad Bucal + Salud bucal anidada.
-                if (field.name === 'boca_estado') {
-                  return (
-                    <div key="cavidad_bucal" className="sm:col-span-2 lg:col-span-1 border border-slate-100 rounded-lg p-3 bg-white">
-                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
-                        Cavidad Bucal
-                      </label>
-                      <input
-                        type="text"
-                        value={form.boca_alineacion ?? ''}
-                        onChange={e => handleField('boca_alineacion', e.target.value)}
-                        disabled={formReadonly}
-                        placeholder="Dentadura completa"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                      />
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <label
-                          htmlFor="exploracion-boca-estado"
-                          className="block text-[10px] font-semibold text-slate-500 mb-1"
-                        >
-                          Salud bucal
-                        </label>
-                        <select
-                          id="exploracion-boca-estado"
-                          data-testid="exploracion-boca-estado"
-                          value={form.boca_estado ?? ''}
-                          onChange={e => handleField('boca_estado', e.target.value)}
-                          disabled={formReadonly}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                        >
-                          <option value="">— Seleccionar —</option>
-                          {SALUD_BUCAL_VALUES.map(v => (
-                            <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )
-                }
+              <div className={EXAM_CARD_CLASS}>
+                <p className={EXAM_CARD_TITLE_CLASS}>Hallazgos por aparato y sistema</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {EXPLORACION_FIELDS.map(field => {
+                    if (field.name === 'boca_alineacion') return null
 
-                // Columna Vertebral + Test Adam anidado (SI → lateral + Otros).
-                if (field.name === 'columna_vertebral') {
-                  const testAdamEstado = normalizeTestAdamEstado(form.test_adam)
-                  return (
-                    <div key={field.name} className="sm:col-span-2 lg:col-span-1 border border-slate-100 rounded-lg p-3 bg-white">
-                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
-                        {field.label}
-                      </label>
-                      <input
-                        type="text"
-                        value={form.columna_vertebral ?? ''}
-                        onChange={e => handleField('columna_vertebral', e.target.value)}
-                        disabled={formReadonly}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                      />
-                      <div className="mt-3 pt-3 border-t border-slate-100">
-                        <p className="text-[10px] font-semibold text-slate-500 mb-2">Test Adam</p>
-                        <div className="flex gap-1 mb-2">
-                          {(['NEGADO', 'SI'] as const).map(opt => (
-                            <button
-                              key={opt}
-                              type="button"
+                    // Cavidad Bucal + Salud bucal anidada.
+                    if (field.name === 'boca_estado') {
+                      return (
+                        <div
+                          key="cavidad_bucal"
+                          className="sm:col-span-2 lg:col-span-1 border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-3"
+                        >
+                          <div>
+                            <label className={EXAM_LABEL_CLASS}>Cavidad Bucal</label>
+                            <input
+                              type="text"
+                              value={form.boca_alineacion ?? ''}
+                              onChange={e => handleField('boca_alineacion', e.target.value)}
                               disabled={formReadonly}
-                              onClick={() => {
-                                handleField('test_adam', opt)
-                                if (opt === 'NEGADO') {
-                                  handleField('test_adam_lateral', '')
-                                  handleField('test_adam_otros', '')
-                                  handleField('columna_vertebral', PLANTILLAS_EF.columna_vertebral)
-                                } else {
-                                  handleField('columna_vertebral', COLUMNA_VERTEBRAL_DESVIADA)
+                              placeholder="Dentadura completa"
+                              className={EXAM_INPUT_CLASS}
+                            />
+                          </div>
+                          <div className="pt-2 border-t border-slate-200/80">
+                            <label
+                              htmlFor="exploracion-boca-estado"
+                              className={EXAM_LABEL_CLASS}
+                            >
+                              Salud bucal
+                            </label>
+                            <select
+                              id="exploracion-boca-estado"
+                              data-testid="exploracion-boca-estado"
+                              value={form.boca_estado ?? ''}
+                              onChange={e => handleField('boca_estado', e.target.value)}
+                              disabled={formReadonly}
+                              className={EXAM_INPUT_CLASS}
+                            >
+                              <option value="">— Seleccionar —</option>
+                              {SALUD_BUCAL_VALUES.map(v => (
+                                <option key={v} value={v}>
+                                  {getCatalogEnumDisplayLabel(v)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Columna Vertebral + Test Adam anidado (SI → lateral + Otros).
+                    if (field.name === 'columna_vertebral') {
+                      const testAdamEstado = normalizeTestAdamEstado(form.test_adam)
+                      return (
+                        <div
+                          key={field.name}
+                          className="sm:col-span-2 lg:col-span-1 border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-3"
+                        >
+                          <div>
+                            <label className={EXAM_LABEL_CLASS}>{field.label}</label>
+                            <input
+                              type="text"
+                              value={form.columna_vertebral ?? ''}
+                              onChange={e => handleField('columna_vertebral', e.target.value)}
+                              disabled={formReadonly}
+                              className={EXAM_INPUT_CLASS}
+                            />
+                          </div>
+                          <div className="pt-2 border-t border-slate-200/80">
+                            <p className={EXAM_LABEL_CLASS}>Test Adam</p>
+                            <div className="flex gap-1.5 mb-2">
+                              {(['NEGADO', 'SI'] as const).map(opt => (
+                                <button
+                                  key={opt}
+                                  type="button"
+                                  disabled={formReadonly}
+                                  onClick={() => {
+                                    handleField('test_adam', opt)
+                                    if (opt === 'NEGADO') {
+                                      handleField('test_adam_lateral', '')
+                                      handleField('test_adam_otros', '')
+                                      handleField('columna_vertebral', PLANTILLAS_EF.columna_vertebral)
+                                    } else {
+                                      handleField('columna_vertebral', COLUMNA_VERTEBRAL_DESVIADA)
+                                    }
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                    testAdamEstado === opt
+                                      ? 'bg-teal-50 border-teal-400 text-teal-800'
+                                      : 'bg-white border-slate-200 text-slate-600'
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                            {testAdamEstado === 'SI' && (
+                              <div className="space-y-2">
+                                <div>
+                                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                    Lateralidad
+                                  </label>
+                                  <select
+                                    value={form.test_adam_lateral ?? ''}
+                                    onChange={e => handleField('test_adam_lateral', e.target.value)}
+                                    disabled={formReadonly}
+                                    className={EXAM_INPUT_CLASS}
+                                  >
+                                    <option value="">— Seleccionar —</option>
+                                    {TEST_ADAM_LATERAL_VALUES.map(v => (
+                                      <option key={v} value={v}>
+                                        {getCatalogEnumDisplayLabel(v)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                    Otros
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={form.test_adam_otros ?? ''}
+                                    onChange={e => handleField('test_adam_otros', e.target.value)}
+                                    disabled={formReadonly}
+                                    placeholder="Detalle adicional del Test Adam"
+                                    maxLength={500}
+                                    className={EXAM_INPUT_CLASS}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Quiste sinovial — NEGATIVO/POSITIVO + especificar si POSITIVO.
+                    if (field.name === 'presencia_quiste_sinovial') {
+                      const quisteEstado = normalizeQuisteEstado(form.presencia_quiste_sinovial)
+                      return (
+                        <div
+                          key={field.name}
+                          className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2"
+                        >
+                          <div>
+                            <label className={EXAM_LABEL_CLASS}>{field.label}</label>
+                            <select
+                              value={quisteEstado}
+                              onChange={e => {
+                                handleField('presencia_quiste_sinovial', e.target.value)
+                                if (e.target.value !== 'POSITIVO') {
+                                  handleField('especificar_quiste', '')
                                 }
                               }}
-                              className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
-                                testAdamEstado === opt
-                                  ? 'bg-blue-100 border-blue-400 text-blue-700'
-                                  : 'bg-white border-slate-200 text-slate-500'
-                              }`}
+                              disabled={formReadonly}
+                              className={EXAM_INPUT_CLASS}
                             >
-                              {opt}
-                            </button>
-                          ))}
-                        </div>
-                        {testAdamEstado === 'SI' && (
-                          <div className="space-y-2">
+                              {QUISTE_SINOVIAL_CAPTURA_VALUES.map(v => (
+                                <option key={v} value={v}>
+                                  {getCatalogEnumDisplayLabel(v)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          {quisteEstado === 'POSITIVO' && (
                             <div>
-                              <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
-                                Lateralidad
-                              </label>
-                              <select
-                                value={form.test_adam_lateral ?? ''}
-                                onChange={e => handleField('test_adam_lateral', e.target.value)}
-                                disabled={formReadonly}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
-                              >
-                                <option value="">— Seleccionar —</option>
-                                {TEST_ADAM_LATERAL_VALUES.map(v => (
-                                  <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
-                                Otros
+                              <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                                Especifique
                               </label>
                               <input
                                 type="text"
-                                value={form.test_adam_otros ?? ''}
-                                onChange={e => handleField('test_adam_otros', e.target.value)}
+                                value={form.especificar_quiste ?? ''}
+                                onChange={e => handleField('especificar_quiste', e.target.value)}
                                 disabled={formReadonly}
-                                placeholder="Detalle adicional del Test Adam"
+                                placeholder="Ubicación o detalle del quiste"
                                 maxLength={500}
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
+                                className={EXAM_INPUT_CLASS}
                               />
                             </div>
-                          </div>
+                          )}
+                        </div>
+                      )
+                    }
+
+                    const currentValue = form[field.name] ?? ''
+                    if (field.kind === 'select' && field.values) {
+                      return (
+                        <div key={field.name}>
+                          <label className={EXAM_LABEL_CLASS}>{field.label}</label>
+                          <select
+                            value={currentValue}
+                            onChange={e => handleField(field.name, e.target.value)}
+                            disabled={formReadonly}
+                            className={EXAM_INPUT_CLASS}
+                          >
+                            <option value="">— Seleccionar —</option>
+                            {field.values.map(v => (
+                              <option key={v} value={v}>
+                                {getCatalogEnumDisplayLabel(v)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div key={field.name}>
+                        <label className={EXAM_LABEL_CLASS}>{field.label}</label>
+                        <input
+                          type="text"
+                          value={currentValue}
+                          onChange={e => handleField(field.name, e.target.value)}
+                          disabled={formReadonly}
+                          className={EXAM_INPUT_CLASS}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {hasPositiveEF && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <label className="block">
+                    <span className="text-xs font-semibold text-amber-800">
+                      ⚠️ Especifique hallazgos positivos
+                    </span>
+                    <p className="text-[11px] text-amber-700 mt-0.5 mb-2">
+                      Detalle los hallazgos positivos en{' '}
+                      <code>test_romberg</code>, <code>signo_bragard</code>,{' '}
+                      <code>prueba_finkelstein</code>, <code>signo_tinel</code>,{' '}
+                      <code>prueba_phanel</code>, <code>prueba_lasegue</code>.
+                    </p>
+                    <ClinicalTextarea
+                      rows={3}
+                      value={form.especifique_positivos ?? ''}
+                      onChange={v => handleField('especifique_positivos', v)}
+                      disabled={formReadonly}
+                      placeholder="Detalle los hallazgos positivos observados..."
+                      className="w-full bg-white border border-amber-200 rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-60"
+                    />
+                  </label>
+                </div>
+              )}
+
+              <ExamSectionFooter
+                readonly={formReadonly}
+                isBusy={isPending}
+                statusMessage={saveError ? `❌ ${saveError}` : saveMsg}
+                onPrev={() => requestInnerTabChange('antecedentes')}
+                onSaveDraft={() => handleSave(false)}
+                onPrimary={() => {
+                  const nextTab: InnerTab = hasVariantExtension ? 'extension' : 'impresion'
+                  const nextLabel = hasVariantExtension
+                    ? examenMedicoVariantLabel(examVariant)
+                    : 'Impresión clínica'
+                  handleSaveAndAdvanceInner(
+                    nextTab,
+                    `Exploración Física guardada. Continúa con ${nextLabel}.`,
+                  )
+                }}
+                primaryLabel={`Guardar y continuar → ${
+                  hasVariantExtension ? examenMedicoVariantLabel(examVariant) : 'Impresión'
+                }`}
+              />
+            </div>
+          )}
+
+          {/* ── Sub-tab extensión corporativa (Flowserve / Sodexo) ───────── */}
+          {activeInnerTab === 'extension' && examVariant === 'FLOWSERVE' && (
+            <div className="space-y-4">
+              <ExamSectionHeader
+                icon="🏭"
+                title={`Extensión ${examenMedicoVariantLabel(examVariant)}`}
+                subtitle="Campos corporativos específicos requeridos por el cliente."
+                stepNumber={stepNumberFor('extension')}
+                totalSteps={totalSteps}
+              />
+              <FlowserveExtension
+                value={flowserveExt}
+                onChange={setFlowserveExt}
+                readonly={formReadonly}
+              />
+              <ExamSectionFooter
+                readonly={formReadonly}
+                isBusy={isPending}
+                statusMessage={saveError ? `❌ ${saveError}` : saveMsg}
+                onPrev={() => requestInnerTabChange('exploracion')}
+                onSaveDraft={() => handleSave(false)}
+                onPrimary={() =>
+                  handleSaveAndAdvanceInner(
+                    'impresion',
+                    `Extensión ${examenMedicoVariantLabel(examVariant)} guardada. Continúa con Impresión clínica.`,
+                  )
+                }
+                primaryLabel="Guardar y continuar → Impresión"
+              />
+            </div>
+          )}
+
+          {activeInnerTab === 'extension' && examVariant === 'SODEXO' && (
+            <div className="space-y-4">
+              <ExamSectionHeader
+                icon="🍽️"
+                title={`Extensión ${examenMedicoVariantLabel(examVariant)}`}
+                subtitle="Formato corporativo Sodexo REG-SO-01 integrado con la captura clínica."
+                stepNumber={stepNumberFor('extension')}
+                totalSteps={totalSteps}
+              />
+              <SodexoExtension
+                value={sodexoExt}
+                onChange={handleSodexoExtChange}
+                readonly={formReadonly}
+                sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
+                sodexoPreviewApiUrl={examenMedicoSodexoPreviewApiUrl(eventId)}
+                showSodexoPdfDownload={
+                  shouldShowExamenMedicoPdfCta(aptitud) && hasMedicalVerdict === true
+                }
+                sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
+                validatingViewHref={navigateToValidatingView(eventId)}
+                ami={{
+                  examForm: {
+                    ...form,
+                    recomendaciones_clinicas: recomendaciones,
+                    aptitud,
+                  },
+                  antecedentesCaptured,
+                  modulo1,
+                  somatometry: { ...initSomatometryData, ...vitalsForm, ...somaForm },
+                  vitalSigns: { ...vitalsForm },
+                  eyeAcuity: { ...initEyeAcuityData, ...agudezaForm },
+                  prefilledData,
+                  longitudinalData,
+                }}
+              />
+              <ExamSectionFooter
+                readonly={formReadonly}
+                isBusy={isPending}
+                statusMessage={saveError ? `❌ ${saveError}` : saveMsg}
+                onPrev={() => requestInnerTabChange('exploracion')}
+                onSaveDraft={() => handleSave(false)}
+                onPrimary={() =>
+                  handleSaveAndAdvanceInner(
+                    'impresion',
+                    `Extensión ${examenMedicoVariantLabel(examVariant)} guardada. Continúa con Impresión clínica.`,
+                  )
+                }
+                primaryLabel="Guardar y continuar → Impresión"
+              />
+            </div>
+          )}
+
+          {/* ── Sub-tab final: Impresión Diagnóstica y Aptitud ──────────── */}
+          {activeInnerTab === 'impresion' && (
+            <div className="space-y-4">
+              <ExamSectionHeader
+                icon="✅"
+                title="Impresión clínica y recomendaciones"
+                subtitle="Resumen por sistema, impresión diagnóstica, recomendaciones y cierre de captura."
+                stepNumber={stepNumberFor('impresion')}
+                totalSteps={totalSteps}
+              />
+
+              {/* Resumen Clínico por Sistema — ARCH-20260325-09 */}
+              <div className={EXAM_CARD_CLASS}>
+                <p className={EXAM_CARD_TITLE_CLASS}>Resumen Clínico por Sistema</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {RESUMEN_CLINICO_FIELDS.map(([field, label]) => {
+                    const isEstadoNutricional = field === 'estado_nutricional'
+                    const isSaludBucal = field === 'salud_bucal'
+                    const isAgudezaVisual = field === 'agudeza_visual_resumen'
+                    const isPresionArterial = field === 'presion_arterial_resumen'
+                    const comboValues = isEstadoNutricional
+                      ? ESTADO_NUTRICIONAL_VALUES
+                      : isSaludBucal
+                        ? SALUD_BUCAL_VALUES
+                        : isAgudezaVisual
+                          ? AGUDEZA_VISUAL_RESUMEN_VALUES
+                          : isPresionArterial
+                            ? PRESION_ARTERIAL_RESUMEN_VALUES
+                            : null
+                    const fieldErr = examSaveErr(field)
+                    return (
+                      <div key={field}>
+                        <label
+                          htmlFor={`resumen-clinico-${field}`}
+                          className={EXAM_LABEL_CLASS}
+                        >
+                          {label}
+                        </label>
+                        {comboValues ? (
+                          <select
+                            id={`resumen-clinico-${field}`}
+                            data-testid={`resumen-clinico-${field}`}
+                            value={form[field] ?? ''}
+                            onChange={e => handleResumenClinicoField(field, e.target.value)}
+                            disabled={formReadonly}
+                            className={examFieldRingClass(
+                              Boolean(fieldErr),
+                              EXAM_INPUT_CLASS,
+                            )}
+                          >
+                            <option value="">—</option>
+                            {comboValues.map(v => (
+                              <option key={v} value={v}>
+                                {getCatalogEnumDisplayLabel(v)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            id={`resumen-clinico-${field}`}
+                            data-testid={`resumen-clinico-${field}`}
+                            type="text"
+                            value={form[field] ?? ''}
+                            onChange={e => handleResumenClinicoField(field, e.target.value)}
+                            disabled={formReadonly}
+                            className={examFieldRingClass(
+                              Boolean(fieldErr),
+                              EXAM_INPUT_CLASS,
+                            )}
+                          />
+                        )}
+                        {fieldErr && (
+                          <p className="text-[11px] text-red-600 mt-1">{fieldErr}</p>
                         )}
                       </div>
-                    </div>
-                  )
-                }
+                    )
+                  })}
+                </div>
+              </div>
 
-                // Quiste sinovial — NEGATIVO/POSITIVO + especificar si POSITIVO.
-                if (field.name === 'presencia_quiste_sinovial') {
-                  const quisteEstado = normalizeQuisteEstado(form.presencia_quiste_sinovial)
-                  return (
-                    <div key={field.name} className="border border-slate-100 rounded-lg p-3 bg-white">
-                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
-                        {field.label}
-                      </label>
-                      <select
-                        value={quisteEstado}
-                        onChange={e => {
-                          handleField('presencia_quiste_sinovial', e.target.value)
-                          if (e.target.value !== 'POSITIVO') {
-                            handleField('especificar_quiste', '')
-                          }
-                        }}
-                        disabled={formReadonly}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                      >
-                        {QUISTE_SINOVIAL_CAPTURA_VALUES.map(v => (
-                          <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
-                        ))}
-                      </select>
-                      {quisteEstado === 'POSITIVO' && (
-                        <div className="mt-2">
-                          <label className="block text-[9px] font-medium text-slate-500 mb-0.5">
-                            Especifique
-                          </label>
-                          <input
-                            type="text"
-                            value={form.especificar_quiste ?? ''}
-                            onChange={e => handleField('especificar_quiste', e.target.value)}
-                            disabled={formReadonly}
-                            placeholder="Ubicación o detalle del quiste"
-                            maxLength={500}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs focus:ring-1 focus:ring-teal-500 outline-none disabled:opacity-60"
-                          />
-                        </div>
+              {/* Impresión Diagnóstica */}
+              <div className={EXAM_CARD_CLASS}>
+                <p className={EXAM_CARD_TITLE_CLASS}>Impresión diagnóstica y seguimiento</p>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-xs font-semibold text-slate-600">
+                        Impresión diagnóstica
+                      </span>
+                      {!formReadonly && impresionDiagnosticaPropuesta.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            impresionDiagnosticaManualRef.current = false
+                            const propuesta = impresionDiagnosticaPropuesta.trim()
+                            handleField('impresion_diagnostica', propuesta)
+                            if (!(form.examen_medico_texto ?? '').trim()) {
+                              handleField('examen_medico_texto', propuesta)
+                            }
+                          }}
+                          className="text-[11px] font-bold text-teal-700 hover:text-teal-900 underline"
+                          title="Generar texto desde antecedentes patológicos SÍ y hallazgos del examen"
+                        >
+                          ↻ Generar desde antecedentes y examen
+                        </button>
                       )}
                     </div>
-                  )
-                }
-
-                // IMPL-20260817-01-C2: render condicional por `kind`.
-                // - `select` → <select> con valores ZIN (DA-1).
-                // - `plantilla` / `text` → <input> con valor inicial (plantilla ZIN o default).
-                const currentValue = form[field.name] ?? ''
-                if (field.kind === 'select' && field.values) {
-                  return (
-                    <div key={field.name}>
-                      <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
-                        {field.label}
-                      </label>
-                      <select
-                        value={currentValue}
-                        onChange={e => handleField(field.name, e.target.value)}
-                        disabled={formReadonly}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-                      >
-                        <option value="">— Seleccionar —</option>
-                        {field.values.map(v => (
-                          <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )
-                }
-                // `plantilla` o `text` → input text (valor ya prellenado en `form`).
-                return (
-                  <div key={field.name}>
-                    <label className="block text-[10px] font-semibold text-slate-500 tracking-wide mb-1">
-                      {field.label}
-                    </label>
-                    <input
-                      type="text"
-                      value={currentValue}
-                      onChange={e => handleField(field.name, e.target.value)}
+                    <ClinicalTextarea
+                      rows={4}
+                      value={form.impresion_diagnostica ?? ''}
+                      onChange={v => {
+                        impresionDiagnosticaManualRef.current = true
+                        handleField('impresion_diagnostica', v)
+                      }}
                       disabled={formReadonly}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
+                      placeholder={
+                        impresionDiagnosticaPropuesta.trim()
+                          ? 'Se auto-completa al abrir esta pestaña si hay antecedentes patológicos en SÍ (editable).'
+                          : 'Opcional: con APP en SÍ se propone texto desde el examen; si no, se completa al guardar.'
+                      }
+                      className={examFieldRingClass(
+                        Boolean(examSaveErr('impresion_diagnostica')),
+                        EXAM_TEXTAREA_CLASS,
+                      )}
+                    />
+                    {examSaveErr('impresion_diagnostica') && (
+                      <p className="text-[11px] text-red-600 mt-1">
+                        {examSaveErr('impresion_diagnostica')}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className={EXAM_LABEL_CLASS}>Restricciones / condicionantes</span>
+                    <ClinicalTextarea
+                      rows={3}
+                      value={form.restricciones ?? ''}
+                      onChange={v => handleField('restricciones', v)}
+                      disabled={formReadonly}
+                      placeholder="Si aplica, detalla las restricciones o condicionantes laborales..."
+                      className={EXAM_TEXTAREA_CLASS}
                     />
                   </div>
-                )
-              })}
-            </div>
-          </div>
 
-          {/* IMPL-20260817-01-C2: acordeón EF-Especificar (txtEFEspecificar).
-              Aparece cuando alguna prueba de exploración física tiene valor POSITIVO
-              (Test Adam en Columna Vertebral, test_romberg, signo_bragard, prueba_finkelstein, signo_tinel,
-              prueba_phanel, prueba_lasegue). Ver SPEC §4.5 + análisis ZIN §B. */}
-          {hasPositiveEF && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <label className="block">
-                <span className="text-xs font-semibold text-amber-800">
-                  ⚠️ Especifique hallazgos positivos
-                </span>
-                <p className="text-[10px] text-amber-700 mt-0.5 mb-2">
-                  Detalle los hallazgos positivos en{' '}
-                  <code>test_romberg</code>, <code>signo_bragard</code>,{' '}
-                  <code>prueba_finkelstein</code>, <code>signo_tinel</code>,{' '}
-                  <code>prueba_phanel</code>, <code>prueba_lasegue</code>.
-                </p>
-                <ClinicalTextarea
-                  rows={3}
-                  value={form.especifique_positivos ?? ''}
-                  onChange={(v) => handleField('especifique_positivos', v)}
-                  disabled={formReadonly}
-                  placeholder="Detalle los hallazgos positivos observados..."
-                  className="w-full bg-white border border-amber-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-60"
-                />
-              </label>
-            </div>
-          )}
-
-          {/* Guardar borrador desde exploración */}
-          {!formReadonly && (
-            <button
-              onClick={() => handleSave(false)}
-              disabled={isPending}
-              className="w-full border-2 border-teal-400 text-teal-700 hover:bg-teal-50 text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
-            >
-              {isPending ? 'Guardando...' : '💾 Guardar borrador'}
-            </button>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => requestInnerTabChange('antecedentes')}
-              className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold py-2.5 rounded-xl transition-colors"
-            >
-              ← Antecedentes
-            </button>
-            <button
-              onClick={() =>
-                requestInnerTabChange(
-                  !isDefaultExamenMedicoVariant(examVariant) ? 'extension' : 'impresion',
-                )
-              }
-              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors"
-            >
-              Continuar →{' '}
-              {!isDefaultExamenMedicoVariant(examVariant)
-                ? examenMedicoVariantLabel(examVariant)
-                : 'Impresión'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Sub-tab extensión corporativa (Flowserve / Sodexo) ───────── */}
-      {activeInnerTab === 'extension' && examVariant === 'FLOWSERVE' && (
-        <div className="space-y-4">
-          <FlowserveExtension value={flowserveExt} onChange={setFlowserveExt} readonly={formReadonly} />
-          <div className="flex gap-2">
-            <button
-              onClick={() => requestInnerTabChange('exploracion')}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-xl"
-            >
-              ← Exploración
-            </button>
-            <button
-              onClick={() => requestInnerTabChange('impresion')}
-              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl"
-            >
-              Continuar → Impresión
-            </button>
-          </div>
-        </div>
-      )}
-
-      {activeInnerTab === 'extension' && examVariant === 'SODEXO' && (
-        <div className="space-y-4">
-          <SodexoExtension
-            value={sodexoExt}
-            onChange={handleSodexoExtChange}
-            readonly={formReadonly}
-            sodexoPdfUrl={examenMedicoSodexoPdfUrl(eventId)}
-            sodexoPreviewApiUrl={examenMedicoSodexoPreviewApiUrl(eventId)}
-            showSodexoPdfDownload={
-              shouldShowExamenMedicoPdfCta(aptitud) && hasMedicalVerdict === true
-            }
-            sodexoPdfPending={Boolean(aptitud) && hasMedicalVerdict !== true}
-            validatingViewHref={navigateToValidatingView(eventId)}
-            ami={{
-              examForm: {
-                ...form,
-                recomendaciones_clinicas: recomendaciones,
-                aptitud,
-              },
-              antecedentesCaptured,
-              modulo1,
-              somatometry: { ...initSomatometryData, ...somaForm },
-              vitalSigns: { ...vitalsForm },
-              eyeAcuity: initEyeAcuityData,
-              prefilledData,
-              longitudinalData,
-            }}
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => requestInnerTabChange('exploracion')}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-xl"
-            >
-              ← Exploración
-            </button>
-            <button
-              onClick={() => requestInnerTabChange('impresion')}
-              className="flex-1 bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold py-2.5 rounded-xl"
-            >
-              Continuar → Impresión
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Sub-tab 4: Impresión Diagnóstica y Aptitud ────────────────── */}
-          {activeInnerTab === 'impresion' && (
-        <div className="space-y-4">
-          {/* Resumen Clínico por Sistema — ARCH-20260325-09 */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500">Resumen Clínico por Sistema</p>
-            <div className="grid grid-cols-2 gap-3">
-                {RESUMEN_CLINICO_FIELDS.map(([field, label]) => {
-                  // IMPL-20260817-01-C2: estado_nutricional + salud_bucal
-                  // son ZIN combos (DA-1).
-                  // IMPL-20260817-08-C7 (ARCH-20260817-02 DA-6): agudeza_visual_resumen
-                  // y presion_arterial_resumen ahora son <select> con catálogos ZIN.
-                  const isEstadoNutricional = field === 'estado_nutricional'
-                  const isSaludBucal = field === 'salud_bucal'
-                  const isAgudezaVisual = field === 'agudeza_visual_resumen'
-                  const isPresionArterial = field === 'presion_arterial_resumen'
-                  const comboValues = isEstadoNutricional
-                    ? ESTADO_NUTRICIONAL_VALUES
-                    : isSaludBucal
-                    ? SALUD_BUCAL_VALUES
-                    : isAgudezaVisual
-                    ? AGUDEZA_VISUAL_RESUMEN_VALUES
-                    : isPresionArterial
-                    ? PRESION_ARTERIAL_RESUMEN_VALUES
-                    : null
-                  const fieldErr = examSaveErr(field)
-                  return (
-                  <div key={field}>
-                    <label
-                      htmlFor={`resumen-clinico-${field}`}
-                      className="text-[10px] font-semibold text-slate-500"
-                    >
-                      {label}
-                    </label>
-                    {comboValues ? (
-                      <select
-                        id={`resumen-clinico-${field}`}
-                        data-testid={`resumen-clinico-${field}`}
-                        value={form[field] ?? ''}
-                        onChange={e => handleResumenClinicoField(field, e.target.value)}
-                        disabled={formReadonly}
-                        className={examFieldRingClass(
-                          Boolean(fieldErr),
-                          'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
-                        )}
-                      >
-                        <option value="">—</option>
-                        {comboValues.map(v => (
-                          <option key={v} value={v}>{getCatalogEnumDisplayLabel(v)}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        id={`resumen-clinico-${field}`}
-                        data-testid={`resumen-clinico-${field}`}
-                        type="text"
-                        value={form[field] ?? ''}
-                        onChange={e => handleResumenClinicoField(field, e.target.value)}
-                        disabled={formReadonly}
-                        className={examFieldRingClass(
-                          Boolean(fieldErr),
-                          'w-full mt-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
-                        )}
-                      />
-                    )}
-                    {fieldErr && <p className="text-[10px] text-red-600 mt-0.5">{fieldErr}</p>}
+                  <div>
+                    <span className={EXAM_LABEL_CLASS}>Observaciones finales</span>
+                    <ClinicalTextarea
+                      rows={2}
+                      value={form.observaciones_finales ?? ''}
+                      onChange={v => handleField('observaciones_finales', v)}
+                      disabled={formReadonly}
+                      placeholder="Observaciones adicionales para el expediente..."
+                      className={EXAM_TEXTAREA_CLASS}
+                    />
                   </div>
-                  )
-                })}
-            </div>
-          </div>
 
-          {/* Impresión Diagnóstica */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-500">
-                Impresión diagnóstica
-              </span>
-              {!formReadonly && impresionDiagnosticaPropuesta.trim() && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    impresionDiagnosticaManualRef.current = false
-                    const propuesta = impresionDiagnosticaPropuesta.trim()
-                    handleField('impresion_diagnostica', propuesta)
-                    if (!(form.examen_medico_texto ?? '').trim()) {
-                      handleField('examen_medico_texto', propuesta)
-                    }
-                  }}
-                  className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline"
-                  title="Generar texto desde antecedentes patológicos SÍ y hallazgos del examen"
-                >
-                  ↻ Generar desde antecedentes y examen
-                </button>
-              )}
-            </div>
-            <label className="block">
-              <ClinicalTextarea
-                rows={4}
-                value={form.impresion_diagnostica ?? ''}
-                onChange={(v) => {
-                  impresionDiagnosticaManualRef.current = true
-                  handleField('impresion_diagnostica', v)
-                }}
-                disabled={formReadonly}
-                placeholder={
-                  impresionDiagnosticaPropuesta.trim()
-                    ? 'Se auto-completa al abrir esta pestaña si hay antecedentes patológicos en SÍ (editable).'
-                    : 'Opcional: con APP en SÍ se propone texto desde el examen; si no, se completa al guardar.'
-                }
-                className={examFieldRingClass(
-                  Boolean(examSaveErr('impresion_diagnostica')),
-                  'mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
-                )}
-              />
-              {examSaveErr('impresion_diagnostica') && (
-                <p className="text-[10px] text-red-600 mt-1">{examSaveErr('impresion_diagnostica')}</p>
-              )}
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-500">
-                Restricciones / condicionantes
-              </span>
-              <ClinicalTextarea
-                rows={3}
-                value={form.restricciones ?? ''}
-                onChange={(v) => handleField('restricciones', v)}
-                disabled={formReadonly}
-                placeholder="Si aplica, detalla las restricciones o condicionantes laborales..."
-                className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-500">
-                Observaciones finales
-              </span>
-              <ClinicalTextarea
-                rows={2}
-                value={form.observaciones_finales ?? ''}
-                onChange={(v) => handleField('observaciones_finales', v)}
-                disabled={formReadonly}
-                placeholder="Observaciones adicionales para el expediente..."
-                className="mt-2 w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
-              />
-            </label>
-
-            {/*
-              IMPL-20260817-09-C4 (ARCH-20260817-02 DA-7): Recomendaciones
-              auto-pobladas desde hallazgos. Regla explicita de Frank (2026-08-17):
-                "Quiero que se autopoble. Quiero que el medico solo llene lo
-                estrictamente necesario."
-
-              - Default: lista numerada auto-poblada por buildRecommendationsFromExam
-                (catalogo hallazgo → recomendacion, DA-7).
-              - Editable: el medico puede agregar/quitar/sobrescribir
-                recomendaciones libremente.
-              - DA-2: el auto-poblamiento es PROPUESTA INICIAL; una vez que el
-                medico edita, el estado local NO se sobreescribe.
-              - Boton "Regenerar desde hallazgos" para volver al auto-poblado
-                desde los hallazgos actuales del form.
-            */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-slate-500">
-                  Recomendaciones
-                </span>
-                {!formReadonly && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      recomendacionesManualRef.current = false
-                      const next = buildRecommendationsFromExam(examForHallazgosFromForm(form))
-                      lastAutoRecomendacionesRef.current = next.trim()
-                      clearFieldSaveError('recomendaciones_clinicas')
-                      setRecomendaciones(next)
-                    }}
-                    className="text-[10px] font-bold text-teal-700 hover:text-teal-900 underline"
-                    title="Reemplazar por la lista auto-poblada desde los hallazgos actuales"
-                  >
-                    ↻ Regenerar desde hallazgos
-                  </button>
-                )}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-slate-600">
+                        Recomendaciones <span className="text-red-500">*</span>
+                      </span>
+                      {!formReadonly && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            recomendacionesManualRef.current = false
+                            const next = buildRecommendationsFromExam(
+                              examForHallazgosFromForm(form),
+                            )
+                            lastAutoRecomendacionesRef.current = next.trim()
+                            clearFieldSaveError('recomendaciones_clinicas')
+                            setRecomendaciones(next)
+                          }}
+                          className="text-[11px] font-bold text-teal-700 hover:text-teal-900 underline"
+                          title="Reemplazar por la lista auto-poblada desde los hallazgos actuales"
+                        >
+                          ↻ Regenerar desde hallazgos
+                        </button>
+                      )}
+                    </div>
+                    <ClinicalTextarea
+                      rows={6}
+                      value={recomendaciones}
+                      onChange={v => {
+                        recomendacionesManualRef.current = true
+                        clearFieldSaveError('recomendaciones_clinicas')
+                        setRecomendaciones(v)
+                      }}
+                      disabled={formReadonly}
+                      placeholder="1.- Recomendación uno. 2.- Recomendación dos. (auto-poblado desde hallazgos)"
+                      className={examFieldRingClass(
+                        Boolean(examSaveErr('recomendaciones_clinicas')),
+                        EXAM_TEXTAREA_CLASS,
+                      )}
+                    />
+                    {examSaveErr('recomendaciones_clinicas') && (
+                      <p className="text-[11px] text-red-600">
+                        {examSaveErr('recomendaciones_clinicas')}
+                      </p>
+                    )}
+                    <p className="text-[11px] text-slate-500">
+                      Auto-poblado desde hallazgos del examen (caries, sobrepeso, agudeza visual,
+                      presión arterial, etc). Puedes editar, agregar o quitar recomendaciones.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <ClinicalTextarea
-                rows={6}
-                value={recomendaciones}
-                onChange={(v) => {
-                  recomendacionesManualRef.current = true
-                  clearFieldSaveError('recomendaciones_clinicas')
-                  setRecomendaciones(v)
-                }}
-                disabled={formReadonly}
-                placeholder="1.- Recomendación uno. 2.- Recomendación dos. (auto-poblado desde hallazgos)"
-                className={examFieldRingClass(
-                  Boolean(examSaveErr('recomendaciones_clinicas')),
-                  'w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm resize-none focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60',
-                )}
-              />
-              {examSaveErr('recomendaciones_clinicas') && (
-                <p className="text-[10px] text-red-600">{examSaveErr('recomendaciones_clinicas')}</p>
-              )}
-              <p className="text-[10px] text-slate-400 italic">
-                Auto-poblado desde hallazgos del examen (caries, sobrepeso,
-                agudeza visual, presión arterial, etc). Puedes editar, agregar
-                o quitar recomendaciones.
-              </p>
-            </div>
-          </div>
 
-          {/* Aptitud laboral — decisión de cierre (V3), no de captura del examen */}
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
-            <p className="text-xs font-bold text-slate-500">
-              Aptitud laboral (dictamen)
-            </p>
-            <p className="text-[11px] text-slate-500 leading-snug">
-              No forma parte del cierre de captura. Se confirma al{' '}
-              <strong>firmar y emitir dictamen</strong> desde Validación, cuando
-              los estudios estén listos (etapa V3).
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {APTITUD_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  disabled={formReadonly}
-                  onClick={() => handleAptitudSelect(opt.value)}
-                  title={opt.value}
-                  className={`text-xs font-bold px-3 py-3 rounded-xl border-2 transition-all text-left break-words ${
-                    aptitud === opt.value
-                      ? opt.color + ' border-current ring-2 ring-offset-1 ring-current/30'
-                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 disabled:opacity-60'
+              {/* Aptitud laboral — decisión de cierre (V3), no de captura del examen */}
+              <div className={EXAM_CARD_CLASS}>
+                <p className={EXAM_CARD_TITLE_CLASS}>Aptitud laboral (dictamen)</p>
+                <p className="text-xs text-slate-500 leading-snug">
+                  No forma parte del cierre de captura. Se confirma al{' '}
+                  <strong>firmar y emitir dictamen</strong> desde Validación, cuando los estudios
+                  estén listos (etapa V3).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {APTITUD_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      disabled={formReadonly}
+                      onClick={() => handleAptitudSelect(opt.value)}
+                      title={opt.value}
+                      className={`text-xs font-bold px-3.5 py-2.5 rounded-lg border transition-all text-left break-words ${
+                        aptitud === opt.value
+                          ? opt.color + ' border-current ring-2 ring-offset-1 ring-current/30'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-white disabled:opacity-60'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 leading-snug">
+                Al guardar y al generar PDFs se usan automáticamente el{' '}
+                <strong>nombre, cédula y firma</strong> de tu cuenta (
+                <a href="/profile" className="text-teal-700 underline font-medium">
+                  Mi perfil
+                </a>
+                ). No hace falta capturarlos aquí.
+              </p>
+
+              {/* Mensajes de resultado */}
+              {saveMsg && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800 font-medium">
+                  {saveMsg}
+                </div>
+              )}
+              {saveError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700 font-medium space-y-2.5">
+                  <p>❌ {saveError}</p>
+                  {incompleteJumpTabs.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-red-800">
+                        Secciones pendientes:
+                      </span>
+                      {incompleteJumpTabs.map(tab => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => {
+                            if (tab.kind === 'outer') {
+                              requestOuterTabChange(
+                                tab.id as 'somatometria' | 'signos_vitales' | 'agudeza_visual',
+                              )
+                            } else {
+                              requestInnerTabChange(tab.id as InnerTab)
+                            }
+                          }}
+                          className="inline-flex items-center rounded-lg border border-red-300 bg-white px-2.5 py-1 text-xs font-bold text-red-800 hover:bg-red-100 transition-colors"
+                        >
+                          Ir a {tab.label} →
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(saveFieldErrors).length > 0 && (
+                    <ul className="text-xs font-normal list-disc pl-4 space-y-0.5">
+                      {Object.entries(saveFieldErrors).map(([key, messages]) => (
+                        <li key={key}>
+                          <span className="font-semibold">{key}</span>: {messages[0]}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {aiWarning && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 font-medium">
+                  ⚠️ {aiWarning}
+                </div>
+              )}
+
+              {shouldShowExamenMedicoPdfCta(aptitud) ? (
+                <div className="bg-white border-2 border-teal-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <div className="flex-1 space-y-2">
+                    <p className="text-sm font-bold text-teal-800">
+                      Reporte de examen médico (aptitud)
+                    </p>
+                    <p className="text-xs text-slate-600">
+                      Este PDF se emite al cerrar el examen. El dictamen general y el ZIP de cierre
+                      se habilitan después, en Firma.
+                    </p>
+                    {hasMedicalVerdict !== true && (
+                      <Link
+                        href={navigateToValidatingView(eventId)}
+                        className="inline-flex text-xs font-bold text-amber-800 underline"
+                        data-testid="examen-medico-go-validating-link"
+                      >
+                        Después del reporte: ir a Firma y emitir dictamen
+                      </Link>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <a
+                      href={examenMedicoPdfUrl(eventId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="examen-medico-pdf-download-link"
+                      data-implementacion="IMPL-FEATURE-20260825-03"
+                      data-has-medical-verdict={String(hasMedicalVerdict)}
+                      className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap text-center"
+                    >
+                      📄 Reporte de aptitud
+                    </a>
+                    <a
+                      href={examenMedicoFormularioPdfUrl(eventId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="examen-medico-formulario-download-link"
+                      className="bg-white hover:bg-teal-50 text-teal-800 border border-teal-600 text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap text-center"
+                    >
+                      📋 Formulario contestado
+                    </a>
+                    {shouldShowClinicalClosureZipCta(aptitud, hasMedicalVerdict) && (
+                      <a
+                        href={clinicalClosureZipUrl(eventId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="clinical-closure-zip-download-link"
+                        data-implementacion="IMPL-FEATURE-20260825-04"
+                        data-has-medical-verdict={String(hasMedicalVerdict)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+                      >
+                        📦 ZIP
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              <ExamSectionFooter
+                readonly={formReadonly}
+                isBusy={isPending}
+                statusMessage={saveMsg}
+                onPrev={() =>
+                  requestInnerTabChange(hasVariantExtension ? 'extension' : 'exploracion')
+                }
+                onSaveDraft={() => handleSave(false)}
+                onPrimary={!captureClosed ? () => handleSave(true) : undefined}
+                primaryLabel={!captureClosed ? '📋 Guardar para revisión' : undefined}
+                primaryVariant="emerald"
+                primaryDisabled={!recomendaciones.trim()}
+                primaryTitle={!recomendaciones.trim() ? 'Ingresa recomendaciones' : undefined}
+              />
+
+              {readonlyBanner && (
+                <div
+                  className={`rounded-xl p-3 text-xs text-center border ${
+                    formReadonly
+                      ? 'bg-slate-50 border-slate-200 text-slate-400'
+                      : 'bg-teal-50 border-teal-200 text-teal-800'
                   }`}
                 >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 leading-snug">
-            Al guardar y al generar PDFs se usan automáticamente el{' '}
-            <strong>nombre, cédula y firma</strong> de tu cuenta (
-            <a href="/profile" className="text-teal-700 underline font-medium">
-              Mi perfil
-            </a>
-            ). No hace falta capturarlos aquí.
-          </p>
-
-          {/* Mensajes de resultado */}
-          {saveMsg && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800 font-medium">
-              {saveMsg}
-            </div>
-          )}
-          {saveError && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700 font-medium space-y-2">
-              <p>❌ {saveError}</p>
-              {Object.keys(saveFieldErrors).length > 0 && (
-                <ul className="text-xs font-normal list-disc pl-4 space-y-0.5">
-                  {Object.entries(saveFieldErrors).map(([key, messages]) => (
-                    <li key={key}>
-                      <span className="font-semibold">{key}</span>: {messages[0]}
-                    </li>
-                  ))}
-                </ul>
+                  {readonlyBanner}
+                </div>
               )}
             </div>
           )}
-          {aiWarning && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800 font-medium">
-              ⚠️ {aiWarning}
-            </div>
-          )}
-
-          {/* CTA — Descarga PDF consolidado + ZIP de cierre clínico.
-              IMPL-FEATURE-20260825-03/04 ronda 4 (DEC-20260825-19 /
-              BR-20260825-20 / FND-20260825-22): visible sólo cuando
-              (a) hay aptitud persistida Y (b) existe MedicalVerdict
-              emitido. Sin verdict, los CTAs NO se muestran (BR-20260825-20)
-              — el endpoint devolvería 404 — y se reemplaza por un
-              mensaje informativo invitando a firmar el dictamen desde
-              el flujo "Firmar y Emitir Dictamen" del workspace. */}
-          {shouldShowExamenMedicoPdfCta(aptitud) ? (
-            <div className="bg-white border-2 border-teal-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <div className="flex-1 space-y-2">
-                <p className="text-sm font-bold text-teal-800">
-                  Reporte de examen médico (aptitud)
-                </p>
-                <p className="text-xs text-slate-600">
-                  Este PDF se emite al cerrar el examen. El dictamen general
-                  y el ZIP de cierre se habilitan después, en Firma.
-                </p>
-                {hasMedicalVerdict !== true && (
-                  <Link
-                    href={navigateToValidatingView(eventId)}
-                    className="inline-flex text-xs font-bold text-amber-800 underline"
-                    data-testid="examen-medico-go-validating-link"
-                  >
-                    Después del reporte: ir a Firma y emitir dictamen
-                  </Link>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <a
-                  href={examenMedicoPdfUrl(eventId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="examen-medico-pdf-download-link"
-                  data-implementacion="IMPL-FEATURE-20260825-03"
-                  data-has-medical-verdict={String(hasMedicalVerdict)}
-                  className="bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap text-center"
-                >
-                  📄 Reporte de aptitud
-                </a>
-                <a
-                  href={examenMedicoFormularioPdfUrl(eventId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="examen-medico-formulario-download-link"
-                  className="bg-white hover:bg-teal-50 text-teal-800 border border-teal-600 text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap text-center"
-                >
-                  📋 Formulario contestado
-                </a>
-                {shouldShowClinicalClosureZipCta(aptitud, hasMedicalVerdict) && (
-                  <a
-                    href={clinicalClosureZipUrl(eventId)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="clinical-closure-zip-download-link"
-                    data-implementacion="IMPL-FEATURE-20260825-04"
-                    data-has-medical-verdict={String(hasMedicalVerdict)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-sm transition-colors whitespace-nowrap"
-                  >
-                    📦 ZIP
-                  </a>
-                )}
-              </div>
-            </div>
-          ) : null}
-
-          {/* Acciones de guardado */}
-          {!formReadonly && (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                onClick={() => requestInnerTabChange('exploracion')}
-                className="sm:flex-none bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors"
-              >
-                ← Exploración
-              </button>
-              <button
-                onClick={() => handleSave(false)}
-                disabled={isPending}
-                className="flex-1 border-2 border-teal-400 text-teal-700 hover:bg-teal-50 text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50"
-              >
-                {isPending ? 'Guardando...' : '💾 Guardar borrador'}
-              </button>
-              {!captureClosed && (
-                <button
-                  onClick={() => handleSave(true)}
-                  disabled={isPending || !recomendaciones.trim()}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold py-2.5 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={!recomendaciones.trim() ? 'Ingresa recomendaciones' : ''}
-                >
-                  {isPending ? 'Guardando...' : '📋 Guardar para revisión'}
-                </button>
-              )}
-            </div>
-          )}
-
-          {readonlyBanner && (
-            <div
-              className={`rounded-xl p-3 text-xs text-center border ${
-                formReadonly
-                  ? 'bg-slate-50 border-slate-200 text-slate-400'
-                  : 'bg-teal-50 border-teal-200 text-teal-800'
-              }`}
-            >
-              {readonlyBanner}
-            </div>
-          )}
-        </div>
-      )}
         </div>
       )}
     </div>

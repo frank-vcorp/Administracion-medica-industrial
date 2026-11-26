@@ -131,6 +131,10 @@ interface AntecedentesCapturaProps {
   portalPrefillHint?: boolean
   /** Certificado: AHF/APP/ANP sin datos personales laborales ni historia laboral (SME-127). */
   captureLayout?: 'examen' | 'certificado'
+  /** Oculta el banner superior cuando el contenedor padre provee encabezado unificado. */
+  hideHeader?: boolean
+  /** Oculta la barra inferior propia cuando el contenedor padre provee navegación y guardado. */
+  hideFooter?: boolean
 }
 
 type SectionKey = 'datos_personales' | 'historia_laboral' | 'heredo_familiares' | 'no_patologicos' | 'patologicos'
@@ -371,7 +375,7 @@ function renderModulo1Fields(
   readonly: boolean,
 ) {
   const baseInputClass =
-    'w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60'
+    'w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60'
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
       {fields.map(field => {
@@ -455,6 +459,8 @@ export function AntecedentesCaptura({
   onAntecedentesMedicoChange,
   portalPrefillHint = false,
   captureLayout = 'examen',
+  hideHeader = false,
+  hideFooter = false,
 }: AntecedentesCapturaProps) {
   const certificadoLayout = captureLayout === 'certificado'
   const [form, setForm] = useState(() => sectionsFromValue(value))
@@ -623,31 +629,33 @@ export function AntecedentesCaptura({
   return (
     <div className="space-y-4">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5 flex-1">
-          <span className="text-teal-600">📋</span>
-          <div>
-            <p className="text-xs font-bold text-teal-800">
-              {certificadoLayout
-                ? 'Antecedentes — Certificado médico'
-                : 'Antecedentes — Captura por cita'}
-            </p>
-            <p className="text-[10px] text-teal-600 mt-0.5">
-              {certificadoLayout
-                ? 'Antecedentes heredofamiliares, personales no patológicos y personales patológicos para las secciones I–III del PDF. Sin puesto, turno ni historia laboral.'
-                : 'Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita. Se guarda junto con el resto del Examen Médico.'}
-              {portalPrefillHint && (
-                <span className="ml-1 text-emerald-700 font-semibold">
-                  Snapshot del portal disponible.
-                </span>
-              )}
-            </p>
+      {!hideHeader && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5 flex-1">
+            <span className="text-teal-600">📋</span>
+            <div>
+              <p className="text-xs font-bold text-teal-800">
+                {certificadoLayout
+                  ? 'Antecedentes — Certificado médico'
+                  : 'Antecedentes — Captura por cita'}
+              </p>
+              <p className="text-[10px] text-teal-600 mt-0.5">
+                {certificadoLayout
+                  ? 'Antecedentes heredofamiliares, personales no patológicos y personales patológicos para las secciones I–III del PDF. Sin puesto, turno ni historia laboral.'
+                  : 'Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita. Se guarda junto con el resto del Examen Médico.'}
+                {portalPrefillHint && (
+                  <span className="ml-1 text-emerald-700 font-semibold">
+                    Snapshot del portal disponible.
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
+          <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${provenanceBadge.color}`}>
+            {provenanceBadge.label}
+          </span>
         </div>
-        <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${provenanceBadge.color}`}>
-          {provenanceBadge.label}
-        </span>
-      </div>
+      )}
 
       {/* ── CTA al historial maestro ────────────────────────────────────── */}
       {workerId && (
@@ -687,8 +695,8 @@ export function AntecedentesCaptura({
         }
       >
         {!certificadoLayout && (
-        <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 px-1">
+        <fieldset className="border border-slate-200 rounded-xl p-4 bg-white">
+          <legend className="text-xs font-bold text-slate-700 px-1">
             Datos Personales
           </legend>
           <div className="space-y-3 mt-2">
@@ -704,14 +712,14 @@ export function AntecedentesCaptura({
                     value={form.datos_personales[campo.field] ?? ''}
                     onChange={e => setField('datos_personales', campo.field, e.target.value)}
                     disabled={readonly}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                   />
                 ) : campo.kind === 'select-turno' ? (
                   <select
                     value={form.datos_personales[campo.field] ?? ''}
                     onChange={e => setField('datos_personales', campo.field, e.target.value)}
                     disabled={readonly}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                   >
                     <option value="">—</option>
                     {TURNO_OPTIONS.map(o => (
@@ -723,7 +731,7 @@ export function AntecedentesCaptura({
                     value={form.datos_personales[campo.field] ?? ''}
                     onChange={e => setField('datos_personales', campo.field, e.target.value)}
                     disabled={readonly}
-                    className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                    className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                   >
                     <option value="">—</option>
                     {ESTADO_CIVIL_OPTIONS.map(o => (
@@ -738,8 +746,8 @@ export function AntecedentesCaptura({
         )}
 
         {!certificadoLayout && (
-        <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-          <legend className="text-xs font-bold text-slate-600 px-1">
+        <fieldset className="border border-slate-200 rounded-xl p-4 bg-white">
+          <legend className="text-xs font-bold text-slate-700 px-1">
             Historia Laboral
           </legend>
           <div className="space-y-3 mt-2">
@@ -761,7 +769,7 @@ export function AntecedentesCaptura({
                         value={form.historia_laboral[field] ?? ''}
                         onChange={e => setField('historia_laboral', field, e.target.value)}
                         disabled={readonly}
-                        className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                        className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                       />
                     </FieldRow>
                   ))}
@@ -791,7 +799,7 @@ export function AntecedentesCaptura({
                       onChange={e => setField('historia_laboral', exp.descKey, e.target.value)}
                       disabled={readonly}
                       placeholder="Especifique…"
-                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                      className="mt-1 w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                     />
                   )}
                 </div>
@@ -818,7 +826,7 @@ export function AntecedentesCaptura({
                       onChange={e => setField('historia_laboral', exp.descKey, e.target.value)}
                       disabled={readonly}
                       placeholder="Especifique…"
-                      className="mt-1 w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                      className="mt-1 w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                     />
                   )}
                 </div>
@@ -829,8 +837,8 @@ export function AntecedentesCaptura({
         )}
 
         {/* Heredo-Familiares */}
-        <fieldset className="border border-violet-100 rounded-xl p-3 bg-violet-50/30">
-          <legend className="text-xs font-bold text-violet-900 px-1">
+        <fieldset className="border border-slate-200 rounded-xl p-4 bg-white">
+          <legend className="text-xs font-bold text-slate-700 px-1">
             {ANTECEDENTES_SECTION_LEGEND.heredo_familiares}
           </legend>
           <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
@@ -855,7 +863,7 @@ export function AntecedentesCaptura({
                       disabled={readonly}
                       placeholder="Campo abierto (ej: depresión materna; vacío = negado)"
                       maxLength={500}
-                      className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+                      className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
                     />
                   ) : (
                     <HeredofamiliaresRelacionMultiSelect
@@ -872,8 +880,8 @@ export function AntecedentesCaptura({
       </div>
 
       {/* ── Fila 2: No Patológicos ──────────────────────────────────────── */}
-      <fieldset className="border border-slate-200 rounded-xl p-3 bg-white">
-        <legend className="text-xs font-bold text-slate-600 px-1">
+      <fieldset className="border border-slate-200 rounded-xl p-4 bg-white">
+        <legend className="text-xs font-bold text-slate-700 px-1">
           {ANTECEDENTES_SECTION_LEGEND.no_patologicos}
         </legend>
         <p className="text-[10px] text-slate-600 mt-1 mb-2 leading-snug">
@@ -929,7 +937,7 @@ export function AntecedentesCaptura({
               value={form.no_patologicos.alimentacion ?? 'BUENA'}
               onChange={e => setField('no_patologicos', 'alimentacion', e.target.value)}
               disabled={readonly}
-              className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+              className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
             >
               {ALIMENTACION_OPTIONS.map(o => (
                 <option key={o} value={o}>{getCatalogEnumDisplayLabel(o)}</option>
@@ -976,7 +984,7 @@ export function AntecedentesCaptura({
               value={form.no_patologicos.grupo_y_rh ?? ''}
               onChange={e => setField('no_patologicos', 'grupo_y_rh', e.target.value)}
               disabled={readonly}
-              className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-lg focus:ring-1 focus:ring-teal-500 disabled:opacity-60"
+              className="w-full bg-slate-50 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:opacity-60"
             >
               <option value="">— Seleccionar —</option>
               {GRUPO_RH_VALUES.map(v => (
@@ -1020,8 +1028,8 @@ export function AntecedentesCaptura({
       </fieldset>
 
       {/* ── Fila 3: Patológicos ─────────────────────────────────────────── */}
-      <fieldset className="border border-amber-100 rounded-xl p-3 bg-amber-50/30">
-        <legend className="text-xs font-bold text-amber-900 px-1">
+      <fieldset className="border border-slate-200 rounded-xl p-4 bg-white">
+        <legend className="text-xs font-bold text-slate-700 px-1">
           {ANTECEDENTES_SECTION_LEGEND.patologicos}
         </legend>
         <p className="text-[10px] text-slate-600 mt-1 mb-3 leading-snug">
@@ -1178,12 +1186,14 @@ export function AntecedentesCaptura({
       </fieldset>
 
       {/* ── Sexo, gineco/repro e inmunizaciones (antes “Módulo 1”) ─────── */}
-      <fieldset className="border border-teal-200 rounded-xl p-3 bg-teal-50/30">
-        <legend className="text-xs font-semibold text-teal-800 px-1">
+      <fieldset className="border border-slate-200 rounded-xl p-4 bg-white">
+        <legend className="text-xs font-bold text-slate-700 px-1">
           Sexo, antecedentes ginecológicos/reproductivos e inmunizaciones
         </legend>
-      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-4 mt-2">
-        <span className="text-xs font-bold text-slate-500 shrink-0">Sexo</span>
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center gap-4 mt-2">
+        <span className="text-xs font-bold text-slate-600 shrink-0">
+          Sexo <span className="text-red-500">*</span>
+        </span>
         <div className="flex gap-2">
           {M1_SEX_OPTIONS.map(opt => (
             <button
@@ -1296,32 +1306,36 @@ export function AntecedentesCaptura({
       )}
 
       {/* ── Footer: sin botón guardar propio — persistencia integrada ─── */}
-      {readonly ? (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-400 text-center">
-          Vista de solo lectura — expediente cerrado.
-        </div>
-      ) : (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700">
-          💾 Autoguardado cada 7 s mientras capturas (consulta, certificado o examen médico). También
-          puedes usar &ldquo;Guardar borrador&rdquo; en cualquier momento.
-        </div>
-      )}
+      {!hideFooter && (
+        <>
+          {readonly ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-400 text-center">
+              Vista de solo lectura — expediente cerrado.
+            </div>
+          ) : (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-700">
+              💾 Autoguardado cada 7 s mientras capturas (consulta, certificado o examen médico). También
+              puedes usar &ldquo;Guardar borrador&rdquo; en cualquier momento.
+            </div>
+          )}
 
-      {/* ── Navegación a la siguiente sub-pestaña ────────────────────────
-          IMPL-20260809-03 — affordance UX al pie de Antecedentes
-          (SPEC ARCH-20260809-01 v2 §6.9). El botón salta a Módulo 1
-          se deshabilita en modo readonly. */}
-      {onContinue && (
-        <div className="flex justify-end pt-1">
-          <button
-            type="button"
-            onClick={onContinue}
-            disabled={readonly}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
-          >
-            Continuar → Exploración Física
-          </button>
-        </div>
+          {/* ── Navegación a la siguiente sub-pestaña ────────────────────────
+              IMPL-20260809-03 — affordance UX al pie de Antecedentes
+              (SPEC ARCH-20260809-01 v2 §6.9). El botón salta a Módulo 1
+              se deshabilita en modo readonly. */}
+          {onContinue && (
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={onContinue}
+                disabled={readonly}
+                className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+              >
+                Continuar → Exploración Física
+              </button>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

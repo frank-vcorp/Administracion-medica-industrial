@@ -14,6 +14,12 @@ import { updateEventTestStatus } from "@/actions/event-test.actions"
 import { ClinicalAutosaveIndicator } from "@/components/clinical/ClinicalAutosaveIndicator"
 import { UserFacingErrorCallout } from "@/components/clinical/UserFacingErrorCallout"
 import {
+  EXAM_CARD_CLASS,
+  EXAM_CARD_TITLE_CLASS,
+  EXAM_INPUT_CLASS,
+  EXAM_LABEL_CLASS,
+} from '@/components/clinical/examen-medico/ExamSectionLayout'
+import {
   StudyCaptureFieldLabel,
   StudyCaptureMissingBanner,
   studyCaptureInputClass,
@@ -201,7 +207,7 @@ export default function AgudezaVisualStudy({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {!readonly && (
         <ClinicalAutosaveIndicator label={autosaveLabel} error={autosaveError} />
       )}
@@ -210,10 +216,11 @@ export default function AgudezaVisualStudy({
       <p className="text-[11px] text-slate-500">
         Los campos con <span className="text-red-500">*</span> son obligatorios para completar la prueba.
       </p>
+
       {/* Campo Visual */}
-      <div>
-        <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Campo Visual</h4>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className={EXAM_CARD_CLASS}>
+        <p className={EXAM_CARD_TITLE_CLASS}>Campo Visual</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {VISUAL_FIELDS.map(f => (
             <div key={f.name}>
               <StudyCaptureFieldLabel required={isStudyRequiredField('AgudezaVisual', f.name)}>
@@ -225,38 +232,38 @@ export default function AgudezaVisualStudy({
                 disabled={readonly}
                 className={studyCaptureInputClass(
                   Boolean(err(f.name)),
-                  'w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:opacity-60',
+                  `${EXAM_INPUT_CLASS} font-mono`,
                 )}
               >
                 {visionFieldSelectOptions(f.name, formData[f.name]).map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
               </select>
-              {err(f.name) && <p className="text-[10px] text-red-600 mt-1">{err(f.name)}</p>}
+              {err(f.name) && <p className="text-[11px] text-red-600 mt-1">{err(f.name)}</p>}
             </div>
           ))}
         </div>
-        <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
-          <p className="text-[10px] font-bold text-blue-500">
+        <div className="rounded-xl border border-teal-200 bg-teal-50/60 px-4 py-3">
+          <p className="text-[11px] font-bold text-teal-700">
             Clasificación agudeza visual (automática)
           </p>
-          <p className="mt-1 text-sm font-semibold text-blue-900">
+          <p className="mt-1 text-sm font-semibold text-slate-800">
             {derivedResumen || 'Complete visión lejana OD/OI para clasificar'}
           </p>
         </div>
       </div>
 
       {/* Pruebas Complementarias */}
-      <div>
-        <h4 className="text-sm font-semibold text-slate-600 mb-3 border-b pb-2">Pruebas Complementarias</h4>
+      <div className={EXAM_CARD_CLASS}>
+        <p className={EXAM_CARD_TITLE_CLASS}>Pruebas Complementarias</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-2">Campimetría</label>
+            <label className={EXAM_LABEL_CLASS}>Campimetría</label>
             <select
               value={formData.campimetria || CAMPIMETRIA_VALUES[0]}
               onChange={e => handleChange('campimetria', e.target.value)}
               disabled={readonly}
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
+              className={EXAM_INPUT_CLASS}
             >
               {CAMPIMETRIA_VALUES.map(v => (
                 <option key={v} value={v}>{v}</option>
@@ -264,12 +271,12 @@ export default function AgudezaVisualStudy({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-2">Test Ishihara</label>
+            <label className={EXAM_LABEL_CLASS}>Test Ishihara</label>
             <select
               value={formData.test_ishihara || TEST_ISHIHARA_VALUES[0]}
               onChange={e => handleChange('test_ishihara', e.target.value)}
               disabled={readonly}
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
+              className={EXAM_INPUT_CLASS}
             >
               {TEST_ISHIHARA_VALUES.map(v => (
                 <option key={v} value={v}>{v}</option>
@@ -277,12 +284,12 @@ export default function AgudezaVisualStudy({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-2">Reflejos</label>
+            <label className={EXAM_LABEL_CLASS}>Reflejos</label>
             <select
               value={formData.reflejos || REFLEJOS_VALUES[0]}
               onChange={e => handleChange('reflejos', e.target.value)}
               disabled={readonly}
-              className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-60"
+              className={EXAM_INPUT_CLASS}
             >
               {REFLEJOS_VALUES.map(v => (
                 <option key={v} value={v}>{v}</option>
@@ -293,9 +300,9 @@ export default function AgudezaVisualStudy({
       </div>
 
       {/* Acciones */}
-      <div className="flex items-center justify-between pt-4 border-t border-slate-100 gap-3 flex-wrap">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-500">{message}</p>
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-slate-600">{message}</p>
           {aiWarning && (
             <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-xl">
               ⚠️ {aiWarning}
@@ -303,12 +310,12 @@ export default function AgudezaVisualStudy({
           )}
         </div>
         {!readonly && (
-          <div className="flex gap-2">
+          <div className="flex gap-2 ml-auto">
             <button
               type="button"
               onClick={() => handleSave(false)}
               disabled={isSaving}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-5 rounded-xl transition-all disabled:opacity-50 text-sm"
+              className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 text-xs sm:text-sm"
             >
               {isSaving ? "Guardando..." : "Guardar borrador"}
             </button>
@@ -316,9 +323,9 @@ export default function AgudezaVisualStudy({
               type="button"
               onClick={() => handleSave(true)}
               disabled={isSaving}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition-all disabled:opacity-50 text-sm"
+              className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-5 rounded-lg shadow-sm transition-colors disabled:opacity-50 text-xs sm:text-sm"
             >
-              {isSaving ? "Guardando..." : "✓ Completar Agudeza Visual"}
+              {isSaving ? "Guardando..." : "Guardar y continuar →"}
             </button>
           </div>
         )}
