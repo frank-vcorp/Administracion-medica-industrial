@@ -499,7 +499,7 @@ class FeatherlessVisionBase:
                 pages = convert_from_path(file_path, first_page=1, last_page=1)
                 if pages:
                     img_byte_arr = io.BytesIO()
-                    pages[0].save(img_byte_arr, format="JPEG")
+                    pages[0].save(img_byte_arr, format="JPEG", quality=92, subsampling=0)
                     return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
             except Exception as e:
                 print(f"⚠️ PDF conversion error: {e}")
@@ -781,7 +781,7 @@ class M3VisionBase:
                 pages = convert_from_path(file_path, first_page=1, last_page=1)
                 if pages:
                     img_byte_arr = io.BytesIO()
-                    pages[0].save(img_byte_arr, format="JPEG")
+                    pages[0].save(img_byte_arr, format="JPEG", quality=92, subsampling=0)
                     return base64.b64encode(img_byte_arr.getvalue()).decode("utf-8")
             except Exception as e:
                 print(f"⚠️ PDF conversion error: {e}")

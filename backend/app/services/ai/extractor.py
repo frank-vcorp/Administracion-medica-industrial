@@ -1096,6 +1096,18 @@ class ExtractorService(GeminiBase):
                     result.pop(legacy_field, None)
                 # ARCH-20260518-17: normalización + guardrails post-extracción
                 result = self._normalize_audiometria_result(result)
+                # Verificación geométrica determinística de curvas OD/OI sobre rejilla logarítmica
+                from app.services.audiometry_graph_reader import (
+                    extract_audiogram_curves_from_file,
+                    merge_audiogram_graph_reading,
+                )
+                graph_reading = extract_audiogram_curves_from_file(file_path)
+                result, cv_changed = merge_audiogram_graph_reading(result, graph_reading)
+                if cv_changed:
+                    print(
+                        "📐 [AUDIOMETRY-CV] Umbrales VA verificados/corregidos "
+                        "geométricamente sobre el audiograma"
+                    )
                 # Si el prompt V3 devolvió estructura anidada (oido_derecho.va/pta,
                 # paciente_detalle, campos_fuente), preservar el dict completo para
                 # que el renderer clínico del frontend pinte tabla VA, PTA y paciente.
