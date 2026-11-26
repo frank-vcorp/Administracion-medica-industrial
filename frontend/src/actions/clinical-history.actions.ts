@@ -52,6 +52,39 @@ export async function getWorkerClinicalHistory(workerId: string) {
  * @param data - Datos del historial clínico (validados con Zod)
  * @returns Objeto con el historial creado/actualizado o error
  */
+function sanitizeClinicalHistoryInput(data: unknown): unknown {
+  if (!data || typeof data !== 'object') return data
+  const rec = { ...(data as Record<string, unknown>) }
+  if (rec.datos_personales && typeof rec.datos_personales === 'object') {
+    const dp = { ...(rec.datos_personales as Record<string, unknown>) }
+    for (const [k, v] of Object.entries(dp)) {
+      if (typeof v === 'string' && v.trim() === '') {
+        delete dp[k]
+      }
+    }
+    rec.datos_personales = dp
+  }
+  if (rec.no_patologicos && typeof rec.no_patologicos === 'object') {
+    const np = { ...(rec.no_patologicos as Record<string, unknown>) }
+    for (const [k, v] of Object.entries(np)) {
+      if (typeof v === 'string' && v.trim() === '') {
+        delete np[k]
+      }
+    }
+    rec.no_patologicos = np
+  }
+  if (rec.historia_laboral && typeof rec.historia_laboral === 'object') {
+    const hl = { ...(rec.historia_laboral as Record<string, unknown>) }
+    for (const [k, v] of Object.entries(hl)) {
+      if (typeof v === 'string' && v.trim() === '') {
+        delete hl[k]
+      }
+    }
+    rec.historia_laboral = hl
+  }
+  return rec
+}
+
 export async function upsertWorkerClinicalHistory(
   workerId: string,
   data: unknown
@@ -70,8 +103,11 @@ export async function upsertWorkerClinicalHistory(
       return { success: false, error: 'Trabajador no encontrado' }
     }
 
+    // Sanitizar data para no enviar cadenas vacías en enums opcionales
+    const cleanData = sanitizeClinicalHistoryInput(data)
+
     // Validar data con esquema Zod
-    const validatedData = ClinicalHistoryDataSchema.parse(data)
+    const validatedData = ClinicalHistoryDataSchema.parse(cleanData)
 
     // ARCH-20260326-06: Merge defensivo — no borrar secciones longitudinales no editadas
     const existingHistory = await prisma.clinicalHistory.findUnique({

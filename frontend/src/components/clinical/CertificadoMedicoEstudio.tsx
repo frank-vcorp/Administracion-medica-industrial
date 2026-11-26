@@ -37,6 +37,8 @@ import {
   type CertificadoMedicoPayload,
   type DictamenLaboralValue,
 } from '@/schemas/clinical/certificado-medico.schema'
+import { visionFieldSelectOptions } from '@/lib/clinical/agudeza-visual'
+import { updateAgudezaVisual } from '@/actions/medical-exam.actions'
 
 type TabId = 'antecedentes' | 'vitales' | 'exploracion' | 'dictamen'
 
@@ -82,17 +84,26 @@ function CertificadoPdfLink({
   )
 }
 
-function mergeLongitudinalAntecedentes(
+function deepMergeAntecedentes(
   longitudinal: Record<string, unknown> | null | undefined,
+  studySpecific: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
-  if (!longitudinal || typeof longitudinal !== 'object') return {}
-  const out: Record<string, unknown> = {}
-  for (const key of ['heredo_familiares', 'no_patologicos', 'patologicos']) {
-    if (longitudinal[key] && typeof longitudinal[key] === 'object') {
-      out[key] = longitudinal[key]
-    }
+  const result: Record<string, unknown> = {}
+  for (const section of ['heredo_familiares', 'no_patologicos', 'patologicos'] as const) {
+    const longSec =
+      longitudinal?.[section] && typeof longitudinal[section] === 'object'
+        ? (longitudinal[section] as Record<string, unknown>)
+        : {}
+    const studySec =
+      studySpecific?.[section] && typeof studySpecific[section] === 'object'
+        ? (studySpecific[section] as Record<string, unknown>)
+        : {}
+    const hasStudyFields = Object.values(studySec).some(
+      (v) => v !== null && v !== undefined && (typeof v !== 'object' || Object.keys(v as object).length > 0),
+    )
+    result[section] = hasStudyFields ? { ...longSec, ...studySec } : longSec
   }
-  return out
+  return result
 }
 
 function signosToSomaVitalsValue(
@@ -152,6 +163,60 @@ export default function CertificadoMedicoEstudio({
   const [signos, setSignos] = useState(() =>
     mergeCertificadoSignosPrefill(parsed?.signos_vitales, somatometryData, eyeAcuityData),
   )
+
+  // Agudeza visual estructurada (Snellen OD / OI)
+  const [eyeState, setEyeState] = useState(() => {
+    const e = eyeAcuityData ?? {}
+    const parsePair = (val: string | undefined) => {
+      if (!val || !val.trim()) return { od: 'NO APLICA', oi: 'NO APLICA' }
+      const match = val.match(/^(.*?)\s*OD\s*\/\s*(.*?)\s*OI$/i)
+      if (match) return { od: match[1].trim(), oi: match[2].trim() }
+      const single = val.trim()
+      return { od: single, oi: single }
+    }
+    const initSignos = mergeCertificadoSignosPrefill(parsed?.signos_vitales, somatometryData, eyeAcuityData)
+    const vl = parsePair(initSignos.agudeza_vl)
+    const vlc = parsePair(initSignos.agudeza_vlc)
+    const vc = parsePair(initSignos.agudeza_vc)
+    const vcc = parsePair(initSignos.agudeza_vcc)
+
+    return {
+      vision_lejana_od: String(e.vision_lejana_od ?? vl.od ?? 'NO APLICA'),
+      vision_lejana_oi: String(e.vision_lejana_oi ?? vl.oi ?? 'NO APLICA'),
+      lejana_corregida_od: String(e.lejana_corregida_od ?? vlc.od ?? 'NO APLICA'),
+      lejana_corregida_oi: String(e.lejana_corregida_oi ?? vlc.oi ?? 'NO APLICA'),
+      vision_cercana_od: String(e.vision_cercana_od ?? vc.od ?? 'NO APLICA'),
+      vision_cercana_oi: String(e.vision_cercana_oi ?? vc.oi ?? 'NO APLICA'),
+      cercana_corregida_od: String(e.cercana_corregida_od ?? vcc.od ?? 'NO APLICA'),
+      cercana_corregida_oi: String(e.cercana_corregida_oi ?? vcc.oi ?? 'NO APLICA'),
+    }
+  })
+
+  const [freeTextAgudeza, setFreeTextAgudeza] = useState(false)
+
+  const handleEyeChange = (field: string, value: string) => {
+    const nextEye = { ...eyeState, [field]: value }
+    setEyeState(nextEye)
+
+    const formatPair = (od: string, oi: string) => {
+      const isOdEmpty = !od || od === 'NO APLICA'
+      const isOiEmpty = !oi || oi === 'NO APLICA'
+      if (isOdEmpty && isOiEmpty) return ''
+      if (!isOdEmpty && !isOiEmpty) return `${od} OD / ${oi} OI`
+      if (!isOdEmpty) return `${od} OD`
+      return `${oi} OI`
+    }
+
+    setSignos((s) => ({
+      ...s,
+      agudeza_vl: formatPair(nextEye.vision_lejana_od, nextEye.vision_lejana_oi),
+      agudeza_vlc: formatPair(nextEye.lejana_corregida_od, nextEye.lejana_corregida_oi),
+      agudeza_vc: formatPair(nextEye.vision_cercana_od, nextEye.vision_cercana_oi),
+      agudeza_vcc: formatPair(nextEye.cercana_corregida_od, nextEye.cercana_corregida_oi),
+    }))
+
+    void updateAgudezaVisual(eventId, nextEye, { autosave: true, revalidate: false }).catch(() => {})
+  }
   const [exploracion, setExploracion] = useState(
     parsed?.exploracion_fisica ?? buildDefaultExploracionCertificado(),
   )
@@ -164,10 +229,9 @@ export default function CertificadoMedicoEstudio({
   const [dictamenTexto, setDictamenTexto] = useState(
     parsed?.dictamen_laboral_texto ?? DEFAULT_DICTAMEN_LABORAL_TEXTO.APTO,
   )
-  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() => ({
-    ...mergeLongitudinalAntecedentes(longitudinalData),
-    ...(parsed?.antecedentes ?? {}),
-  }))
+  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
+    deepMergeAntecedentes(longitudinalData, parsed?.antecedentes as Record<string, unknown> | undefined),
+  )
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
   const editorRole = session?.user?.role
   const formReadonly = useMemo(
@@ -477,28 +541,197 @@ export default function CertificadoMedicoEstudio({
             sexoForPrediagnosis={resolvedMetadata.sexo_atencion?.trim() || undefined}
             inputClass={inputClass}
           />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-            <p className="sm:col-span-2 text-[10px] font-semibold text-slate-500">
-              Agudeza visual (PDF)
-            </p>
-            {(
-              [
-                ['agudeza_vl', 'Agudeza VL'],
-                ['agudeza_vlc', 'Agudeza VLC'],
-                ['agudeza_vc', 'Agudeza VC'],
-                ['agudeza_vcc', 'Agudeza VCC'],
-              ] as const
-            ).map(([key, label]) => (
-              <div key={key}>
-                <label className="text-[10px] font-semibold text-slate-500">{label}</label>
-                <input
-                  className={inputClass}
-                  value={signos[key]}
-                  onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
-                  disabled={formReadonly}
-                />
+          <div className="space-y-4 pt-4 border-t border-slate-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>👁️</span> Agudeza visual (Snellen OD / OI)
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Selecciona la agudeza visual. Se formatea automáticamente para el PDF y se guarda en el expediente.
+                </p>
               </div>
-            ))}
+              <button
+                type="button"
+                onClick={() => setFreeTextAgudeza((prev) => !prev)}
+                className="text-[11px] font-semibold text-teal-700 hover:text-teal-800 underline self-start sm:self-auto cursor-pointer"
+              >
+                {freeTextAgudeza ? '← Usar selectores Snellen' : 'Editar texto libre directo'}
+              </button>
+            </div>
+
+            {!freeTextAgudeza ? (
+              <div className="space-y-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                {/* 1. Visión Lejana */}
+                <div>
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                    1. Visión Lejana (sin lentes)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Derecho (OD)</label>
+                      <select
+                        value={eyeState.vision_lejana_od}
+                        onChange={(e) => handleEyeChange('vision_lejana_od', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('vision_lejana_od', eyeState.vision_lejana_od).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Izquierdo (OI)</label>
+                      <select
+                        value={eyeState.vision_lejana_oi}
+                        onChange={(e) => handleEyeChange('vision_lejana_oi', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('vision_lejana_oi', eyeState.vision_lejana_oi).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Visión Lejana Corregida */}
+                <div>
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                    2. Visión Lejana Corregida (con lentes)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Derecho (OD)</label>
+                      <select
+                        value={eyeState.lejana_corregida_od}
+                        onChange={(e) => handleEyeChange('lejana_corregida_od', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('lejana_corregida_od', eyeState.lejana_corregida_od).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Izquierdo (OI)</label>
+                      <select
+                        value={eyeState.lejana_corregida_oi}
+                        onChange={(e) => handleEyeChange('lejana_corregida_oi', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('lejana_corregida_oi', eyeState.lejana_corregida_oi).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Visión Cercana */}
+                <div>
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                    3. Visión Cercana (sin lentes)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Derecho (OD)</label>
+                      <select
+                        value={eyeState.vision_cercana_od}
+                        onChange={(e) => handleEyeChange('vision_cercana_od', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('vision_cercana_od', eyeState.vision_cercana_od).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Izquierdo (OI)</label>
+                      <select
+                        value={eyeState.vision_cercana_oi}
+                        onChange={(e) => handleEyeChange('vision_cercana_oi', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('vision_cercana_oi', eyeState.vision_cercana_oi).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Visión Cercana Corregida */}
+                <div>
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1.5">
+                    4. Visión Cercana Corregida (con lentes)
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Derecho (OD)</label>
+                      <select
+                        value={eyeState.cercana_corregida_od}
+                        onChange={(e) => handleEyeChange('cercana_corregida_od', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('cercana_corregida_od', eyeState.cercana_corregida_od).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-semibold text-slate-500">Ojo Izquierdo (OI)</label>
+                      <select
+                        value={eyeState.cercana_corregida_oi}
+                        onChange={(e) => handleEyeChange('cercana_corregida_oi', e.target.value)}
+                        disabled={formReadonly}
+                        className={`${inputClass} font-mono bg-white`}
+                      >
+                        {visionFieldSelectOptions('cercana_corregida_oi', eyeState.cercana_corregida_oi).map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Resumen formateado para PDF */}
+                <div className="pt-2 border-t border-slate-200/80 text-[11px] text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+                  <span><strong>VL:</strong> {signos.agudeza_vl || '—'}</span>
+                  <span><strong>VLC:</strong> {signos.agudeza_vlc || '—'}</span>
+                  <span><strong>VC:</strong> {signos.agudeza_vc || '—'}</span>
+                  <span><strong>VCC:</strong> {signos.agudeza_vcc || '—'}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(
+                  [
+                    ['agudeza_vl', 'Agudeza VL (Lejana)'],
+                    ['agudeza_vlc', 'Agudeza VLC (Lejana corregida)'],
+                    ['agudeza_vc', 'Agudeza VC (Cercana)'],
+                    ['agudeza_vcc', 'Agudeza VCC (Cercana corregida)'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="text-[10px] font-semibold text-slate-500">{label}</label>
+                    <input
+                      className={inputClass}
+                      value={signos[key] ?? ''}
+                      onChange={(e) => setSignos((s) => ({ ...s, [key]: e.target.value }))}
+                      disabled={formReadonly}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       )}

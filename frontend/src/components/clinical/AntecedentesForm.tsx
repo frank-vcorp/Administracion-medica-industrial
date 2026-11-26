@@ -311,15 +311,25 @@ export function AntecedentesForm({
     return base
   }, [patologicos, otrasEnfermedades])
 
+  const buildDatosPersonales = useCallback(() => {
+    const cleaned: Record<string, string> = {}
+    for (const [k, v] of Object.entries(datosPersonales)) {
+      if (typeof v === 'string' && v.trim() !== '') {
+        cleaned[k] = v.trim()
+      }
+    }
+    return cleaned
+  }, [datosPersonales])
+
   const buildPayload = useCallback(
     () => ({
-      datos_personales: datosPersonales,
+      datos_personales: buildDatosPersonales(),
       historia_laboral: historiaLaboral,
       heredo_familiares: heredofamiliares,
       no_patologicos: noPatologicos,
       patologicos: buildPatologicosSection(),
     }),
-    [datosPersonales, historiaLaboral, heredofamiliares, noPatologicos, buildPatologicosSection],
+    [buildDatosPersonales, historiaLaboral, heredofamiliares, noPatologicos, buildPatologicosSection],
   )
 
   const historySnapshotKey = useMemo(() => JSON.stringify(buildPayload()), [buildPayload])

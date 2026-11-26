@@ -4,8 +4,60 @@ import {
   parseCertificadoMedicoClinicalContext,
   parseCertificadoMedicoDraftContext,
 } from '@/lib/clinical/certificado-medico'
-import { buildVitalesLine } from '@/lib/clinical/certificado-medico-narrative'
+import { buildAntecedentesNarratives, buildVitalesLine } from '@/lib/clinical/certificado-medico-narrative'
 import { ANTECEDENTES_SECTION_LEGEND } from '@/lib/antecedentes-section-ui'
+
+describe('buildAntecedentesNarratives', () => {
+  it('formatea correctamente antecedentes heredofamiliares positivos y omite negados', () => {
+    const narr = buildAntecedentesNarratives({
+      heredo_familiares: {
+        diabetes: 'NEGADOS',
+        has: 'NEGADOS',
+        cancer: 'MADRE',
+        mentales: 'OTROS',
+        mentales_especifique: 'Esquizofrenia',
+      } as any,
+    } as any)
+    expect(narr.heredoFamiliares).toContain('Cáncer: Madre.')
+    expect(narr.heredoFamiliares).toContain('Trastornos mentales: Esquizofrenia.')
+    expect(narr.heredoFamiliares).not.toContain('Diabetes')
+    expect(narr.heredoFamiliares).not.toContain('Hipertensión')
+  })
+
+  it('formatea correctamente antecedentes personales patológicos con detalles', () => {
+    const narr = buildAntecedentesNarratives({
+      patologicos: {
+        cirugias: {
+          estado: 'SI',
+          detalle: {
+            desde_cuando: 'hace 5 años',
+            observaciones: 'Apendicectomía sin complicaciones',
+          },
+        },
+        diabetes: { estado: 'NEGADO' },
+      } as any,
+    } as any)
+    expect(narr.patologicos).toContain('Quirúrgicos / Cirugías: Sí (desde hace hace 5 años, Apendicectomía sin complicaciones).')
+    expect(narr.patologicos).not.toContain('Diabetes')
+  })
+
+  it('retorna texto canónico cuando todos los antecedentes están negados', () => {
+    const narr = buildAntecedentesNarratives({
+      heredo_familiares: { diabetes: 'NEGADOS', has: 'NEGADOS' } as any,
+      patologicos: { diabetes: { estado: 'NEGADO' } } as any,
+      no_patologicos: { alcohol: 'NEGADO', tabaco: 'NEGADO' } as any,
+    } as any)
+    expect(narr.heredoFamiliares).toBe(
+      'Interrogados y negados. Sin antecedentes heredofamiliares de importancia referidos.',
+    )
+    expect(narr.patologicos).toBe(
+      'Crónico-degenerativos, quirúrgicos, traumáticos y alérgicos interrogados y negados.',
+    )
+    expect(narr.noPatologicos).toContain(
+      'Toxicomanías (alcohol, tabaco, drogas) interrogadas y negadas.',
+    )
+  })
+})
 
 describe('isCertificadoMedicoTestName', () => {
   it('matches catalog name', () => {

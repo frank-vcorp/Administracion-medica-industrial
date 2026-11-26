@@ -14,17 +14,26 @@ import {
   type CertificadoMedicoPayload,
 } from '@/schemas/clinical/certificado-medico.schema'
 
-function mergeLongitudinalAntecedentes(
+function deepMergeAntecedentes(
   longitudinal: Record<string, unknown> | null | undefined,
+  studySpecific: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> {
-  if (!longitudinal || typeof longitudinal !== 'object') return {}
-  const out: Record<string, unknown> = {}
-  for (const key of ['heredo_familiares', 'no_patologicos', 'patologicos']) {
-    if (longitudinal[key] && typeof longitudinal[key] === 'object') {
-      out[key] = longitudinal[key]
-    }
+  const result: Record<string, unknown> = {}
+  for (const section of ['heredo_familiares', 'no_patologicos', 'patologicos'] as const) {
+    const longSec =
+      longitudinal?.[section] && typeof longitudinal[section] === 'object'
+        ? (longitudinal[section] as Record<string, unknown>)
+        : {}
+    const studySec =
+      studySpecific?.[section] && typeof studySpecific[section] === 'object'
+        ? (studySpecific[section] as Record<string, unknown>)
+        : {}
+    const hasStudyFields = Object.values(studySec).some(
+      (v) => v !== null && v !== undefined && (typeof v !== 'object' || Object.keys(v as object).length > 0),
+    )
+    result[section] = hasStudyFields ? { ...longSec, ...studySec } : longSec
   }
-  return out
+  return result
 }
 
 function formatLongDate(d: Date): string {
@@ -167,10 +176,10 @@ export async function loadCertificadoMedicoPdfInput(
       certificadoRaw?.dictamen_laboral_texto !== undefined
         ? certificadoRaw.dictamen_laboral_texto
         : DEFAULT_DICTAMEN_LABORAL_TEXTO[dictamen],
-    antecedentes: {
-      ...mergeLongitudinalAntecedentes(histObj),
-      ...(certificadoRaw?.antecedentes ?? {}),
-    } as CertificadoMedicoPayload['antecedentes'],
+    antecedentes: deepMergeAntecedentes(
+      histObj,
+      certificadoRaw?.antecedentes as Record<string, unknown> | null | undefined,
+    ) as CertificadoMedicoPayload['antecedentes'],
     cerrada_at: certificadoRaw?.cerrada_at,
   }
 
