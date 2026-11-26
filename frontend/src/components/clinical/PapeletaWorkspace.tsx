@@ -30,7 +30,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react"
-import { ClipboardList, Eye, Scale } from "lucide-react"
+import { ClipboardList, Eye, FileCheck, Scale } from "lucide-react"
 import { StudyCaptureMissingBanner } from "@/components/clinical/studies/StudyCaptureUi"
 import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLeaveGuard"
 import { formatStudyMissingFieldsSpanish } from "@/lib/clinical/study-required-fields"
@@ -56,7 +56,9 @@ import {
   uploadEventTestFile,
 } from "@/actions/event-test.actions"
 import { retryExamenMedicoPrediagnosis } from "@/actions/medical-exam.actions"
-import ExamenMedicoEstudio from "@/components/clinical/ExamenMedicoEstudio"
+import ExamenMedicoEstudio, {
+  navigateToValidatingView,
+} from "@/components/clinical/ExamenMedicoEstudio"
 import ConsultaMedicaEstudio from "@/components/clinical/ConsultaMedicaEstudio"
 import CertificadoMedicoEstudio from "@/components/clinical/CertificadoMedicoEstudio"
 import { isConsultaMedicaTestName } from "@/lib/clinical/consulta-medica"
@@ -1081,6 +1083,32 @@ export default function PapeletaWorkspace({
             />
           )}
 
+          {completedCount === localTests.length && localTests.length > 0 && !hasMedicalVerdict && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 my-3">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                  <FileCheck className="h-4 w-4" />
+                </span>
+                <div>
+                  <h4 className="font-bold text-emerald-900 text-xs sm:text-sm">
+                    Todos los estudios completados ({completedCount}/{localTests.length})
+                  </h4>
+                  <p className="text-[11px] sm:text-xs text-emerald-700">
+                    Listo para emitir el dictamen y firma final.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push(navigateToValidatingView(eventId))}
+                className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-lg shadow-sm transition-all shrink-0"
+              >
+                <FileCheck className="h-4 w-4" />
+                <span>Firmar y dictaminar →</span>
+              </button>
+            </div>
+          )}
+
           {localTests.length === 0 && (
             <p className="text-center text-slate-400 text-sm py-10">
               No hay estudios registrados en este módulo.
@@ -1129,6 +1157,8 @@ export default function PapeletaWorkspace({
       <WorkerHeader
         completedCount={completedCount}
         totalCount={localTests.length}
+        hasMedicalVerdict={hasMedicalVerdict}
+        onGoToValidating={() => router.push(navigateToValidatingView(eventId))}
         onBack={() => {
           if (!navigateToStudy(null)) return
           setUploadError('')
@@ -1607,12 +1637,17 @@ function WorkerHeader({
   completedCount,
   totalCount,
   onBack,
+  onGoToValidating,
+  hasMedicalVerdict,
 }: {
   completedCount: number
   totalCount: number
   onBack?: () => void
+  onGoToValidating?: () => void
+  hasMedicalVerdict?: boolean
 }) {
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
+  const allCompleted = totalCount > 0 && completedCount === totalCount
 
   return (
     <div className="px-4 py-2 border-b border-slate-200 bg-slate-50/80">
@@ -1638,6 +1673,16 @@ function WorkerHeader({
               style={{ width: `${progressPct}%` }}
             />
           </div>
+          {allCompleted && !hasMedicalVerdict && onGoToValidating && (
+            <button
+              type="button"
+              onClick={onGoToValidating}
+              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-2.5 py-1 rounded-lg shadow-sm transition-all ml-1"
+            >
+              <FileCheck className="h-3.5 w-3.5" />
+              <span>Firmar y dictaminar →</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

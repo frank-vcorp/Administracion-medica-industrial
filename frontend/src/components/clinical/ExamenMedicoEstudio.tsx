@@ -2726,15 +2726,6 @@ export default function ExamenMedicoEstudio({
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 leading-snug">
-                Al guardar y al generar PDFs se usan automáticamente el{' '}
-                <strong>nombre, cédula y firma</strong> de tu cuenta (
-                <a href="/profile" className="text-teal-700 underline font-medium">
-                  Mi perfil
-                </a>
-                ). No hace falta capturarlos aquí.
-              </p>
-
               {/* Mensajes de resultado */}
               {saveMsg && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-sm text-emerald-800 font-medium">
@@ -2799,10 +2790,11 @@ export default function ExamenMedicoEstudio({
                     {hasMedicalVerdict !== true && (
                       <Link
                         href={navigateToValidatingView(eventId)}
-                        className="inline-flex text-xs font-bold text-amber-800 underline"
+                        className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl shadow-sm transition-all"
                         data-testid="examen-medico-go-validating-link"
                       >
-                        Después del reporte: ir a Firma y emitir dictamen
+                        <FileCheck className="h-4 w-4" />
+                        <span>Firmar y dictaminar →</span>
                       </Link>
                     )}
                   </div>
@@ -2851,12 +2843,15 @@ export default function ExamenMedicoEstudio({
                 onPrev={() =>
                   requestInnerTabChange(hasVariantExtension ? 'extension' : 'exploracion')
                 }
-                onSaveDraft={() => handleSave(false)}
-                onPrimary={!captureClosed ? () => handleSave(true) : undefined}
-                primaryLabel={!captureClosed ? 'Finalizar examen y pasar a Firma →' : undefined}
+                onPrimary={
+                  captureClosed
+                    ? () => router.push(navigateToValidatingView(eventId))
+                    : () => handleSave(true)
+                }
+                primaryLabel="Firmar y dictaminar →"
                 primaryVariant="emerald"
-                primaryDisabled={!recomendaciones.trim()}
-                primaryTitle={!recomendaciones.trim() ? 'Ingresa recomendaciones' : undefined}
+                primaryDisabled={!captureClosed && !recomendaciones.trim()}
+                primaryTitle={!captureClosed && !recomendaciones.trim() ? 'Ingresa recomendaciones' : undefined}
               />
 
               {readonlyBanner && (
