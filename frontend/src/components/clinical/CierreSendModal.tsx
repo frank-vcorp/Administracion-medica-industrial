@@ -11,6 +11,8 @@ import {
   Send,
   AlertCircle,
   Plus,
+  ShieldCheck,
+  Package,
 } from 'lucide-react'
 import {
   getCierreClinicoContactInfo,
@@ -38,27 +40,31 @@ export function CierreSendModal({
   const [info, setInfo] = useState<CierreClinicoContactInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Tipo de destinatario: 'company' (Predeterminado) o 'worker' (Solo recomendaciones)
+  const [recipientType, setRecipientType] = useState<'company' | 'worker'>('company')
+
   // Form states
   const [selectedEmail, setSelectedEmail] = useState<string>('')
   const [extraEmails, setExtraEmails] = useState<string>('')
   const [phone, setPhone] = useState<string>('')
+  const [extraPhones, setExtraPhones] = useState<string>('')
 
   useEffect(() => {
     if (!isOpen) return
     let active = true
     setLoading(true)
     setError(null)
+    setRecipientType('company')
 
     getCierreClinicoContactInfo(eventId).then((res) => {
       if (!active) return
       setLoading(false)
       if (res.success) {
         setInfo(res)
-        // Default to company email if present, else worker email
-        const defEmail = res.companyEmail || res.workerEmail || res.additionalEmails?.[0] || ''
+        // Predeterminado al Cliente / Empresa
+        const defEmail = res.companyEmail || res.additionalEmails?.[0] || ''
         setSelectedEmail(defEmail)
-        // Default phone: worker phone or company phone
-        const defPhone = res.workerPhone || res.companyPhone || ''
+        const defPhone = res.companyPhone || ''
         setPhone(defPhone)
       } else {
         setError(res.error || 'No se pudo obtener la información de contacto.')
@@ -72,6 +78,18 @@ export function CierreSendModal({
 
   if (!isOpen) return null
 
+  const handleSwitchRecipientType = (type: 'company' | 'worker') => {
+    setRecipientType(type)
+    setError(null)
+    if (type === 'company') {
+      setSelectedEmail(info?.companyEmail || info?.additionalEmails?.[0] || '')
+      setPhone(info?.companyPhone || '')
+    } else {
+      setSelectedEmail(info?.workerEmail || '')
+      setPhone(info?.workerPhone || '')
+    }
+  }
+
   const handleSend = async () => {
     setError(null)
     setSending(true)
@@ -81,21 +99,36 @@ export function CierreSendModal({
       .map((e) => e.trim())
       .filter((e) => e.length > 0 && e.includes('@'))
 
+    const extraPhoneList = extraPhones
+      .split(/[,;\n]/)
+      .map((p) => p.trim())
+      .filter((p) => p.length >= 10)
+
     const res = await sendCierreClinico({
       eventId,
       channel,
+      recipientType,
       recipientEmail: selectedEmail,
       additionalEmails: extras,
       recipientPhone: phone,
+      additionalPhones: extraPhoneList,
     })
 
     setSending(false)
 
     if (res.success) {
-      const msg =
-        channel === 'email'
-          ? 'Cierre clínico enviado exitosamente por correo electrónico.'
-          : 'Cierre clínico enviado exitosamente por WhatsApp.'
+      let msg = ''
+      if (recipientType === 'company') {
+        msg =
+          channel === 'email'
+            ? 'Expediente de cierre clínico enviado a la empresa por correo electrónico.'
+            : 'Expediente de cierre clínico enviado a la empresa por WhatsApp.'
+      } else {
+        msg =
+          channel === 'email'
+            ? 'Recomendaciones de salud enviadas al trabajador por correo electrónico.'
+            : 'Recomendaciones de salud enviadas al trabajador por WhatsApp.'
+      }
       onSent(msg, false)
       onClose()
     } else {
@@ -122,12 +155,17 @@ export function CierreSendModal({
             </div>
             <div>
               <h3 className="font-bold text-slate-800 text-base">
-                {channel === 'email'
-                  ? 'Enviar Cierre Clínico por Correo'
-                  : 'Enviar Cierre Clínico por WhatsApp'}
+                {recipientType === 'company'
+                  ? channel === 'email'
+                    ? 'Enviar Cierre a Empresa (Correo)'
+                    : 'Enviar Cierre a Empresa (WhatsApp)'
+                  : channel === 'email'
+                  ? 'Enviar Recomendaciones a Trabajador (Correo)'
+                  : 'Enviar Recomendaciones a Trabajador (WhatsApp)'}
               </h3>
               <p className="text-xs text-slate-500">
-                {info?.patientName ? `Paciente: ${info.patientName}` : 'Expediente digital'}
+                {info?.patientName ? `${info.patientName}` : 'Expediente digital'}
+                {info?.companyName ? ` · ${info.companyName}` : ''}
               </p>
             </div>
           </div>
@@ -156,78 +194,140 @@ export function CierreSendModal({
                 </div>
               )}
 
+              {/* Selector de Destinatario: Empresa (Cliente) vs Trabajador */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                  Destinatario del Envío
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchRecipientType('company')}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      recipientType === 'company'
+                        ? channel === 'email'
+                          ? 'border-sky-500 bg-sky-50 text-sky-800 ring-2 ring-sky-400/30'
+                          : 'border-[#128C7E] bg-emerald-50 text-emerald-800 ring-2 ring-emerald-400/30'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Building2 className="h-4 w-4" />
+                    <span>Empresa / Cliente (Default)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchRecipientType('worker')}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border text-xs font-bold transition-all ${
+                      recipientType === 'worker'
+                        ? channel === 'email'
+                          ? 'border-sky-500 bg-sky-50 text-sky-800 ring-2 ring-sky-400/30'
+                          : 'border-[#128C7E] bg-emerald-50 text-emerald-800 ring-2 ring-emerald-400/30'
+                        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <User className="h-4 w-4" />
+                    <span>Trabajador (Solo Recs.)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Banner informativo según destinatario */}
+              {recipientType === 'company' ? (
+                <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs text-sky-900 flex items-start gap-2.5">
+                  <Package className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Expediente Completo para la Empresa:</strong> Se enviará el archivo{' '}
+                    <strong>ZIP de cierre clínico</strong> con el Dictamen General de Aptitud firmado,
+                    reporte de recomendaciones y todos los estudios validados.
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950 flex items-start gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Confidencialidad Médica:</strong> Al trabajador se le enviará{' '}
+                    <em>únicamente su PDF de Recomendaciones de Salud y Bienestar</em> para su cuidado
+                    personal (sin dictamen de aptitud patronal ni reportes corporativos).
+                  </div>
+                </div>
+              )}
+
               {channel === 'email' ? (
+                /* Canal Email */
                 <div className="space-y-4">
                   {/* Preset email options */}
                   <div>
                     <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                      Destinatario Principal
+                      {recipientType === 'company'
+                        ? 'Correo Principal de la Empresa'
+                        : 'Correo del Trabajador'}
                     </label>
-                    <div className="space-y-2">
-                      {info?.companyEmail && (
-                        <label
-                          className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                            selectedEmail === info.companyEmail
-                              ? 'border-sky-500 bg-sky-50/50 ring-1 ring-sky-400'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="primaryEmail"
-                            value={info.companyEmail}
-                            checked={selectedEmail === info.companyEmail}
-                            onChange={(e) => setSelectedEmail(e.target.value)}
-                            className="text-sky-600 focus:ring-sky-500"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                              <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                              <span>Empresa: {info.companyName || 'Cliente'}</span>
-                            </div>
-                            <span className="text-sm font-medium text-slate-900">
-                              {info.companyEmail}
-                            </span>
-                          </div>
-                        </label>
-                      )}
 
-                      {info?.workerEmail && (
-                        <label
-                          className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                            selectedEmail === info.workerEmail
-                              ? 'border-sky-500 bg-sky-50/50 ring-1 ring-sky-400'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name="primaryEmail"
-                            value={info.workerEmail}
-                            checked={selectedEmail === info.workerEmail}
-                            onChange={(e) => setSelectedEmail(e.target.value)}
-                            className="text-sky-600 focus:ring-sky-500"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                              <User className="h-3.5 w-3.5 text-slate-500" />
-                              <span>Trabajador</span>
-                            </div>
-                            <span className="text-sm font-medium text-slate-900">
-                              {info.workerEmail}
-                            </span>
-                          </div>
-                        </label>
+                    <div className="space-y-2">
+                      {recipientType === 'company' ? (
+                        <>
+                          {info?.companyEmail && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmail(info.companyEmail || '')}
+                              className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                                selectedEmail === info.companyEmail
+                                  ? 'border-sky-500 bg-sky-50/60 ring-1 ring-sky-400'
+                                  : 'border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <Building2 className="h-4 w-4 text-slate-500" />
+                              <div className="flex-1">
+                                <div className="text-xs text-slate-500 font-semibold">
+                                  Empresa: {info.companyName || 'Cliente'}
+                                </div>
+                                <div className="text-sm font-bold text-slate-800">
+                                  {info.companyEmail}
+                                </div>
+                              </div>
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {info?.workerEmail && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedEmail(info.workerEmail || '')}
+                              className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                                selectedEmail === info.workerEmail
+                                  ? 'border-emerald-500 bg-emerald-50/60 ring-1 ring-emerald-400'
+                                  : 'border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <User className="h-4 w-4 text-slate-500" />
+                              <div className="flex-1">
+                                <div className="text-xs text-slate-500 font-semibold">
+                                  Trabajador: {info.patientName}
+                                </div>
+                                <div className="text-sm font-bold text-slate-800">
+                                  {info.workerEmail}
+                                </div>
+                              </div>
+                            </button>
+                          )}
+                        </>
                       )}
 
                       {/* Custom primary email input */}
-                      <div className="pt-1">
+                      <div>
                         <span className="text-xs text-slate-500 block mb-1">
-                          O escribe otro correo principal:
+                          {recipientType === 'company'
+                            ? 'Correo principal de envío (editable):'
+                            : 'Correo del trabajador (editable):'}
                         </span>
                         <input
                           type="email"
-                          placeholder="contacto@empresa.com"
+                          placeholder={
+                            recipientType === 'company'
+                              ? 'contacto@empresa.com'
+                              : 'trabajador@correo.com'
+                          }
                           value={selectedEmail}
                           onChange={(e) => setSelectedEmail(e.target.value)}
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500"
@@ -243,7 +343,7 @@ export function CierreSendModal({
                       Correos Adicionales (Opcional)
                     </label>
                     <p className="text-xs text-slate-500 mb-2">
-                      Separa múltiples direcciones con coma (ej. rrhh@empresa.com, medico@empresa.com)
+                      Separa con coma o salto de línea (ej. rrhh@empresa.com, medico@empresa.com)
                     </p>
                     <textarea
                       rows={2}
@@ -253,65 +353,67 @@ export function CierreSendModal({
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 resize-none"
                     />
                   </div>
-
-                  {/* Attachment Note */}
-                  <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs text-sky-900">
-                    📦 <strong>Se adjuntará:</strong> Archivo ZIP de cierre clínico con el
-                    Dictamen General firmado, Reporte de recomendaciones del paciente y estudios
-                    validados.
-                  </div>
                 </div>
               ) : (
-                /* WhatsApp Channel */
+                /* Canal WhatsApp */
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                      Número de WhatsApp de Entrega
+                      {recipientType === 'company'
+                        ? 'Número de WhatsApp de la Empresa'
+                        : 'Número de WhatsApp del Trabajador'}
                     </label>
+
                     <div className="space-y-2">
-                      {info?.workerPhone && (
-                        <button
-                          type="button"
-                          onClick={() => setPhone(info.workerPhone || '')}
-                          className={`w-full text-left p-3 rounded-xl border transition-all ${
-                            phone === info.workerPhone
-                              ? 'border-[#128C7E] bg-emerald-50/50 ring-1 ring-emerald-400'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                            <User className="h-3.5 w-3.5 text-slate-500" />
-                            <span>Teléfono del Trabajador:</span>
-                          </div>
-                          <span className="text-sm font-medium text-slate-900">
-                            {info.workerPhone}
-                          </span>
-                        </button>
+                      {recipientType === 'company' ? (
+                        <>
+                          {info?.companyPhone && (
+                            <button
+                              type="button"
+                              onClick={() => setPhone(info.companyPhone || '')}
+                              className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                phone === info.companyPhone
+                                  ? 'border-[#128C7E] bg-emerald-50/50 ring-1 ring-emerald-400'
+                                  : 'border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                                <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                                <span>Teléfono de la Empresa:</span>
+                              </div>
+                              <span className="text-sm font-bold text-slate-900">
+                                {info.companyPhone}
+                              </span>
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {info?.workerPhone && (
+                            <button
+                              type="button"
+                              onClick={() => setPhone(info.workerPhone || '')}
+                              className={`w-full text-left p-3 rounded-xl border transition-all ${
+                                phone === info.workerPhone
+                                  ? 'border-[#128C7E] bg-emerald-50/50 ring-1 ring-emerald-400'
+                                  : 'border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                                <User className="h-3.5 w-3.5 text-slate-500" />
+                                <span>Teléfono del Trabajador:</span>
+                              </div>
+                              <span className="text-sm font-bold text-slate-900">
+                                {info.workerPhone}
+                              </span>
+                            </button>
+                          )}
+                        </>
                       )}
 
-                      {info?.companyPhone && (
-                        <button
-                          type="button"
-                          onClick={() => setPhone(info.companyPhone || '')}
-                          className={`w-full text-left p-3 rounded-xl border transition-all ${
-                            phone === info.companyPhone
-                              ? 'border-[#128C7E] bg-emerald-50/50 ring-1 ring-emerald-400'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                            <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                            <span>Teléfono de la Empresa:</span>
-                          </div>
-                          <span className="text-sm font-medium text-slate-900">
-                            {info.companyPhone}
-                          </span>
-                        </button>
-                      )}
-
-                      <div className="pt-1">
+                      <div>
                         <span className="text-xs text-slate-500 block mb-1">
-                          Número (10 dígitos):
+                          Número principal (10 dígitos):
                         </span>
                         <input
                           type="tel"
@@ -321,13 +423,25 @@ export function CierreSendModal({
                           className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#128C7E] focus:ring-1 focus:ring-[#128C7E]"
                         />
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-900">
-                    💬 <strong>Envío directo:</strong> El ZIP de cierre clínico se enviará como
-                    documento adjunto a través de la línea institucional de WhatsApp de Soluciones
-                    Médico Empresariales.
+                      {/* Números adicionales de WhatsApp */}
+                      <div className="pt-2">
+                        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                          <Plus className="h-3.5 w-3.5 text-slate-500" />
+                          Números de WhatsApp Adicionales (Opcional)
+                        </label>
+                        <p className="text-xs text-slate-500 mb-1.5">
+                          Separa con coma o salto de línea (ej. 8111223344, 8122334455)
+                        </p>
+                        <input
+                          type="text"
+                          placeholder="8111223344, 8122334455"
+                          value={extraPhones}
+                          onChange={(e) => setExtraPhones(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#128C7E] focus:ring-1 focus:ring-[#128C7E]"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -368,7 +482,13 @@ export function CierreSendModal({
               <>
                 <Send className="h-4 w-4" />
                 <span>
-                  {channel === 'email' ? 'Enviar por Correo' : 'Enviar por WhatsApp'}
+                  {recipientType === 'company'
+                    ? channel === 'email'
+                      ? 'Enviar Cierre a Empresa'
+                      : 'Enviar Cierre por WhatsApp'
+                    : channel === 'email'
+                    ? 'Enviar Recomendaciones'
+                    : 'Enviar Recomendaciones por WhatsApp'}
                 </span>
               </>
             )}

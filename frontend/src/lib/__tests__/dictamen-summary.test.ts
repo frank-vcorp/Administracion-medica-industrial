@@ -180,6 +180,7 @@ describe('IMPL-20260826-04: dictamen-summary helpers', () => {
   it('classifyStudyStatus: undefined → PENDIENTE', () => {
     const { status } = classifyStudyStatus({
       serviceName: 'Espirometría',
+      extractedData: undefined,
     })
     expect(status).toBe('PENDIENTE')
   })

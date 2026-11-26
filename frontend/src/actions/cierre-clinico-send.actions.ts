@@ -11,6 +11,15 @@ import {
   buildCierreClinicoZip,
   CierreClinicoError,
 } from '@/lib/zip-cierre-clinico'
+import { readPersistedPdfBytes } from '@/lib/clinical/study-pdf-for-zip'
+import { renderPatientHealthDictamenToMemory } from '@/lib/patient-dictamen-pdf'
+import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
+import {
+  resolveStudiesFromEvent,
+  resolveWorkerPersonalDetails,
+  summarizeExtractedData,
+} from '@/lib/dictamen-summary'
+import { resolveSmeLogoDataUrl } from '@/lib/sme-brand'
 
 const STAFF = new Set([
   'ADMIN',
@@ -165,18 +174,91 @@ function buildCierreClinicoEmailHtml(input: {
 </html>`
 }
 
-export async function sendCierreClinico(input: {
+function buildPatientRecommendationsEmailHtml(input: {
+  patient: string
+  folioShort: string
+  filename: string
+}): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b; }
+    .container { max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
+    .header { background: linear-gradient(135deg, #064e3b 0%, #047857 100%); color: #ffffff; padding: 24px 28px; }
+    .header h1 { margin: 0 0 4px; font-size: 19px; font-weight: 700; }
+    .header p { margin: 0; font-size: 12px; color: #a7f3d0; }
+    .content { padding: 28px; }
+    .intro { font-size: 14px; line-height: 1.5; color: #334155; margin-bottom: 20px; }
+    .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+    .card-table { width: 100%; border-collapse: collapse; }
+    .card-table td { padding: 5px 0; font-size: 13px; }
+    .card-label { color: #64748b; font-weight: 600; width: 140px; }
+    .card-value { color: #0f172a; font-weight: 600; text-align: right; }
+    .attachment-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px; margin-bottom: 20px; font-size: 13px; color: #166534; line-height: 1.4; }
+    .footer { background: #f1f5f9; padding: 18px 28px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Soluciones Médico Empresariales</h1>
+      <p>Orientación Preventiva y Salud Integral</p>
+    </div>
+    <div class="content">
+      <p class="intro">
+        Estimado(a) <strong>${input.patient}</strong>,<br><br>
+        Te compartimos tus <strong>Recomendaciones Médicas y de Bienestar</strong> derivadas de tu reciente evaluación de salud:
+      </p>
+      <div class="card">
+        <table class="card-table">
+          <tr>
+            <td class="card-label">Paciente:</td>
+            <td class="card-value">${input.patient}</td>
+          </tr>
+          <tr>
+            <td class="card-label">Folio:</td>
+            <td class="card-value">${input.folioShort}</td>
+          </tr>
+        </table>
+      </div>
+      <div class="attachment-box">
+        🩺 <strong>Archivo adjunto:</strong> ${input.filename}<br>
+        Contiene tus recomendaciones personalizadas para el cuidado preventivo de tu salud y estilo de vida.
+      </div>
+      <p style="font-size: 11px; color: #64748b; line-height: 1.4; margin: 0;">
+        <em>Nota de confidencialidad:</em> Este documento contiene información de salud personal confidencial para tu beneficio y orientación médica.
+      </p>
+    </div>
+    <div class="footer">
+      ${SME_LEGAL_NAME} · Cuidado de la Salud y Medicina Preventiva
+    </div>
+  </div>
+</body>
+</html>`
+}
+
+export interface SendCierreClinicoInput {
   eventId: string
   channel: 'email' | 'whatsapp'
+  recipientType?: 'company' | 'worker'
   recipientEmail?: string
   additionalEmails?: string[]
   recipientPhone?: string
-}): Promise<{ success: boolean; error?: string }> {
+  additionalPhones?: string[]
+}
+
+export async function sendCierreClinico(
+  input: SendCierreClinicoInput,
+): Promise<{ success: boolean; error?: string }> {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return { success: false, error: 'No autenticado' }
   if (!STAFF.has(session.user.role as string)) {
     return { success: false, error: 'Sin permiso para enviar el cierre clínico' }
   }
+
+  const isWorkerTarget = input.recipientType === 'worker'
 
   const event = await prisma.medicalEvent.findUnique({
     where: { id: input.eventId },
@@ -186,6 +268,8 @@ export async function sendCierreClinico(input: {
         select: {
           firstName: true,
           lastName: true,
+          universalId: true,
+          dob: true,
           email: true,
           phone: true,
           company: {
@@ -205,74 +289,180 @@ export async function sendCierreClinico(input: {
       },
       verdict: {
         select: {
+          id: true,
           finalDiagnosis: true,
+          recommendations: true,
+          signedAt: true,
+          patientPdfUrl: true,
+          validator: {
+            select: {
+              fullName: true,
+              professionalLicense: true,
+            },
+          },
+        },
+      },
+      studies: {
+        select: {
+          serviceName: true,
+          extractedData: true,
+        },
+      },
+      eventTests: {
+        select: {
+          id: true,
+          testNameSnapshot: true,
+          status: true,
+          selectedOption: true,
+          resultNotes: true,
+          clinicalContext: true,
+          test: { select: { name: true } },
+          extractionSnapshots: {
+            select: { structuredData: true },
+            take: 1,
+            orderBy: { createdAt: 'desc' },
+          },
         },
       },
     },
   })
   if (!event) return { success: false, error: 'Expediente no encontrado' }
 
-  let zip: Buffer
-  let filename: string
-  try {
-    const built = await buildCierreClinicoZip(event.id)
-    zip = Buffer.from(built.zip)
-    filename = built.filename
-  } catch (err) {
-    if (err instanceof CierreClinicoError) {
-      return { success: false, error: 'No se pudo armar el cierre clínico para enviarlo.' }
-    }
-    return { success: false, error: 'No se pudo armar el cierre clínico.' }
-  }
-
   const patient = `${event.worker.firstName} ${event.worker.lastName}`.trim()
   const companyName = event.worker.company?.name || 'Empresa Cliente'
   const ped = (event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
   const aptitud = (ped.aptitud as string | null) || null
+  const folioShort = event.id.slice(0, 8).toUpperCase()
 
+  let fileBuffer: Buffer
+  let filename: string
+  let mimetype: string
+
+  if (isWorkerTarget) {
+    // Al trabajador ÚNICAMENTE se le envían sus recomendaciones de salud (PDF personal)
+    mimetype = 'application/pdf'
+    filename = `Recomendaciones-Salud-${event.worker.universalId || event.id}.pdf`
+
+    let patientBytes: Uint8Array | null = null
+    if (event.verdict?.patientPdfUrl) {
+      patientBytes = await readPersistedPdfBytes(event.verdict.patientPdfUrl)
+    }
+
+    if (patientBytes) {
+      fileBuffer = Buffer.from(patientBytes)
+    } else {
+      const personal = resolveWorkerPersonalDetails(ped, event.worker)
+      const healthRecommendations =
+        readPatientHealthRecommendations(ped) ||
+        event.verdict?.recommendations ||
+        'Mantener estilos de vida saludables, alimentación balanceada y seguimiento médico preventivo.'
+
+      const resolved = resolveStudiesFromEvent(
+        event.studies,
+        event.eventTests,
+        ped,
+      )
+      const studiesForPatient = resolved.map((s) => ({
+        serviceName: s.serviceName,
+        findings: summarizeExtractedData(s.extractedData),
+      }))
+      const logoUrl = await resolveSmeLogoDataUrl()
+
+      fileBuffer = await renderPatientHealthDictamenToMemory({
+        signedAt: event.verdict?.signedAt ?? new Date(),
+        eventId: event.id,
+        verdictId: event.verdict?.id ?? event.id,
+        worker: {
+          firstName: event.worker.firstName,
+          lastName: event.worker.lastName,
+          universalId: event.worker.universalId,
+          companyName: event.worker.company?.name ?? null,
+          age: personal.edad,
+          gender: personal.sexo,
+          position: personal.puesto,
+        },
+        healthRecommendations,
+        validator: {
+          fullName: event.verdict?.validator?.fullName || 'Médico Validador',
+          professionalLicense: event.verdict?.validator?.professionalLicense ?? null,
+        },
+        studies: studiesForPatient,
+        logoUrl,
+      })
+    }
+  } else {
+    // A la empresa / cliente: Expediente completo de Cierre Clínico (ZIP con Dictamen Ocupacional, Estudios, etc.)
+    mimetype = 'application/zip'
+    try {
+      const built = await buildCierreClinicoZip(event.id)
+      fileBuffer = Buffer.from(built.zip)
+      filename = built.filename
+    } catch (err) {
+      if (err instanceof CierreClinicoError) {
+        return { success: false, error: 'No se pudo armar el cierre clínico para enviarlo.' }
+      }
+      return { success: false, error: 'No se pudo armar el cierre clínico.' }
+    }
+  }
+
+  // ── Canal Email ─────────────────────────────────────────────────────────────
   if (input.channel === 'email') {
-    // Resolver correos destino
     const candidateEmails = [
       input.recipientEmail?.trim(),
       ...(input.additionalEmails ?? []).map((e) => e.trim()),
     ].filter((e): e is string => Boolean(e && e.includes('@')))
 
-    // Fallbacks si no se pasaron destinatarios explícitos
     if (candidateEmails.length === 0) {
-      if (event.worker.company?.email?.trim()) candidateEmails.push(event.worker.company.email.trim())
-      if (event.worker.email?.trim()) candidateEmails.push(event.worker.email.trim())
-      for (const re of event.worker.reportEmails ?? []) {
-        if (re.email?.trim()) candidateEmails.push(re.email.trim())
+      if (isWorkerTarget) {
+        if (event.worker.email?.trim()) candidateEmails.push(event.worker.email.trim())
+      } else {
+        if (event.worker.company?.email?.trim()) candidateEmails.push(event.worker.company.email.trim())
+        for (const re of event.worker.reportEmails ?? []) {
+          if (re.email?.trim()) candidateEmails.push(re.email.trim())
+        }
       }
     }
 
     const uniqueEmails = Array.from(new Set(candidateEmails))
     if (uniqueEmails.length === 0) {
-      return { success: false, error: 'No se proporcionó ningún correo electrónico válido de destino.' }
+      return {
+        success: false,
+        error: isWorkerTarget
+          ? 'No se proporcionó ningún correo electrónico válido para el trabajador.'
+          : 'No se proporcionó ningún correo electrónico válido para la empresa.',
+      }
     }
 
     const to = uniqueEmails.join(', ')
-    const folioShort = event.id.slice(0, 8).toUpperCase()
-    const emailHtml = buildCierreClinicoEmailHtml({
-      patient,
-      companyName,
-      folioShort,
-      verdictAptitud: aptitud,
-      filename,
-    })
+    const subject = isWorkerTarget
+      ? `Recomendaciones de Salud y Bienestar — ${patient}`
+      : `Cierre Clínico — ${patient} (${companyName})`
+
+    const html = isWorkerTarget
+      ? buildPatientRecommendationsEmailHtml({
+          patient,
+          folioShort,
+          filename,
+        })
+      : buildCierreClinicoEmailHtml({
+          patient,
+          companyName,
+          folioShort,
+          verdictAptitud: aptitud,
+          filename,
+        })
+
+    const text = isWorkerTarget
+      ? `Estimado(a) ${patient},\n\nAdjuntamos tus recomendaciones médicas y preventivas de salud emitidas por ${SME_LEGAL_NAME}.\n\nFolio: ${folioShort}\nArchivo adjunto: ${filename}\n\n${SME_LEGAL_NAME}`
+      : `Estimado cliente,\n\nAdjuntamos el expediente digital de cierre clínico correspondiente a: ${patient} (${companyName}).\n\nFolio: ${folioShort}\nArchivo adjunto: ${filename}\n\n${SME_LEGAL_NAME}`
 
     const mailed = await sendSmtpMail({
       purpose: 'results',
       to,
-      subject: `Cierre Clínico — ${patient} (${companyName})`,
-      text:
-        `Estimado cliente,\n\n` +
-        `Adjuntamos el expediente digital de cierre clínico correspondiente a: ${patient} (${companyName}).\n\n` +
-        `Folio: ${folioShort}\n\n` +
-        `Archivo adjunto: ${filename}\n\n` +
-        `${SME_LEGAL_NAME}`,
-      html: emailHtml,
-      attachments: [{ filename, content: zip }],
+      subject,
+      text,
+      html,
+      attachments: [{ filename, content: fileBuffer }],
     })
 
     if (mailed.skipped) {
@@ -284,31 +474,59 @@ export async function sendCierreClinico(input: {
     return { success: true }
   }
 
-  // Canal WhatsApp
-  const rawPhone = input.recipientPhone?.trim() || event.worker.phone || event.worker.company?.phone || ''
-  const phone = normalizeWhatsAppPhone(rawPhone)
-  if (!isValidWhatsAppPhone(phone)) {
+  // ── Canal WhatsApp ──────────────────────────────────────────────────────────
+  const candidatePhones: string[] = [
+    input.recipientPhone?.trim(),
+    ...(input.additionalPhones ?? []).map((p) => p.trim()),
+  ].filter((p): p is string => Boolean(p))
+
+  if (candidatePhones.length === 0) {
+    const fallbackPhone = isWorkerTarget
+      ? event.worker.phone
+      : event.worker.company?.phone
+    if (fallbackPhone?.trim()) candidatePhones.push(fallbackPhone.trim())
+  }
+
+  const validPhones = Array.from(new Set(candidatePhones))
+    .map((p) => normalizeWhatsAppPhone(p))
+    .filter((p) => isValidWhatsAppPhone(p))
+
+  if (validPhones.length === 0) {
+    const attempted = input.recipientPhone?.trim() || (isWorkerTarget ? event.worker.phone : event.worker.company?.phone) || 'vacío'
     return {
       success: false,
-      error: `El teléfono "${rawPhone || 'vacío'}" no es un número válido de 10 dígitos para WhatsApp.`,
+      error: `El teléfono "${attempted}" no es un número válido de 10 dígitos para WhatsApp.`,
     }
   }
 
-  const sent = await sendWhatsAppDocumentMessage({
-    phone,
-    fileName: filename,
-    mimetype: 'application/zip',
-    dataBase64: zip.toString('base64'),
-    caption: `Cierre clínico de ${patient} (${companyName}). ${SME_LEGAL_NAME}`,
-    auditContext: 'cierre_clinico',
-    entityId: event.id,
-  })
+  let sentCount = 0
+  let lastError: string | undefined
 
-  if (sent.skipped) {
-    return { success: false, error: 'El servicio institucional de WhatsApp no está conectado actualmente.' }
+  for (const phone of validPhones) {
+    const sent = await sendWhatsAppDocumentMessage({
+      phone,
+      fileName: filename,
+      mimetype,
+      dataBase64: fileBuffer.toString('base64'),
+      caption: isWorkerTarget
+        ? `Hola ${patient}, te compartimos tus recomendaciones médicas y de bienestar de Soluciones Médico Empresariales. ${SME_LEGAL_NAME}`
+        : `Cierre clínico de ${patient} (${companyName}). ${SME_LEGAL_NAME}`,
+      auditContext: isWorkerTarget ? 'cierre_clinico_paciente' : 'cierre_clinico_empresa',
+      entityId: event.id,
+    })
+
+    if (sent.sent) {
+      sentCount++
+    } else if (sent.skipped) {
+      lastError = 'El servicio institucional de WhatsApp no está conectado actualmente.'
+    } else {
+      lastError = sent.error ?? 'Error enviando por WhatsApp.'
+    }
   }
-  if (!sent.sent) {
-    return { success: false, error: sent.error ?? 'No se pudo enviar el archivo por WhatsApp.' }
+
+  if (sentCount === 0) {
+    return { success: false, error: lastError || 'No se pudo enviar el archivo por WhatsApp.' }
   }
+
   return { success: true }
 }

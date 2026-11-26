@@ -29,7 +29,7 @@
 
 export interface DictamenStudyEntry {
   serviceName: string
-  extractedData?: unknown
+  extractedData: unknown
 }
 
 export type StudyStatus = 'APLICADO' | 'PENDIENTE' | 'NO_APLICADO'
