@@ -214,11 +214,13 @@ const eventTestsForZipSelect = {
   status: true,
   testNameSnapshot: true,
   fileUrl: true,
+  clinicalContext: true,
   extractionSnapshots: {
     where: { isSuperseded: false },
     orderBy: { version: 'desc' as const },
     take: 1,
     select: {
+      studyType: true,
       sourceFileUrl: true,
       sourceFileName: true,
       aiPrediagnoses: {
@@ -246,7 +248,9 @@ type RawEventTestForZip = {
   status: string
   testNameSnapshot: string | null
   fileUrl: string | null
+  clinicalContext?: unknown
   extractionSnapshots?: Array<{
+    studyType?: string | null
     sourceFileUrl?: string | null
     sourceFileName?: string | null
     aiPrediagnoses?: Array<{
@@ -275,6 +279,8 @@ function mapEventTestForZipPdf(test: RawEventTestForZip): EventTestForZipPdf {
     sourceFileName: snapshot?.sourceFileName ?? null,
     validatedPdfUrl,
     reviewId: latestReview?.id ?? null,
+    studyType: snapshot?.studyType ?? null,
+    clinicalContext: test.clinicalContext ?? null,
   }
 }
 
