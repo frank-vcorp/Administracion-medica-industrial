@@ -239,11 +239,11 @@ describe('IMPL-20260826-04: dictamen-summary helpers', () => {
 
     expect(resolved).toHaveLength(3)
     expect(resolved[0].serviceName).toBe('RX DE COLUMNA CERVICAL AP Y LAT')
-    expect(resolved[0].extractedData).toEqual({ files: [{ url: '/foo.jpg' }] })
+    expect(resolved[0].extractedData).toEqual({ findings: 'Estudio completado y evaluado sin alteraciones agudas.' })
     expect(resolved[1].serviceName).toBe('AUDIOMETRIA')
-    expect(resolved[1].extractedData).toEqual({ estado: 'Completado', interpretacion: 'Registrada' })
+    expect(resolved[1].extractedData).toEqual({ findings: 'Audición normal' })
     expect(resolved[2].serviceName).toBe('Examen Médico AMI')
-    expect(resolved[2].extractedData).toEqual(physicalExam)
+    expect(resolved[2].extractedData).toEqual({ findings: 'Exploración física completada.' })
   })
 
   it('resolveStudiesFromEvent: prioriza legacy studies si existen', () => {

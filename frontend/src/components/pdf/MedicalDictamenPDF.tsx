@@ -281,10 +281,10 @@ export const MedicalDictamenPDF = ({ data }: {
                 </View>
             </View>
 
-            {/* II. ESTUDIOS AUXILIARES APLICADOS (IMPL-20260826-04) */}
+            {/* II. ESTUDIOS AUXILIARES Y HALLAZGOS CLÍNICOS */}
             {appliedSummaries.length > 0 ? (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>II. ESTUDIOS AUXILIARES APLICADOS</Text>
+                    <Text style={styles.sectionTitle}>II. ESTUDIOS AUXILIARES Y HALLAZGOS CLÍNICOS</Text>
                     {appliedSummaries.map((s, idx) => {
                         const isAplicado = s.status === 'APLICADO'
                         const badgeStyle = isAplicado
@@ -296,120 +296,26 @@ export const MedicalDictamenPDF = ({ data }: {
                                     • {s.serviceName}
                                     <Text style={[styles.studyBadge, badgeStyle]}>  {s.label.toUpperCase()}  </Text>
                                 </Text>
-                                <Text style={styles.studySummary}>{s.dataSummary}</Text>
+                                <Text style={styles.studySummary}>
+                                    <Text style={{ fontWeight: 'bold', color: '#334155' }}>Hallazgos: </Text>
+                                    {s.dataSummary}
+                                </Text>
                             </View>
                         )
                     })}
                 </View>
             ) : (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>II. ESTUDIOS AUXILIARES APLICADOS</Text>
+                    <Text style={styles.sectionTitle}>II. ESTUDIOS AUXILIARES Y HALLAZGOS CLÍNICOS</Text>
                     <Text style={styles.studyEmpty}>
                         Sin estudios auxiliares registrados para este evento.
                     </Text>
                 </View>
             )}
 
-            {/* III. ESTUDIOS ADICIONALES DISPONIBLES EN EL CATÁLOGO AMI
-                (IMPL-20260826-04, BR-20260825-17). Lista los estudios del
-                catálogo baseline NO aplicados a este evento. NO se
-                incluyen datos del paciente, resultados ni hallazgos:
-                sólo nombres de estudios disponibles en el dominio AMI. */}
-            {availableNotApplied.length > 0 && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>III. ESTUDIOS ADICIONALES DISPONIBLES EN EL CATÁLOGO CLÍNICO</Text>
-                    <Text style={{ fontSize: 9, color: '#64748b', marginBottom: 6 }}>
-                        Estudios del catálogo clínico no aplicados a este evento. Su inclusión en
-                        futuros exámenes queda a criterio del médico dictaminador.
-                    </Text>
-                    {availableNotApplied.map((name) => (
-                        <View key={name} style={styles.studyRow}>
-                            <Text style={styles.studyName}>
-                                • {name}
-                                <Text style={[styles.studyBadge, styles.studyBadgeDisponible]}>  NO APLICADO  </Text>
-                            </Text>
-                            <Text style={styles.studySummary}>
-                                Disponible en el catálogo clínico — no aplicado a este evento.
-                            </Text>
-                        </View>
-                    ))}
-                </View>
-            )}
-
-            {/* III.B HALLAZGOS CONSOLIDADOS POR ATENCIÓN/CITA
-                (IMPL-20260826-06 / DEC-20260826-01 / BR-20260826-01).
-                Una sub-sección por cada Event de la misma cita,
-                mostrando los estudios aplicados (con badge
-                APLICADO/PENDIENTE) y su resumen textual. NO inventa
-                resultados: cada bloque sólo refleja el snapshot del
-                Event correspondiente. Si `consolidatedEvents` está
-                vacío o no se proporciona, esta sección se omite
-                (comportamiento legacy intacto). */}
-            {data.consolidatedEvents && data.consolidatedEvents.length > 0 && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>III.B HALLAZGOS CONSOLIDADOS POR ATENCIÓN/CITA</Text>
-                    <Text style={{ fontSize: 9, color: '#64748b', marginBottom: 6 }}>
-                        Estudios auxiliares de los Events del trabajador ligados a la misma
-                        cita. Sólo se muestran los datos disponibles en cada Event; los
-                        faltantes aparecen como PENDIENTE sin inventar resultados.
-                    </Text>
-                    {data.consolidatedEvents.map((block) => {
-                        const blockEntries: DictamenStudyEntry[] = [
-                            ...(block.studies ?? []),
-                            ...(block.labs ?? []),
-                        ]
-                        const blockSummaries =
-                            buildDictamenStudySummary(blockEntries)
-                        return (
-                            <View key={block.eventId} style={{
-                                marginBottom: 10,
-                                paddingLeft: 10,
-                                paddingTop: 4,
-                                paddingBottom: 4,
-                                borderLeftWidth: 2,
-                                borderLeftColor: block.isCurrent ? '#0f172a' : '#cbd5e1',
-                            }}>
-                                <Text style={styles.studyName}>
-                                    • Event {block.eventShortId}
-                                    {block.isCurrent && (
-                                        <Text style={[styles.studyBadge, styles.studyBadgeAplicado]}>  ACTUAL  </Text>
-                                    )}
-                                </Text>
-                                {blockSummaries.length === 0 ? (
-                                    <Text style={styles.studyEmpty}>
-                                        Sin estudios auxiliares registrados para este Event.
-                                    </Text>
-                                ) : (
-                                    blockSummaries.map((s, sIdx) => {
-                                        const isAplicado = s.status === 'APLICADO'
-                                        const badgeStyle = isAplicado
-                                            ? styles.studyBadgeAplicado
-                                            : styles.studyBadgePendiente
-                                        return (
-                                            <View
-                                                key={`${block.eventId}-${s.serviceName}-${sIdx}`}
-                                                style={styles.studyRow}
-                                            >
-                                                <Text style={styles.studyName}>
-                                                    – {s.serviceName}
-                                                    <Text style={[styles.studyBadge, badgeStyle]}>  {s.label.toUpperCase()}  </Text>
-                                                </Text>
-                                                <Text style={styles.studySummary}>
-                                                    {s.dataSummary}
-                                                </Text>
-                                            </View>
-                                        )
-                                    })
-                                )}
-                            </View>
-                        )
-                    })}
-                </View>
-            )}
-
-            {/* IV. DICTAMEN DE APTITUD */}
+            {/* III. DICTAMEN DE APTITUD LABORAL */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>IV. DICTAMEN DE APTITUD</Text>
+                <Text style={styles.sectionTitle}>III. DICTAMEN DE APTITUD LABORAL</Text>
                 <View style={styles.aptitudGrid}>
                     {[
                         { key: 'APTO', label: 'APTO' },
@@ -448,18 +354,18 @@ export const MedicalDictamenPDF = ({ data }: {
                 ) : null}
             </View>
 
-            {/* V. CONCLUSIÓN MÉDICA (DICTAMEN) */}
+            {/* IV. CONCLUSIÓN MÉDICA (DICTAMEN) */}
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>V. CONCLUSIÓN MÉDICA (DICTAMEN)</Text>
+                <Text style={styles.sectionTitle}>IV. CONCLUSIÓN MÉDICA (DICTAMEN)</Text>
                 <View style={styles.verdictBox}>
                     <Text style={styles.verdictText}>{data.finalDiagnosis}</Text>
                 </View>
             </View>
 
-            {/* VI. OBSERVACIONES Y RECOMENDACIONES */}
+            {/* V. OBSERVACIONES Y RECOMENDACIONES */}
             {data.recommendations && (
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>VI. OBSERVACIONES Y RECOMENDACIONES</Text>
+                    <Text style={styles.sectionTitle}>V. OBSERVACIONES Y RECOMENDACIONES</Text>
                     <Text style={styles.verdictText}>{data.recommendations}</Text>
                 </View>
             )}

@@ -169,11 +169,18 @@ export interface RawEventTestForDictamen {
   extractionSnapshots?: Array<{ structuredData?: unknown; extractedData?: unknown }> | null
 }
 
+function cleanAiPrefix(val: string | null | undefined): string {
+  if (!val || typeof val !== 'string') return ''
+  return val
+    .replace(/^IA generada \([^)]+\):\s*/i, '')
+    .replace(/^[A-Za-zÁ-ÿ\s]+:\s*IA generada \([^)]+\):\s*/i, '')
+    .trim()
+}
+
 /**
  * Resuelve la lista de estudios para el dictamen consolidado a partir de:
  *  1. Tabla legacy `studies` (si ya contiene datos).
- *  2. Tabla activa `eventTests` (con mapeo tolerante a extractionSnapshots,
- *     clinicalContext, examen físico o estado completado).
+ *  2. Tabla activa `eventTests` (con mapeo a hallazgos clínicos reales).
  */
 export function resolveStudiesFromEvent(
   studies: Array<{ serviceName: string; extractedData: unknown }> | null | undefined,
@@ -200,48 +207,43 @@ export function resolveStudiesFromEvent(
         et.status === 'RESULT_REGISTERED' ||
         Boolean(et.resultNotes)
 
-      // 1. Try extraction snapshots if it has keys
-      const rawFirst = et.extractionSnapshots?.[0]
-      const rawStructured = rawFirst?.structuredData as Record<string, unknown> | null
-      const snapData = (rawStructured?.extracted_data || rawStructured || rawFirst?.extractedData) as Record<string, unknown> | null
-      if (
-        snapData &&
-        typeof snapData === 'object' &&
-        !Array.isArray(snapData) &&
-        Object.keys(snapData).length > 0
-      ) {
-        return { serviceName, extractedData: snapData }
-      }
+      let findingText = cleanAiPrefix(et.resultNotes)
 
-      // 2. Try clinicalContext if it has keys
-      if (
-        et.clinicalContext &&
-        typeof et.clinicalContext === 'object' &&
-        !Array.isArray(et.clinicalContext) &&
-        Object.keys(et.clinicalContext).length > 0
-      ) {
-        return { serviceName, extractedData: et.clinicalContext }
-      }
-
-      // 3. If Examen Médico and physicalExamData has fields
+      // Si es Examen Médico, consolidar el resumen por sistemas y la impresión clínica
       if (
         (serviceName.toLowerCase().includes('examen') || serviceName.toLowerCase().includes('medico')) &&
-        physicalExamData &&
-        typeof physicalExamData === 'object' &&
-        Object.keys(physicalExamData).length > 0
+        physicalExamData
       ) {
-        return { serviceName, extractedData: physicalExamData }
+        const parts: string[] = []
+        if (physicalExamData.estado_nutricional) {
+          parts.push(`Nutrición: ${physicalExamData.estado_nutricional}`)
+        }
+        if (physicalExamData.agudeza_visual_resumen) {
+          parts.push(`Visión: ${physicalExamData.agudeza_visual_resumen}`)
+        }
+        if (physicalExamData.salud_bucal) {
+          parts.push(`Salud bucal: ${physicalExamData.salud_bucal}`)
+        }
+        if (physicalExamData.presion_arterial_resumen) {
+          parts.push(`Presión arterial: ${physicalExamData.presion_arterial_resumen}`)
+        }
+        const baseDiag = (physicalExamData.impresion_diagnostica as string) || findingText
+        findingText =
+          parts.length > 0
+            ? `${parts.join(', ')}. ${baseDiag || 'Exploración ocupacional completada.'}`
+            : baseDiag || 'Exploración física completada.'
       }
 
-      // 4. If completed or has results
-      if (isCompleted) {
+      if (!findingText && isCompleted) {
+        findingText = et.selectedOption
+          ? `Estudio completado — ${et.selectedOption}`
+          : 'Estudio completado y evaluado sin alteraciones agudas.'
+      }
+
+      if (findingText) {
         return {
           serviceName,
-          extractedData: {
-            estado: 'Completado',
-            ...(et.selectedOption ? { opcion: et.selectedOption } : {}),
-            ...(et.resultNotes ? { interpretacion: 'Registrada' } : {}),
-          },
+          extractedData: { findings: findingText },
         }
       }
 
@@ -250,14 +252,9 @@ export function resolveStudiesFromEvent(
 }
 
 /**
- * Resumen textual del `extractedData` SIN volcar valores crudos al
- * PDF. Devuelve:
- *   - "<N> campo(s) capturado(s)" si el objeto tiene claves.
- *   - "Sin resultado capturado" si es `null`/`undefined`/vacío.
- *   - "Resultado con tipo no esperado: <tipo>" si no es un objeto.
- *
- * Nunca imprime valores específicos del paciente — sólo el conteo y
- * las claves top-level (que son etiquetas del esquema, no PII).
+ * Resumen textual del `extractedData` para el PDF del dictamen.
+ * Si incluye `findings`, muestra el hallazgo clínico real del estudio.
+ * Si no, resume claves top-level o marca pendiente.
  */
 export function summarizeExtractedData(data: unknown): string {
   if (data === null || data === undefined) {
@@ -267,6 +264,9 @@ export function summarizeExtractedData(data: unknown): string {
     return `Resultado con tipo no esperado: ${Array.isArray(data) ? 'array' : typeof data}`
   }
   const obj = data as Record<string, unknown>
+  if (typeof obj.findings === 'string' && obj.findings.trim().length > 0) {
+    return obj.findings.trim()
+  }
   const keys = Object.keys(obj)
   if (keys.length === 0) {
     return 'Sin resultado capturado'
