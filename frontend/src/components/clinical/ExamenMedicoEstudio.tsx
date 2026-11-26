@@ -2779,7 +2779,7 @@ export default function ExamenMedicoEstudio({
 
               {shouldShowExamenMedicoPdfCta(aptitud) ? (
                 <div className="bg-white border-2 border-teal-300 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="flex-1 space-y-2">
+                  <div className="flex-1 space-y-1">
                     <p className="text-sm font-bold text-teal-800">
                       Reporte de examen médico (aptitud)
                     </p>
@@ -2787,16 +2787,6 @@ export default function ExamenMedicoEstudio({
                       Este PDF se emite al cerrar el examen. El dictamen general y el ZIP de cierre
                       se habilitan después, en Firma.
                     </p>
-                    {hasMedicalVerdict !== true && (
-                      <Link
-                        href={navigateToValidatingView(eventId)}
-                        className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl shadow-sm transition-all"
-                        data-testid="examen-medico-go-validating-link"
-                      >
-                        <FileCheck className="h-4 w-4" />
-                        <span>Firmar y dictaminar →</span>
-                      </Link>
-                    )}
                   </div>
                   <div className="flex flex-col gap-2">
                     <a

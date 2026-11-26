@@ -189,27 +189,27 @@ class GeminiBase:
                 f"Respuesta del modelo no es JSON parseable: {text!r}"
             )
 
-        # Intento 1: parseo directo.
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
+        # Intento 1: parseo directo (estricto y tolerando saltos/caracteres de control sin escapar).
+        for strict in (True, False):
+            try:
+                res = json.loads(text, strict=strict)
+                if isinstance(res, dict):
+                    return res
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
 
         # Intento 2: raw_decode — salta whitespace inicial y devuelve el
-        # primer valor JSON completo. Robusto contra texto líder antes
-        # del JSON si ese texto NO contiene un `{`/`[` válido al inicio.
-        # `raw_decode` falla si hay caracteres no-whitespace antes del
-        # valor, por lo que sólo aporta valor cuando el payload empieza
-        # directamente por JSON (con posibles espacios/newlines).
-        decoder = json.JSONDecoder()
+        # primer valor JSON completo.
         stripped = text.lstrip()
         if stripped and stripped[0] in ("{", "["):
-            try:
-                obj, _end = decoder.raw_decode(stripped)
-                if isinstance(obj, dict):
-                    return obj
-            except json.JSONDecodeError:
-                pass
+            for strict in (True, False):
+                try:
+                    decoder = json.JSONDecoder(strict=strict)
+                    obj, _end = decoder.raw_decode(stripped)
+                    if isinstance(obj, dict):
+                        return obj
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    pass
 
         # Intento 3: extraer subcadena primer `{` ... último `}` para
         # ignorar texto extra al inicio/fin (eg. fences, explicaciones).
@@ -218,20 +218,57 @@ class GeminiBase:
         candidate: Optional[str] = None
         if start != -1 and end != -1 and end > start:
             candidate = text[start : end + 1]
-            try:
-                return json.loads(candidate)
-            except json.JSONDecodeError:
-                pass
+            for strict in (True, False):
+                try:
+                    res = json.loads(candidate, strict=strict)
+                    if isinstance(res, dict):
+                        return res
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    pass
 
         # Intento 4: subcadena `{...}` con comas finales eliminadas
         # (transformación segura y monótona hacia JSON válido).
         if candidate is not None:
             cleaned = cls._TRAILING_COMMA_RE.sub(r"\1", candidate)
             if cleaned != candidate:
-                try:
-                    return json.loads(cleaned)
-                except json.JSONDecodeError:
-                    pass
+                for strict in (True, False):
+                    try:
+                        res = json.loads(cleaned, strict=strict)
+                        if isinstance(res, dict):
+                            return res
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass
+
+        # Intento 5: remoción de comentarios JS (// o /* */) que algunos LLMs insertan
+        if start != -1:
+            raw_cand = text[start : (end + 1 if end > start else len(text))]
+            no_comments = re.sub(r"//[^\n]*\n|/\*.*?\*/", "\n", raw_cand, flags=re.DOTALL)
+            cleaned_nc = cls._TRAILING_COMMA_RE.sub(r"\1", no_comments)
+            for cand_attempt in (no_comments, cleaned_nc):
+                for strict in (True, False):
+                    try:
+                        res = json.loads(cand_attempt, strict=strict)
+                        if isinstance(res, dict):
+                            return res
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        pass
+
+        # Intento 6: auto-cierre de JSON truncado (eg. tokens agotados antes de cerrar `}` / `]`)
+        if start != -1:
+            raw_cand = text[start : (end + 1 if end > start else len(text))]
+            open_cur = raw_cand.count("{") - raw_cand.count("}")
+            open_sq = raw_cand.count("[") - raw_cand.count("]")
+            if open_cur > 0 or open_sq > 0:
+                auto_closed = raw_cand + ("]" * max(0, open_sq)) + ("}" * max(0, open_cur))
+                cleaned_closed = cls._TRAILING_COMMA_RE.sub(r"\1", auto_closed)
+                for cand_attempt in (auto_closed, cleaned_closed):
+                    for strict in (True, False):
+                        try:
+                            res = json.loads(cand_attempt, strict=strict)
+                            if isinstance(res, dict):
+                                return res
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            pass
 
         # Ningún intento recuperó un objeto JSON. Fallar con error
         # trazable — NO devolver dict vacío (FIX-FEATURE-20260824-01
