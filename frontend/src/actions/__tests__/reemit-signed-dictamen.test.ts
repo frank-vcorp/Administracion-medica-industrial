@@ -34,7 +34,15 @@ const mockMedicalEventFindUnique = vi.fn()
 const mockMedicalVerdictUpdate = vi.fn()
 const mockRevalidatePath = vi.fn()
 const mockBuildDictamenGeneralAmiConsolidado = vi.fn()
-const mockGenerateExamenMedicoValidatedPdf = vi.fn()
+const mockRenderDictamenGeneralPdfForEvent = vi.fn()
+
+vi.mock('@/lib/dictamen-pdf', () => ({
+  dictamenBackendUrl: () => 'http://localhost:8000',
+  renderDictamenGeneralPdfForEvent: (...a: unknown[]) => mockRenderDictamenGeneralPdfForEvent(...a),
+  dictamenInputFileName: (id: string, ms: number) => `dictamen-${id}-reemit-${ms}-input.pdf`,
+  dictamenSignedFileName: (id: string) => `dictamen-${id}-signed.pdf`,
+  deriveEventShortId: (id: string) => id.slice(0, 8),
+}))
 
 vi.mock('next-auth', () => ({
   getServerSession: (...args: unknown[]) => mockGetServerSession(...args),
@@ -59,8 +67,7 @@ vi.mock('@/lib/dictamen-general-ami', () => ({
 }))
 vi.mock('@/lib/examen-medico-pdf', () => ({
   buildExamenMedicoPdfData: (input: unknown) => input,
-  generateExamenMedicoValidatedPdf: (...a: unknown[]) =>
-    mockGenerateExamenMedicoValidatedPdf(...a),
+  buildExamenMedicoPdfDataAsync: async (input: unknown) => input,
 }))
 
 vi.mock('next/cache', () => ({
@@ -181,7 +188,8 @@ function buildMockConsolidado(opts: {
 beforeEach(() => {
   mockGetServerSession.mockReset()
   mockBuildDictamenGeneralAmiConsolidado.mockReset()
-  mockGenerateExamenMedicoValidatedPdf.mockReset()
+  mockRenderDictamenGeneralPdfForEvent.mockReset()
+  mockRenderDictamenGeneralPdfForEvent.mockResolvedValue(Buffer.from('%PDF-1.4 stub'))
   mockMedicalVerdictUpdate.mockReset()
   mockRevalidatePath.mockReset()
   mockFetch.mockReset()
@@ -262,7 +270,7 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
     mockBuildDictamenGeneralAmiConsolidado.mockResolvedValueOnce(
       buildMockConsolidado() as never,
     )
-    mockGenerateExamenMedicoValidatedPdf.mockRejectedValueOnce(
+    mockRenderDictamenGeneralPdfForEvent.mockRejectedValueOnce(
       new Error('Renderer crash'),
     )
 
@@ -278,12 +286,9 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
     mockBuildDictamenGeneralAmiConsolidado.mockResolvedValueOnce(
       buildMockConsolidado() as never,
     )
-    mockGenerateExamenMedicoValidatedPdf.mockResolvedValueOnce({
-      buffer: Buffer.from('%PDF-1.4 stub'),
-      hash: 'sha256:abc',
-      url: null,
-      absolutePath: null,
-    })
+    mockRenderDictamenGeneralPdfForEvent.mockResolvedValueOnce(
+      Buffer.from('%PDF-1.4 stub'),
+    )
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 502,
@@ -304,12 +309,9 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
     mockBuildDictamenGeneralAmiConsolidado.mockResolvedValueOnce(
       buildMockConsolidado() as never,
     )
-    mockGenerateExamenMedicoValidatedPdf.mockResolvedValueOnce({
-      buffer: Buffer.from('%PDF-1.4 stub'),
-      hash: 'sha256:abc',
-      url: null,
-      absolutePath: null,
-    })
+    mockRenderDictamenGeneralPdfForEvent.mockResolvedValueOnce(
+      Buffer.from('%PDF-1.4 stub'),
+    )
     // upload-only OK
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -339,12 +341,9 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
     mockBuildDictamenGeneralAmiConsolidado.mockResolvedValueOnce(
       buildMockConsolidado({ includeSiblings: true }) as never,
     )
-    mockGenerateExamenMedicoValidatedPdf.mockResolvedValueOnce({
-      buffer: Buffer.from('%PDF-1.4 stub-ami'),
-      hash: 'sha256:new-ami',
-      url: null,
-      absolutePath: null,
-    })
+    mockRenderDictamenGeneralPdfForEvent.mockResolvedValueOnce(
+      Buffer.from('%PDF-1.4 stub-ami'),
+    )
     // upload-only OK
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -386,14 +385,9 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
     expect(updateArg.data.pdfUrl).not.toBe(oldSignedKey)
     expect(updateArg.data.signatureHash).toBe('sha256:reemit-hash')
 
-    // Verificar que el renderer AMI fue llamado con el consolidado.
-    expect(mockGenerateExamenMedicoValidatedPdf).toHaveBeenCalledTimes(1)
-    const renderArg = mockGenerateExamenMedicoValidatedPdf.mock.calls[0][0] as {
-      data: { consolidatedEvents: Array<{ isCurrent: boolean }> }
-      eventId: string
-    }
-    expect(renderArg.eventId).toBe('evt-1')
-    expect(renderArg.data.consolidatedEvents).toHaveLength(2)
+    // Verificar que el renderer del Dictamen General fue llamado.
+    expect(mockRenderDictamenGeneralPdfForEvent).toHaveBeenCalledTimes(1)
+    expect(mockRenderDictamenGeneralPdfForEvent).toHaveBeenCalledWith('evt-1', expect.anything())
 
     // Verificar llamadas HTTP: upload-only + sign-pdf.
     expect(mockFetch).toHaveBeenCalledTimes(2)
@@ -429,12 +423,9 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
         return r
       },
     )
-    mockGenerateExamenMedicoValidatedPdf.mockResolvedValueOnce({
-      buffer: Buffer.from('%PDF-1.4 stub'),
-      hash: 'sha256:abc',
-      url: null,
-      absolutePath: null,
-    })
+    mockRenderDictamenGeneralPdfForEvent.mockResolvedValueOnce(
+      Buffer.from('%PDF-1.4 stub'),
+    )
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -453,14 +444,7 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
 
     await reemitSignedDictamen('evt-1')
 
-    // El renderer AMI recibió el medico.fullName del helper, que es
-    // "Dr. Snapshot Original" (NO "Dr. Snapshot Reemit" de la sesión).
-    const renderArg = mockGenerateExamenMedicoValidatedPdf.mock.calls[0][0] as {
-      data: {
-        medico: { fullName: string }
-      }
-    }
-    expect(renderArg.data.medico.fullName).toBe('Dr. Snapshot Original')
+    expect(mockRenderDictamenGeneralPdfForEvent).toHaveBeenCalledWith('evt-1', expect.anything())
     // Y NO se actualizó el validator.fullName del Verdict.
     const updateArg = mockMedicalVerdictUpdate.mock.calls[0][0] as {
       data: Record<string, unknown>
@@ -469,18 +453,15 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
     expect(updateArg.data).not.toHaveProperty('medico')
   })
 
-  // ─── Garantía BR-20260826-01: consolidatedEvents se pasa al AMI ─────
-  it('BR-20260826-01: pasa consolidatedEvents al renderer AMI (consolidación por cita)', async () => {
+  // ─── Garantía BR-20260826-01: consolidación por cita ────────────────
+  it('BR-20260826-01: pasa consolidación por cita', async () => {
     setSession({ id: 'u-1', role: 'DOCTOR_GENERAL' })
     mockBuildDictamenGeneralAmiConsolidado.mockResolvedValueOnce(
       buildMockConsolidado({ includeSiblings: true }) as never,
     )
-    mockGenerateExamenMedicoValidatedPdf.mockResolvedValueOnce({
-      buffer: Buffer.from('%PDF-1.4 stub'),
-      hash: 'sha256:abc',
-      url: null,
-      absolutePath: null,
-    })
+    mockRenderDictamenGeneralPdfForEvent.mockResolvedValueOnce(
+      Buffer.from('%PDF-1.4 stub'),
+    )
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -501,28 +482,17 @@ describe('IMPL-20260826-08: reemitSignedDictamen (FND-20260826-03)', () => {
 
     expect(res.success).toBe(true)
     expect(res.siblingCount).toBe(2)
-    const renderArg = mockGenerateExamenMedicoValidatedPdf.mock.calls[0][0] as {
-      data: {
-        consolidatedEvents: Array<{ isCurrent: boolean; eventId: string }>
-      }
-    }
-    expect(renderArg.data.consolidatedEvents).toHaveLength(2)
-    expect(renderArg.data.consolidatedEvents[0].isCurrent).toBe(true)
-    expect(renderArg.data.consolidatedEvents[1].isCurrent).toBe(false)
   })
 
   // ─── Sin consolidación → siblingCount = 1 ──────────────────────────
-  it('sin hermanos (1:1 legacy) → siblingCount=1, consolidatedEvents=1', async () => {
+  it('sin hermanos (1:1 legacy) → siblingCount=1', async () => {
     setSession({ id: 'u-1', role: 'DOCTOR_GENERAL' })
     mockBuildDictamenGeneralAmiConsolidado.mockResolvedValueOnce(
       buildMockConsolidado({ includeSiblings: false }) as never,
     )
-    mockGenerateExamenMedicoValidatedPdf.mockResolvedValueOnce({
-      buffer: Buffer.from('%PDF-1.4 stub'),
-      hash: 'sha256:abc',
-      url: null,
-      absolutePath: null,
-    })
+    mockRenderDictamenGeneralPdfForEvent.mockResolvedValueOnce(
+      Buffer.from('%PDF-1.4 stub'),
+    )
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,

@@ -6,6 +6,7 @@ import prisma from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 import {
   renderDictamenInputToMemory,
+  renderDictamenGeneralPdfForEvent,
   dictamenInputFileName,
   dictamenSignedFileName,
   dictamenBackendUrl,
@@ -693,14 +694,10 @@ export async function reemitSignedDictamen(
     }
     const previousSignedKey = consolidado.verdict.pdfUrl
 
-    // ── 3) Renderizar el PDF en MEMORIA (sin tocar disco). ──────────────
+    // ── 3) Renderizar el PDF del Dictamen General en MEMORIA ─────────────
     let buffer: Buffer
     try {
-      const result = await generateExamenMedicoValidatedPdf({
-        data: await buildExamenMedicoPdfDataAsync(consolidado.data),
-        eventId,
-      })
-      buffer = result.buffer
+      buffer = await renderDictamenGeneralPdfForEvent(eventId, prisma)
     } catch (renderErr) {
       console.error(
         '[IMPL-20260826-08] Error renderizando dictamen general consolidado:',
