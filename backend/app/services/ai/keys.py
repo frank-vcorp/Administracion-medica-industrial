@@ -34,6 +34,10 @@ logger = logging.getLogger(__name__)
 # Lista canónica de proveedores soportados.
 CANONICAL_PROVIDERS = ("gemini", "m3", "dr7")
 
+# Ventana de gracia para lecturas sincrónicas en vuelo (evita que una extracción
+# larga expire la caché TTL de 60s justo antes del prediagnóstico clínico).
+SYNC_STALE_GRACE_SECONDS = 180.0
+
 # Longitudes esperadas para AES-256-GCM.
 _GCM_KEY_BYTES = 32      # AES-256
 _GCM_NONCE_BYTES = 12    # estándar GCM
@@ -438,7 +442,10 @@ class KeyResolver:
         if cached is None:
             return None
         ts, value = cached
-        if time.monotonic() - ts >= self.ttl:
+        # `await resolve()` refresca en cada paso async cada `self.ttl` (60s), e
+        # `invalidate()` limpia de inmediato al rotar/borrar; este margen evita que un
+        # paso sync largo en el event loop pierda la clave a mitad de la petición.
+        if time.monotonic() - ts >= self.ttl + SYNC_STALE_GRACE_SECONDS:
             return None
         if not (value.api_key or "").strip():
             return None

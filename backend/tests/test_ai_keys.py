@@ -580,3 +580,42 @@ def test_m3_default_model_and_legacy_promotion(monkeypatch):
     monkeypatch.setenv("M3_DEFAULT_MODEL", "Minimax-M3")
     _api_key2, _base_url2, promoted_model = KeyResolver._env_value("m3")
     assert promoted_model == "MiniMax-M3.1-Flash"
+
+
+def test_resolve_sync_cached_survives_mid_request_ttl_expiry_within_grace_window(
+    monkeypatch, master_key_env
+):
+    """Una extracción larga que rebase `ttl` (60s) no debe invalidar `resolve_sync_cached` a mitad del flujo."""
+    monkeypatch.setenv("AI_KEYS_FROM_DB_ENABLED", "true")
+    monkeypatch.setenv("M3_API_KEY", "")
+    ct, n, t = encrypt_key("sk-grace-window-m3", _load_encryption_key())
+    row = MagicMock()
+    row.provider = "m3"
+    row.keyCiphertext = MagicMock(decode=lambda v=ct: v)
+    row.keyNonce = MagicMock(decode=lambda v=n: v)
+    row.keyTag = MagicMock(decode=lambda v=t: v)
+    row.baseUrl = None
+    row.defaultModel = None
+    row.enabled = True
+    prisma = _mock_prisma(row=row)
+    from app.services import prisma_client
+
+    prisma_client.set_prisma_client(prisma)
+
+    r = KeyResolver(ttl_seconds=1)
+    r.invalidate_all()
+
+    first = _arun(r.resolve("m3"))
+    assert first.api_key == "sk-grace-window-m3"
+
+    # Simular que ya pasaron 10s desde el warmup inicial (> ttl=1s, pero dentro del margen de gracia)
+    ts, res = r._cache["m3"]
+    r._cache["m3"] = (ts - 10.0, res)
+
+    sync_res = r.resolve_sync_cached("m3")
+    assert sync_res is not None
+    assert sync_res.api_key == "sk-grace-window-m3"
+
+    # La invalidación explícita sí limpia de inmediato
+    r.invalidate("m3")
+    assert r.resolve_sync_cached("m3") is None

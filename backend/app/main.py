@@ -1532,6 +1532,11 @@ async def v2_upload_and_analyze(
         )
 
         # PASO 3: PREDIAGNÓSTICO IA (capa separada)
+        if _ai_keys_db_enabled():
+            try:
+                await _key_resolver_singleton.resolve("m3")
+            except Exception:
+                pass
         predx_start = time.time()
         prediagnosis = prediagnostic_svc.generate_prediagnosis(
             detected_type,

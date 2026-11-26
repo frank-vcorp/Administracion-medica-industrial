@@ -612,6 +612,11 @@ async def upload_calibration_test(
         extraction_dict = _serialize_extraction_result(extraction_result)
 
         # Prediagnóstico
+        if _ai_keys_db_enabled():
+            try:
+                await _key_resolver_singleton.resolve("m3")
+            except Exception:
+                pass
         predx_start = time.time()
         prediagnosis_obj = prediagnostic_svc.generate_prediagnosis(
             study_type=canonical_study_type,
