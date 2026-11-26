@@ -232,8 +232,10 @@ export default function EventFlowController({
                                 <Stethoscope className="w-6 h-6" strokeWidth={2.25} />
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-slate-800">Reporte médico de aptitud</h3>
-                                <p className="text-sm text-slate-500">Completa la evaluación para generar el certificado firmado.</p>
+                                <h3 className="text-xl font-bold text-slate-800">Dictamen General y Firma Médica</h3>
+                                <p className="text-sm text-slate-500">
+                                    Emisión del dictamen final para la empresa y reporte para el paciente, integrando todos los estudios realizados en la papeleta.
+                                </p>
                             </div>
                         </div>
 
