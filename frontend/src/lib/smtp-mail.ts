@@ -16,6 +16,39 @@ export type SendSmtpMailArgs = {
   forProbe?: boolean
 }
 
+const SME_SMTP_FROM_NAME = 'Soluciones Médico Empresariales'
+
+export function formatSmtpFromWithBrand(rawFrom: string): string {
+  const trimmed = rawFrom.trim()
+  if (!trimmed) return rawFrom
+  if (trimmed.includes('<') && trimmed.includes('>')) return trimmed
+  return `"${SME_SMTP_FROM_NAME}" <${trimmed}>`
+}
+
+export function buildSendGridDisableClickTrackHeaders(transport: {
+  host: string
+  source: 'sendgrid_db' | 'env'
+}): Record<string, string> | undefined {
+  if (
+    transport.source === 'sendgrid_db' ||
+    transport.host.toLowerCase().includes('sendgrid')
+  ) {
+    return {
+      'X-SMTPAPI': JSON.stringify({
+        filters: {
+          clicktrack: {
+            settings: {
+              enable: 0,
+              enable_text: 0,
+            },
+          },
+        },
+      }),
+    }
+  }
+  return undefined
+}
+
 export async function sendSmtpMail(
   args: SendSmtpMailArgs,
 ): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
@@ -37,12 +70,13 @@ export async function sendSmtpMail(
     })
 
     await transporter.sendMail({
-      from,
+      from: formatSmtpFromWithBrand(from),
       to: args.to,
       subject: args.subject,
       text: args.text,
       html: args.html,
       attachments: args.attachments,
+      headers: buildSendGridDisableClickTrackHeaders(transportConfig),
     })
 
     return { success: true }

@@ -8,6 +8,10 @@ import {
   buildPortalAccessEmailText,
 } from '@/lib/emails/portal-access-email-template'
 
+export function buildPortalAccessEmailSubject(companyName: string): string {
+  return `Credenciales de acceso al Portal de Medicina Laboral — ${companyName}`
+}
+
 export async function sendPortalAccessCredentialsEmail(args: {
   to: string
   companyName: string
@@ -18,7 +22,7 @@ export async function sendPortalAccessCredentialsEmail(args: {
   const result = await sendSmtpMail({
     purpose: 'portal',
     to: args.to,
-    subject: `Acceso al portal cliente — ${args.companyName}`,
+    subject: buildPortalAccessEmailSubject(args.companyName),
     text: buildPortalAccessEmailText(args),
     html: buildPortalAccessEmailHtml(args),
   })

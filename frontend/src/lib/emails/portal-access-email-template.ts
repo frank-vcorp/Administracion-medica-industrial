@@ -120,15 +120,15 @@ export function buildPortalAccessEmailHtml(args: PortalAccessEmailContentArgs): 
               <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 28px;">
                 <tr>
                   <td align="center">
-                    <a href="${loginUrl}" style="display:inline-block;background-color:${SME_PRIMARY};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:8px;mso-padding-alt:0;">Acceder al portal</a>
+                    <a clicktracking="off" href="${loginUrl}" style="display:inline-block;background-color:${SME_PRIMARY};color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 32px;border-radius:8px;mso-padding-alt:0;">Acceder al portal</a>
                   </td>
                 </tr>
               </table>
 
               <p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#475569;font-weight:600;">Primer ingreso</p>
               <ul style="margin:0 0 20px;padding-left:20px;font-size:14px;line-height:1.65;color:#475569;">
-                <li style="margin-bottom:6px;">Acepte los <a href="${termsUrlEsc}" style="color:${SME_SECONDARY};">términos y condiciones</a> del portal.</li>
-                <li style="margin-bottom:6px;">Acepte el <a href="${privacyUrlEsc}" style="color:${SME_SECONDARY};">aviso de privacidad</a>.</li>
+                <li style="margin-bottom:6px;">Acepte los <a clicktracking="off" href="${termsUrlEsc}" style="color:${SME_SECONDARY};">términos y condiciones</a> del portal.</li>
+                <li style="margin-bottom:6px;">Acepte el <a clicktracking="off" href="${privacyUrlEsc}" style="color:${SME_SECONDARY};">aviso de privacidad</a>.</li>
                 <li>Defina una contraseña nueva de acceso.</li>
               </ul>
 

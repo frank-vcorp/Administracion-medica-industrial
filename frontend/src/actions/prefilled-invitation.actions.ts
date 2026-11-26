@@ -9,27 +9,17 @@
  * @id IMPL-20260324-07
  */
 
-import { createHash, randomBytes } from 'crypto'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import {
+  createOrReplacePrefilledInvitationForAppointment,
+  hashPrefillToken as hashToken,
+} from '@/lib/prefilled-invitation-server'
+import {
   GenerateInvitationInputSchema,
   SaveModule1InputSchema,
 } from '@/schemas/clinical/prefilled.schema'
-
-/** Vigencia de la invitación según SPEC: 6 horas */
-const INVITATION_TTL_HOURS = 6
-
-/** Genera un token aleatorio seguro (32 bytes → base64url, ~43 caracteres) */
-function generatePlainToken(): string {
-  return randomBytes(32).toString('base64url')
-}
-
-/** Hashea el token plano con SHA-256 para almacenamiento seguro en DB */
-function hashToken(plainToken: string): string {
-  return createHash('sha256').update(plainToken).digest('hex')
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Actions de staff (autenticadas)
@@ -59,43 +49,19 @@ export async function generateInvitation(rawInput: unknown) {
 
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
-    select: { id: true },
+    select: { id: true, scheduledAt: true },
   })
   if (!appointment) {
     return { success: false, error: 'Cita no encontrada' }
   }
 
-  const plainToken = generatePlainToken()
-  const tokenHash  = hashToken(plainToken)
-  const expiresAt  = new Date(Date.now() + INVITATION_TTL_HOURS * 60 * 60 * 1000)
-
-  // Reemplazar invitación previa (incl. SUBMITTED) — evita unique constraint y enlace colgado (O9-16)
-  await prisma.$transaction(async (tx) => {
-    await tx.prefilledInvitation.upsert({
-      where: { appointmentId },
-      create: {
-        appointmentId,
-        tokenHash,
-        expiresAt,
-        status: 'INVITATION_ACTIVE',
-        channel: channel ?? null,
-        generatedById: session.user.id,
-        module1Data: undefined,
-        openedCount: 0,
-        submittedAt: null,
-      },
-      update: {
-        tokenHash,
-        expiresAt,
-        status: 'INVITATION_ACTIVE',
-        channel: channel ?? null,
-        generatedById: session.user.id,
-        module1Data: undefined,
-        openedCount: 0,
-        submittedAt: null,
-      },
+  const { plainToken, expiresAt } =
+    await createOrReplacePrefilledInvitationForAppointment({
+      appointmentId,
+      generatedById: session.user.id,
+      scheduledAt: appointment.scheduledAt,
+      channel: channel ?? null,
     })
-  })
 
   return {
     success: true,

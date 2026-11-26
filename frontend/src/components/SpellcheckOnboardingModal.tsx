@@ -4,22 +4,28 @@ import {
   isSpellcheckOnboardingDismissed,
   persistSpellcheckOnboardingDismissed,
 } from '@/lib/spellcheck-onboarding'
-import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { useState, useSyncExternalStore } from 'react'
+
+const SUPPRESSED_PATHS = ['/login', '/auto-alta', '/prefill', '/solicitar-alta', '/legal'] as const
+
+const subscribeNoop = () => () => {}
 
 /**
  * SME-106: aviso por navegador sobre ortografía mejorada del navegador para español.
  * No bloquea la interacción con la app (sin window.alert).
  */
 export default function SpellcheckOnboardingModal() {
-  const [open, setOpen] = useState(false)
+  const pathname = usePathname()
+  const isSuppressed = SUPPRESSED_PATHS.some((prefix) => pathname?.startsWith(prefix))
+  const [dismissedLocally, setDismissedLocally] = useState(false)
+  const shouldShowFromStorage = useSyncExternalStore(
+    subscribeNoop,
+    () => !isSpellcheckOnboardingDismissed(),
+    () => false,
+  )
 
-  useEffect(() => {
-    if (!isSpellcheckOnboardingDismissed()) {
-      setOpen(true)
-    }
-  }, [])
-
-  if (!open) return null
+  if (isSuppressed || dismissedLocally || !shouldShowFromStorage) return null
 
   return (
     <div
@@ -62,7 +68,7 @@ export default function SpellcheckOnboardingModal() {
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={() => setDismissedLocally(true)}
             className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50"
           >
             Entendido
@@ -71,7 +77,7 @@ export default function SpellcheckOnboardingModal() {
             type="button"
             onClick={() => {
               persistSpellcheckOnboardingDismissed()
-              setOpen(false)
+              setDismissedLocally(true)
             }}
             className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-sm font-bold"
           >

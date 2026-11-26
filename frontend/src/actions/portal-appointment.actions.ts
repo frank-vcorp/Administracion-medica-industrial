@@ -433,6 +433,7 @@ export async function createPortalClientAppointment(input: {
           scheduledTimeLabel: formatAppointmentAgendaTime(apt.scheduledAt),
         }
       : null,
+    whatsApp: result.whatsApp ?? null,
   }
 }
 

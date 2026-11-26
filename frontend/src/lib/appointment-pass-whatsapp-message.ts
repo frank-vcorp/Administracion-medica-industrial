@@ -12,6 +12,7 @@ export type AppointmentPassMessageInput = {
   expedientId?: string | null
   profileName?: string | null
   testNames: string[]
+  prefillUrl?: string | null
 }
 
 /** Texto Baileys al confirmar cita (S23-03). */
@@ -42,6 +43,14 @@ export function buildAppointmentPassWhatsAppMessage(input: AppointmentPassMessag
 
   if (input.expedientId?.trim()) {
     lines.push(`Expediente: ${input.expedientId.trim()}`)
+  }
+
+  if (input.prefillUrl?.trim()) {
+    lines.push(
+      '',
+      'Completa tus antecedentes médicos antes de tu cita en este enlace:',
+      input.prefillUrl.trim(),
+    )
   }
 
   lines.push(

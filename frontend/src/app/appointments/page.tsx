@@ -12,6 +12,10 @@ import AttendedAppointmentsCalendar from '@/components/appointments/AttendedAppo
 import CancelWithReasonButton from '@/components/clinical/CancelWithReasonButton'
 import { getBranches } from '@/actions/admin.actions'
 import { generateInvitation } from '@/actions/prefilled-invitation.actions'
+import {
+    sendAppointmentPassWhatsApp,
+    type AppointmentPassWhatsAppResult,
+} from '@/actions/appointment-pass-whatsapp.actions'
 import { useRouter } from 'next/navigation'
 import AppointmentFormModal from '@/components/AppointmentFormModal'
 import CorroborationModal from '@/components/CorroborationModal'
@@ -161,6 +165,9 @@ export default function AppointmentsPage() {
     const [inviteLink, setInviteLink] = useState<string | null>(null)
     const [inviteLoading, setInviteLoading] = useState(false)
     const [inviteError, setInviteError] = useState<string | null>(null)
+    const [inviteWaBusy, setInviteWaBusy] = useState(false)
+    const [inviteWaResult, setInviteWaResult] = useState<AppointmentPassWhatsAppResult | null>(null)
+    const [inviteCopied, setInviteCopied] = useState(false)
     const [weekModalOpen, setWeekModalOpen] = useState(false)
     const [pendingModalOpen, setPendingModalOpen] = useState(false)
     const [pendingStudyRows, setPendingStudyRows] = useState<PendingStudyPatientRow[]>([])
@@ -259,10 +266,22 @@ export default function AppointmentsPage() {
     const agendaSearchActive = agendaPatientSearch.trim().length > 0
     const totalVisibleAgendaRows = branchColumns.reduce((sum, col) => sum + col.appointments.length, 0)
 
+    const closeInviteModal = () => {
+        setInviteAptId(null)
+        setInviteLink(null)
+        setInviteError(null)
+        setInviteWaBusy(false)
+        setInviteWaResult(null)
+        setInviteCopied(false)
+    }
+
     const handleGenerateInvite = async (aptId: string) => {
         setInviteAptId(aptId)
         setInviteLink(null)
         setInviteError(null)
+        setInviteWaBusy(false)
+        setInviteWaResult(null)
+        setInviteCopied(false)
         setInviteLoading(true)
         try {
             const res = await generateInvitation({ appointmentId: aptId, channel: 'LINK' })
@@ -276,6 +295,25 @@ export default function AppointmentsPage() {
             setInviteError('Error al generar el enlace.')
         } finally {
             setInviteLoading(false)
+        }
+    }
+
+    const handleSendInviteWhatsApp = async () => {
+        if (!inviteAptId || !inviteLink) return
+        setInviteWaBusy(true)
+        setInviteWaResult(null)
+        try {
+            const res = await sendAppointmentPassWhatsApp(inviteAptId, { prefillUrl: inviteLink })
+            setInviteWaResult(res)
+        } catch {
+            setInviteWaResult({
+                sent: false,
+                triptychSent: false,
+                skipped: false,
+                error: 'No se pudo enviar por WhatsApp.',
+            })
+        } finally {
+            setInviteWaBusy(false)
         }
     }
 
@@ -517,7 +555,7 @@ export default function AppointmentsPage() {
                     <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                         <div className="bg-violet-700 p-7 text-white">
                             <button
-                                onClick={() => { setInviteAptId(null); setInviteLink(null); setInviteError(null) }}
+                                onClick={closeInviteModal}
                                 className="float-right text-white/50 hover:text-white"
                             >
                                 ✕
@@ -540,17 +578,21 @@ export default function AppointmentsPage() {
                             {inviteLink && (
                                 <>
                                     <p className="text-xs text-slate-500">
-                                        Comparte este enlace con el trabajador para que complete sus antecedentes médicos antes de la cita. Vigencia: 6 horas.
+                                        Comparte este enlace con el trabajador para que complete sus antecedentes médicos antes de la cita. Vigente hasta la hora de su cita.
                                     </p>
                                     <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-mono text-slate-700 break-all">
                                         {inviteLink}
                                     </div>
                                     <div className="flex gap-3">
                                         <button
-                                            onClick={() => navigator.clipboard.writeText(inviteLink!)}
+                                            type="button"
+                                            onClick={() => {
+                                                void navigator.clipboard.writeText(inviteLink!)
+                                                setInviteCopied(true)
+                                            }}
                                             className="flex-1 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
                                         >
-                                            📋 Copiar enlace
+                                            {inviteCopied ? '✓ Copiado' : '📋 Copiar enlace'}
                                         </button>
                                         <a
                                             href={inviteLink}
@@ -561,10 +603,47 @@ export default function AppointmentsPage() {
                                             🔗 Abrir
                                         </a>
                                     </div>
+                                    <button
+                                        type="button"
+                                        disabled={inviteWaBusy || Boolean(inviteWaResult?.sent)}
+                                        onClick={() => void handleSendInviteWhatsApp()}
+                                        className="w-full bg-[#25D366] hover:bg-[#128C7E] disabled:opacity-65 text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+                                    >
+                                        {inviteWaResult?.sent
+                                            ? '✓ Enviado por WhatsApp'
+                                            : inviteWaBusy
+                                                ? 'Enviando por WhatsApp…'
+                                                : '📱 Enviar por WhatsApp (cita + enlace + tríptico)'}
+                                    </button>
+                                    {inviteWaResult?.sent && (
+                                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 space-y-1">
+                                            <p className="font-bold">✓ Enviado por WhatsApp al trabajador</p>
+                                            <p>
+                                                {inviteWaResult.triptychSent
+                                                    ? 'Tríptico de preparación adjunto.'
+                                                    : 'Se envió el pase con el enlace de prellenado (tríptico enviado como enlace o pendiente en gateway).'}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {inviteWaResult && !inviteWaResult.sent && (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 space-y-2">
+                                            <p>{inviteWaResult.error ?? 'No se pudo enviar por WhatsApp automático.'}</p>
+                                            {inviteWaResult.fallbackWaUrl && (
+                                                <a
+                                                    href={inviteWaResult.fallbackWaUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 font-bold text-emerald-700 underline"
+                                                >
+                                                    Abrir en WhatsApp Web (respaldo) →
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
                                 </>
                             )}
                             <button
-                                onClick={() => { setInviteAptId(null); setInviteLink(null); setInviteError(null) }}
+                                onClick={closeInviteModal}
                                 className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl font-bold text-sm transition-all"
                             >
                                 Cerrar

@@ -5,14 +5,12 @@ import { z } from 'zod'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { callWhatsAppGateway } from '@/lib/whatsapp-gateway-client'
-import { buildWhatsAppWebUrl, isValidWhatsAppPhone, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone'
+import { isValidWhatsAppPhone, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone'
 import {
-  PATIENT_PREPARATION_TRIPTYCH_FILENAME,
-  readPatientPreparationTriptychPdf,
-  resolvePublicPatientTriptychUrl,
-} from '@/lib/patient-preparation-triptych'
-
-const ROW_ID = 'default'
+  deliverPatientPreparationTriptychWhatsApp,
+  deliverWhatsAppPassWithTriptych,
+  isAutoWhatsAppEnabled,
+} from '@/lib/whatsapp-pass-delivery'
 
 const SendSchema = z.object({
   phone: z.string().min(10).max(20),
@@ -42,11 +40,6 @@ const STAFF_ROLES = new Set([
   'VENDEDOR',
 ])
 
-async function isAutoWhatsAppEnabled(): Promise<boolean> {
-  const row = await prisma.whatsAppBaileysConfig.findUnique({ where: { id: ROW_ID } })
-  return Boolean(row?.enabled)
-}
-
 /**
  * S23-03: adjunta el tríptico de preparación vía Baileys después del pase de texto.
  * Usa `POST /v1/messages/send-document-key` (PDF en assets del gateway, sin base64).
@@ -64,114 +57,15 @@ export async function attachPatientPreparationTriptychWhatsApp(input: {
   if (!STAFF_ROLES.has(session.user.role as string)) {
     return { success: false, sent: false, error: 'Sin permiso' }
   }
-  if (!(await isAutoWhatsAppEnabled())) {
-    return { success: true, sent: false }
-  }
 
-  const phone = normalizeWhatsAppPhone(input.phone)
-  if (!isValidWhatsAppPhone(phone)) {
-    return { success: false, sent: false, error: 'Teléfono inválido' }
-  }
-
-  const live = await callWhatsAppGateway({
-    path: '/v1/messages/send-document-key',
-    method: 'POST',
-    role: session.user.role as string,
-    userId: session.user.id,
-    body: {
-      to: phone,
-      documentKey: 'patient_preparation_triptych',
-      caption:
-        input.caption ?? 'Tríptico de preparación para su cita médica (Tips para pacientes).',
-    },
+  return deliverPatientPreparationTriptychWhatsApp({
+    phone: input.phone,
+    actorUserId: session.user.id,
+    actorRole: session.user.role as string,
+    caption: input.caption,
+    auditContext: input.auditContext,
+    entityId: input.entityId,
   })
-
-  if (live.ok && live.data && (live.data as { sent?: boolean }).sent) {
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'WHATSAPP_DOCUMENT_SENT',
-        entity: input.auditContext ?? 'appointment_pass',
-        entityId: input.entityId ?? null,
-        details: {
-          phoneSuffix: phone.slice(-4),
-          fileName: PATIENT_PREPARATION_TRIPTYCH_FILENAME,
-          documentKey: 'patient_preparation_triptych',
-          delivery: 'document_key',
-        },
-      },
-    })
-    return { success: true, sent: true }
-  }
-
-  // Gateway sin redeploy (sin send-document-key): PDF por base64 si el endpoint existe.
-  try {
-    const triptych = await readPatientPreparationTriptychPdf()
-    const legacy = await callWhatsAppGateway({
-      path: '/v1/messages/send-document',
-      method: 'POST',
-      role: session.user.role as string,
-      userId: session.user.id,
-      body: {
-        to: phone,
-        fileName: PATIENT_PREPARATION_TRIPTYCH_FILENAME,
-        mimetype: 'application/pdf',
-        dataBase64: triptych.toString('base64'),
-        caption:
-          input.caption ?? 'Tríptico de preparación para su cita médica (Tips para pacientes).',
-      },
-    })
-    if (legacy.ok && legacy.data && (legacy.data as { sent?: boolean }).sent) {
-      await prisma.auditLog.create({
-        data: {
-          userId: session.user.id,
-          action: 'WHATSAPP_DOCUMENT_SENT',
-          entity: input.auditContext ?? 'appointment_pass',
-          entityId: input.entityId ?? null,
-          details: {
-            phoneSuffix: phone.slice(-4),
-            fileName: PATIENT_PREPARATION_TRIPTYCH_FILENAME,
-            delivery: 'document_base64',
-          },
-        },
-      })
-      return { success: true, sent: true }
-    }
-  } catch {
-    /* continuar a fallback de enlace */
-  }
-
-  // Fallback operativo: enlace al PDF público en Vercel (gateway antiguo sin adjuntos).
-  const triptychUrl = resolvePublicPatientTriptychUrl()
-  const linkText = `📄 Tríptico de preparación para su cita:\n${triptychUrl}`
-  const linkSend = await callWhatsAppGateway({
-    path: '/v1/messages/send',
-    method: 'POST',
-    role: session.user.role as string,
-    userId: session.user.id,
-    body: { to: phone, text: linkText },
-  })
-  if (linkSend.ok && linkSend.data && (linkSend.data as { sent?: boolean }).sent) {
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'WHATSAPP_MESSAGE_SENT',
-        entity: input.auditContext ?? 'appointment_pass',
-        entityId: input.entityId ?? null,
-        details: {
-          phoneSuffix: phone.slice(-4),
-          delivery: 'triptych_public_link',
-        },
-      },
-    })
-    return { success: true, sent: true }
-  }
-
-  return {
-    success: false,
-    sent: false,
-    error: live.error ?? linkSend.error ?? 'No se pudo adjuntar el tríptico por WhatsApp',
-  }
 }
 
 export async function sendWhatsAppTextMessage(input: {
@@ -206,54 +100,15 @@ export async function sendWhatsAppTextMessage(input: {
     }
   }
 
-  const phone = normalizeWhatsAppPhone(parsed.data.phone)
-  if (!isValidWhatsAppPhone(phone)) {
-    return { success: false, sent: false, skipped: false, error: 'Teléfono inválido para WhatsApp' }
-  }
-
-  const fallbackWaUrl = buildWhatsAppWebUrl(phone, parsed.data.text)
-
-  if (!(await isAutoWhatsAppEnabled())) {
-    return { success: true, sent: false, skipped: true, fallbackWaUrl }
-  }
-
-  const live = await callWhatsAppGateway({
-    path: '/v1/messages/send',
-    method: 'POST',
-    role: session.user.role as string,
-    userId: session.user.id,
-    body: { to: phone, text: parsed.data.text },
+  return deliverWhatsAppPassWithTriptych({
+    phone: parsed.data.phone,
+    text: parsed.data.text,
+    actorUserId: session.user.id,
+    actorRole: session.user.role as string,
+    auditContext: parsed.data.auditContext,
+    entityId: parsed.data.entityId,
+    attachPatientTriptych: parsed.data.attachPatientTriptych,
   })
-
-  if (live.ok && live.data && (live.data as { sent?: boolean }).sent) {
-    let triptychSent = false
-    if (parsed.data.attachPatientTriptych) {
-      const triptych = await attachPatientPreparationTriptychWhatsApp({
-        phone: parsed.data.phone,
-        auditContext: parsed.data.auditContext ?? 'appointment_pass',
-        entityId: parsed.data.entityId,
-      })
-      triptychSent = triptych.sent
-    }
-    await prisma.auditLog.create({
-      data: {
-        userId: session.user.id,
-        action: 'WHATSAPP_MESSAGE_SENT',
-        entity: parsed.data.auditContext ?? 'WhatsApp',
-        entityId: parsed.data.entityId ?? null,
-        details: { phoneSuffix: phone.slice(-4) },
-      },
-    })
-    return { success: true, sent: true, skipped: false, triptychSent }
-  }
-
-  return {
-    success: true,
-    sent: false,
-    skipped: false,
-    fallbackWaUrl,
-    error: live.error ?? 'No se pudo enviar por WhatsApp automático',
-  }
 }
 
 export async function sendWhatsAppDocumentMessage(input: {

@@ -9,6 +9,7 @@ import {
 import PortalAppointmentDateCalendar from '@/components/portal/PortalAppointmentDateCalendar'
 import PortalQuickWorkerRegister from '@/components/portal/PortalQuickWorkerRegister'
 import PortalSpecialRequestPanel from '@/components/portal/PortalSpecialRequestPanel'
+import type { AppointmentPassWhatsAppResult } from '@/actions/appointment-pass-whatsapp.actions'
 import type { PortalWorkerListItem } from '@/actions/portal-worker.actions'
 import { formatAgendaDayHeading } from '@/lib/appointment-scheduling'
 import type { BranchHourSlotAvailability } from '@/lib/appointment-capacity'
@@ -65,6 +66,7 @@ export default function PortalAppointmentForm({ context }: Props) {
   const [showCapacityHelp, setShowCapacityHelp] = useState(false)
   const [showBulkRequest, setShowBulkRequest] = useState(false)
   const [successFolio, setSuccessFolio] = useState<string | null>(null)
+  const [successWhatsApp, setSuccessWhatsApp] = useState<AppointmentPassWhatsAppResult | null>(null)
   const [pending, startTransition] = useTransition()
   const readOnly = context.isPreview
   const showSpecialRequest = showCapacityHelp || showBulkRequest
@@ -152,6 +154,7 @@ export default function PortalAppointmentForm({ context }: Props) {
       })
       if (res.success) {
         setSuccessFolio(res.appointment?.expedientId ?? '—')
+        setSuccessWhatsApp(res.whatsApp ?? null)
         return
       }
       if (res.error === 'BRANCH_HOUR_FULL') {
@@ -173,10 +176,25 @@ export default function PortalAppointmentForm({ context }: Props) {
         <p className="text-sm text-slate-700">
           Folio de papeleta: <span className="font-mono font-bold">{successFolio}</span>
         </p>
+        {successWhatsApp?.sent ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            ✓ Se envió por WhatsApp al colaborador la confirmación de cita, el enlace de prellenado
+            {successWhatsApp.triptychSent ? ' y el tríptico de preparación.' : '.'}
+          </div>
+        ) : successWhatsApp ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            {successWhatsApp.skipped
+              ? 'No se envió el WhatsApp automático (el colaborador no tiene un teléfono celular válido o WhatsApp automático está desactivado).'
+              : (successWhatsApp.error ?? 'El pase automático por WhatsApp quedó pendiente.')}
+          </div>
+        ) : null}
         <button
           type="button"
           className="text-sm text-blue-600 font-medium"
-          onClick={() => setSuccessFolio(null)}
+          onClick={() => {
+            setSuccessFolio(null)
+            setSuccessWhatsApp(null)
+          }}
         >
           Agendar otra cita
         </button>
