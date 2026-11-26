@@ -326,7 +326,14 @@ export async function createReceptionWalkInEvent(input: {
 
         const worker = await prisma.worker.findUnique({
             where: { id: input.workerId },
-            select: { id: true, firstName: true, lastName: true },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                universalId: true,
+                company: { select: { name: true } },
+                jobPosition: { select: { name: true } },
+            },
         })
         if (!worker) {
             return { success: false as const, error: 'Trabajador no encontrado.' }
@@ -347,6 +354,9 @@ export async function createReceptionWalkInEvent(input: {
                 patientFullName,
                 signedAt,
                 signatureDataUrl: input.informedConsentSignatureDataUrl,
+                companyName: worker.company?.name ?? null,
+                workerUniversalId: worker.universalId,
+                jobPosition: worker.jobPosition?.name ?? null,
             })
             consentPdfKey = informedConsentFileKeyReceptionWalkIn(worker.id)
             const uploadResult = await uploadPdfBuffer(pdfBuffer, consentPdfKey)

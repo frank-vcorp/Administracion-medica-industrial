@@ -6,6 +6,8 @@ import SignaturePad, { type SignaturePadHandle } from '@/components/reception/Si
 
 type Props = {
   patientFullName: string
+  companyName?: string | null
+  workerUniversalId?: string | null
   onBack: () => void
   onConfirm: (signatureDataUrl: string) => void
   isPending: boolean
@@ -15,6 +17,8 @@ type Props = {
 
 export function ReceptionInformedConsentStep({
   patientFullName,
+  companyName,
+  workerUniversalId,
   onBack,
   onConfirm,
   isPending,
@@ -51,10 +55,15 @@ export function ReceptionInformedConsentStep({
 
   return (
     <div className="space-y-4 max-h-[min(85vh,720px)] overflow-y-auto">
-      <InformedConsentDocument patientFullName={patientFullName} dateLabel={consentDateLabel} />
+      <InformedConsentDocument
+        patientFullName={patientFullName}
+        dateLabel={consentDateLabel}
+        companyName={companyName}
+        workerUniversalId={workerUniversalId}
+      />
       <p className="text-[10px] text-slate-500">
-        Al firmar, se generará el PDF oficial (nombre, fecha y firma) y quedará en el historial del
-        trabajador.
+        Al firmar abajo, se archivará una copia firmada de este consentimiento (con nombre, fecha y
+        firma autógrafa) en el expediente del trabajador.
       </p>
       <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
         <label className="flex items-start gap-3 cursor-pointer">
@@ -64,7 +73,10 @@ export function ReceptionInformedConsentStep({
             onChange={(e) => setConsentGiven(e.target.checked)}
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
           />
-          <span className="text-sm font-medium text-slate-800">Doy mi consentimiento</span>
+          <span className="text-sm font-medium text-slate-800">
+            Doy mi consentimiento expreso para los procedimientos médicos y el tratamiento de mis
+            datos personales sensibles
+          </span>
         </label>
         <label className="flex items-start gap-3 cursor-pointer">
           <input
@@ -74,7 +86,8 @@ export function ReceptionInformedConsentStep({
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
           />
           <span className="text-sm font-medium text-slate-800">
-            Confirmo que he leído el documento y el aviso de privacidad integral (PDF)
+            Confirmo que he leído el Consentimiento Informado y el Aviso de Privacidad Integral
+            (secciones I a XIX)
           </span>
         </label>
         <label className="flex items-start gap-3 cursor-pointer">
@@ -85,7 +98,7 @@ export function ReceptionInformedConsentStep({
             className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
           />
           <span className="text-sm font-medium text-slate-800">
-            Confirmo que mis datos son correctos
+            Confirmo que mis datos y la información proporcionada son verdaderos y correctos
             <span className="block text-xs font-normal text-slate-500 mt-0.5">
               Nombre: {patientFullName.trim() || '—'}
             </span>

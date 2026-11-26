@@ -1407,19 +1407,34 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
       )
     }
 
-    // ── Cargar snapshot del trabajador (última identidad) ─────────────────────
-    const worker = await prisma.worker.findUnique({
-      where: { id: workerId },
-      select: {
-        firstName: true,
-        lastName: true,
-        lastIdentityDocumentType: true,
-        lastIdentityFrontFileUrl: true,
-        lastIdentityBackFileUrl: true,
-      }
-    })
+    // ── Cargar snapshot del trabajador y metadatos de la cita ────────────────
+    const [worker, appointmentMeta] = await Promise.all([
+      prisma.worker.findUnique({
+        where: { id: workerId },
+        select: {
+          firstName: true,
+          lastName: true,
+          universalId: true,
+          lastIdentityDocumentType: true,
+          lastIdentityFrontFileUrl: true,
+          lastIdentityBackFileUrl: true,
+          company: { select: { name: true } },
+          jobPosition: { select: { name: true } },
+        },
+      }),
+      prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        select: {
+          expedientId: true,
+          company: { select: { name: true } },
+        },
+      }),
+    ])
     if (!worker) {
       return { success: false, error: 'Trabajador no encontrado.' }
+    }
+    if (!appointmentMeta) {
+      return { success: false, error: 'Cita no encontrada.' }
     }
 
     // ── Determinar resultado de corroboración ────────────────────────────────
@@ -1462,6 +1477,10 @@ export async function closeReceptionCorroboration(input: CloseReceptionInput) {
         patientFullName,
         signedAt,
         signatureDataUrl: informedConsentSignatureDataUrl,
+        companyName: appointmentMeta.company?.name ?? worker.company?.name ?? null,
+        workerUniversalId: worker.universalId,
+        jobPosition: worker.jobPosition?.name ?? null,
+        expedientId: appointmentMeta.expedientId,
       })
       consentPdfKey = informedConsentFileKey(workerId, appointmentId)
       const uploadResult = await uploadPdfBuffer(pdfBuffer, consentPdfKey)

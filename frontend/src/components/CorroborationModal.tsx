@@ -571,10 +571,13 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                 <InformedConsentDocument
                   patientFullName={patientDisplayName}
                   dateLabel={consentDateLabel}
+                  companyName={appointment.company?.name ?? worker.company?.name ?? null}
+                  workerUniversalId={worker.universalId ?? null}
+                  expedientId={appointment.expedientId ?? null}
                 />
                 <p className="text-[10px] text-slate-400 mt-2">
-                  Al firmar abajo, se generará el PDF oficial (nombre, fecha y firma) y quedará guardado
-                  en el historial del trabajador.
+                  Al firmar abajo, se archivará una copia firmada de este consentimiento (con nombre,
+                  fecha y firma autógrafa) en el expediente del trabajador.
                 </p>
               </div>
 
@@ -587,7 +590,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                     className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                   />
                   <span className="text-sm font-medium text-slate-800">
-                    Doy mi consentimiento
+                    Doy mi consentimiento expreso para los procedimientos médicos y el tratamiento de
+                    mis datos personales sensibles
                   </span>
                 </label>
                 <label className="flex items-start gap-3 cursor-pointer">
@@ -598,7 +602,8 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                     className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                   />
                   <span className="text-sm font-medium text-slate-800">
-                    Confirmo que he leído el documento
+                    Confirmo que he leído el Consentimiento Informado y el Aviso de Privacidad
+                    Integral (secciones I a XIX)
                   </span>
                 </label>
                 <label className="flex items-start gap-3 cursor-pointer">
@@ -609,7 +614,7 @@ export default function CorroborationModal({ appointment, onClose }: Props) {
                     className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                   />
                   <span className="text-sm font-medium text-slate-800">
-                    Confirmo que mis datos son correctos
+                    Confirmo que mis datos y la información proporcionada son verdaderos y correctos
                     <span className="block text-xs font-normal text-slate-500 mt-0.5">
                       Nombre registrado: {patientDisplayName.trim() || '—'}
                     </span>
