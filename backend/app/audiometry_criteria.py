@@ -20,6 +20,9 @@ PTA3_FREQS = (500, 1000, 2000)
 FRECUENCIAS_GRAVES = (250, 500, 1000)
 FRECUENCIAS_AGUDAS = (2000, 3000, 4000, 6000, 8000)
 AMI_HUECOS_DB: Tuple[Tuple[int, int], ...] = ((41, 44), (56, 59), (71, 74), (91, 94))
+NOTCH_FREQS = (3000, 4000, 6000)
+NOTCH_MIN_DROP_DB = 15
+NOTCH_MIN_RECOVERY_8K_DB = 10
 
 
 def _coerce_db(v: Any) -> Optional[int]:
@@ -130,6 +133,57 @@ def resolver_criterio_ami_combinado(
     return "NORMAL"
 
 
+def detectar_morfologia_curva_audiometrica(va: Dict[int, int]) -> Dict[str, Any]:
+    """Detecta escotoma en 3–6 kHz con recuperación en 8 kHz vs caída descendente sin recuperación."""
+    u_2k = _coerce_db(va.get(2000))
+    u_8k = _coerce_db(va.get(8000))
+    notch_vals = {
+        freq: val
+        for freq in NOTCH_FREQS
+        for val in (_coerce_db(va.get(freq)),)
+        if val is not None
+    }
+    if u_2k is None or u_8k is None or not notch_vals:
+        return {
+            "morfologia": "NO_EVALUABLE_SIN_8000",
+            "escotoma_trauma_acustico": False,
+            "frecuencias_escotoma_hz": [],
+            "caida_desde_2k_db": None,
+            "recuperacion_8k_db": None,
+        }
+
+    peor_notch = max(notch_vals.values())
+    caida_vs_2k = peor_notch - u_2k
+    recuperacion_8k = peor_notch - u_8k
+    frecuencias_escotoma = [
+        freq
+        for freq, val in sorted(notch_vals.items())
+        if (val - u_2k) >= NOTCH_MIN_DROP_DB and (val - u_8k) >= NOTCH_MIN_RECOVERY_8K_DB
+    ]
+
+    if caida_vs_2k >= NOTCH_MIN_DROP_DB and recuperacion_8k >= NOTCH_MIN_RECOVERY_8K_DB:
+        morfologia = (
+            "ESCOTOMA_TRAUMA_ACUSTICO_FRANCO"
+            if peor_notch > AMI_NORMALIDAD_DB
+            else "ESCOTOMA_TRAUMA_ACUSTICO_INCIPIENTE"
+        )
+        escotoma = True
+    elif u_8k > AMI_NORMALIDAD_DB and (u_8k - u_2k) >= NOTCH_MIN_DROP_DB and u_8k >= peor_notch:
+        morfologia = "DESCENDENTE_AGUDAS_SIN_RECUPERACION"
+        escotoma = False
+    else:
+        morfologia = "SIN_ESCOTOMA"
+        escotoma = False
+
+    return {
+        "morfologia": morfologia,
+        "escotoma_trauma_acustico": escotoma,
+        "frecuencias_escotoma_hz": frecuencias_escotoma,
+        "caida_desde_2k_db": caida_vs_2k,
+        "recuperacion_8k_db": recuperacion_8k,
+    }
+
+
 def resolve_audiometria_ear(
     ear_raw: Any,
 ) -> Dict[str, Any]:
@@ -149,6 +203,7 @@ def resolve_audiometria_ear(
         "criterio_ami": criterio,
         "peor_umbral_va_db": max(umbrales) if umbrales else None,
         "umbrales_va_db": {str(k): v for k, v in sorted(va.items())},
+        "morfologia_curva": detectar_morfologia_curva_audiometrica(va),
     }
 
 
@@ -174,7 +229,9 @@ def enrich_audiometry_extracted_data(data: Dict[str, Any]) -> Dict[str, Any]:
         "oido_izquierdo": oi,
         "nota": (
             "Criterio AMI combina PTA3 (500/1000/2000) y patrón por grupos de frecuencia; "
-            "no usar PTA3 ≤25 dB aislado como NORMAL si el patrón indica compromiso >25 dB."
+            "no usar PTA3 ≤25 dB aislado como NORMAL si el patrón indica compromiso >25 dB. "
+            "El bloque morfologia_curva señala escotoma franco (>25 dB) o incipiente (≤25 dB) "
+            "en 3000–6000 Hz con recuperación en 8000 Hz frente a caída descendente sin recuperación."
         ),
     }
     return enriched
