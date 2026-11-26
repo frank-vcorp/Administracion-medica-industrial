@@ -24,7 +24,11 @@ import {
   patientDictamenHasRequiredContent,
 } from '@/lib/clinical/dictamen-audience'
 import { findSiblingEventsInAtencion } from '@/lib/event-atencion'
-import { resolveStudiesFromEvent } from '@/lib/dictamen-summary'
+import {
+  resolveStudiesFromEvent,
+  resolveWorkerPersonalDetails,
+  summarizeExtractedData,
+} from '@/lib/dictamen-summary'
 import {
   buildDictamenGeneralAmiConsolidado,
   hasConsolidation,
@@ -256,14 +260,8 @@ export async function signMedicalDictamPDF(eventId: string) {
       (event.exam?.physicalExamData as Record<string, unknown> | null) ?? null
     const aptitudLaboral = readEmployerAptitudLaboral(physicalExamData)
     const ped = physicalExamData ?? {}
-    const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
-    const sexo = (ped.sexo ?? dp.sexo) as string | null
-    const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
-    const tipoExamen = (ped.tipo_examen ?? 'INGRESO') as string | null
+    const personal = resolveWorkerPersonalDetails(ped, event.worker)
     const restrictions = (ped.restricciones as string | null) ?? null
-    const edad = event.worker.dob
-      ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-      : (dp.edad ? Number(dp.edad) : null)
 
     const currentStudies = resolveStudiesFromEvent(
       event.studies,
@@ -314,10 +312,10 @@ export async function signMedicalDictamPDF(eventId: string) {
             lastName: event.worker.lastName,
             universalId: event.worker.universalId,
             nationalId: event.worker.nationalId ?? null,
-            sexo,
-            edad,
-            puesto,
-            tipoExamen,
+            sexo: personal.sexo,
+            edad: personal.edad,
+            puesto: personal.puesto,
+            tipoExamen: personal.tipoExamen,
           },
           company: event.worker.company
             ? { name: event.worker.company.name ?? 'Independiente' }
@@ -470,6 +468,11 @@ export async function signMedicalDictamPDF(eventId: string) {
         const patientInputName = patientDictamenInputFileName(eventId, patientNowMs)
         const patientSignedName = patientDictamenSignedFileName(eventId)
         try {
+          const patientStudies = currentStudies.map((s) => ({
+            serviceName: s.serviceName,
+            findings: summarizeExtractedData(s.extractedData),
+          }))
+
           const patientBuffer = await renderPatientHealthDictamenToMemory({
             signedAt: new Date(),
             eventId: event.id,
@@ -477,10 +480,18 @@ export async function signMedicalDictamPDF(eventId: string) {
               firstName: event.worker.firstName,
               lastName: event.worker.lastName,
               universalId: event.worker.universalId,
+              companyName: event.worker.company?.name ?? null,
+              age: personal.edad,
+              gender: personal.sexo,
+              position: personal.puesto,
             },
             healthRecommendations: readPatientHealthRecommendations(physicalExamData),
-            validator: { fullName: event.verdict.validator.fullName },
+            validator: {
+              fullName: event.verdict.validator.fullName,
+              professionalLicense: event.verdict.validator.professionalLicense ?? null,
+            },
             verdictId: event.verdict.id,
+            studies: patientStudies,
           })
           const patientSigned = await uploadAndSignPdfOnBackend({
             pdfBuffer: patientBuffer,

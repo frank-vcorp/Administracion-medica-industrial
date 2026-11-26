@@ -45,6 +45,7 @@
 import { renderToBuffer } from '@react-pdf/renderer'
 import { MedicalDictamenPDF } from '@/components/pdf/MedicalDictamenPDF'
 import { resolveSmeLogoDataUrl } from '@/lib/ami-brand'
+import { resolveWorkerPersonalDetails } from '@/lib/dictamen-summary'
 
 /**
  * URL base del backend (Railway). Configurable vía
@@ -396,15 +397,9 @@ export async function renderDictamenGeneralPdfForEvent(
     ),
   ]
 
-  const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
-  const sexo = (ped.sexo ?? dp.sexo) as string | null
-  const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
-  const tipoExamen = (ped.tipo_examen ?? 'INGRESO') as string | null
+  const personal = resolveWorkerPersonalDetails(ped, event.worker)
   const aptitudLaboral = (ped.aptitud as string | null) ?? null
   const restrictions = (ped.restricciones as string | null) ?? null
-  const edad = event.worker.dob
-    ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-    : (dp.edad ? Number(dp.edad) : null)
 
   return renderDictamenInputToMemory({
     payload: {
@@ -416,10 +411,10 @@ export async function renderDictamenGeneralPdfForEvent(
         lastName: event.worker.lastName,
         universalId: event.worker.universalId,
         nationalId: event.worker.nationalId ?? null,
-        sexo,
-        edad,
-        puesto,
-        tipoExamen,
+        sexo: personal.sexo,
+        edad: personal.edad,
+        puesto: personal.puesto,
+        tipoExamen: personal.tipoExamen,
       },
       company: event.worker.company
         ? { name: event.worker.company.name ?? 'Independiente' }

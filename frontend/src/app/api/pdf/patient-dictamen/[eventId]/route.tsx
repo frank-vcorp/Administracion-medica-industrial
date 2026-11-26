@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma'
 import { renderToStream } from '@react-pdf/renderer'
 import { PatientHealthDictamenPDF } from '@/components/pdf/PatientHealthDictamenPDF'
 import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
-import { resolveStudiesFromEvent, summarizeExtractedData } from '@/lib/dictamen-summary'
+import { resolveStudiesFromEvent, summarizeExtractedData, resolveWorkerPersonalDetails } from '@/lib/dictamen-summary'
 import { resolveSmeLogoDataUrl } from '@/lib/sme-brand'
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -110,12 +110,7 @@ export async function GET(
 
   // Regenerar en línea con diseño enriquecido
   const ped = (verdict.event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
-  const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
-  const sexo = (ped.sexo ?? dp.sexo) as string | null
-  const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
-  const edad = verdict.event.worker.dob
-    ? Math.floor((Date.now() - new Date(verdict.event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-    : (dp.edad ? Number(dp.edad) : null)
+  const personal = resolveWorkerPersonalDetails(ped, verdict.event.worker)
 
   const healthRecommendations =
     readPatientHealthRecommendations(ped) ||
@@ -140,21 +135,21 @@ export async function GET(
       data={{
         signedAt: verdict.signedAt ?? new Date(),
         eventId: verdict.eventId,
+        verdictId: verdict.id,
         worker: {
           firstName: verdict.event.worker.firstName,
           lastName: verdict.event.worker.lastName,
           universalId: verdict.event.worker.universalId,
           companyName: verdict.event.worker.company?.name ?? null,
-          age: edad,
-          gender: sexo,
-          position: puesto,
+          age: personal.edad,
+          gender: personal.sexo,
+          position: personal.puesto,
         },
         healthRecommendations,
         validator: {
           fullName: verdict.validator?.fullName || 'Médico Validador',
           professionalLicense: verdict.validator?.professionalLicense || null,
         },
-        verdictId: verdict.id,
         studies: studiesForPatient,
         logoUrl,
       }}

@@ -6,7 +6,7 @@ import { resolveSmeLogoDataUrl } from "@/lib/ami-brand"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/auth"
 import { canAccessPortalCompanyData } from "@/lib/portal-event-access"
-import { resolveStudiesFromEvent } from "@/lib/dictamen-summary"
+import { resolveStudiesFromEvent, resolveWorkerPersonalDetails } from "@/lib/dictamen-summary"
 
 /**
  * @fileoverview Endpoint autenticado para descargar el PDF de dictamen
@@ -186,15 +186,9 @@ export async function GET(
         // Si NO hay pdfUrl firmado, regeneramos el PDF en línea desde el
         // snapshot (no toca disco).
         const ped = (verdict.event.exam?.physicalExamData as Record<string, unknown> | null) ?? {}
-        const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
-        const sexo = (ped.sexo ?? dp.sexo) as string | null
-        const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
-        const tipoExamen = (ped.tipo_examen ?? 'INGRESO') as string | null
+        const personal = resolveWorkerPersonalDetails(ped, verdict.event.worker)
         const aptitudLaboral = (ped.aptitud as string | null) ?? undefined
         const restrictions = (ped.restricciones as string | null) ?? undefined
-        const edad = verdict.event.worker.dob
-            ? Math.floor((Date.now() - new Date(verdict.event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-            : (dp.edad ? Number(dp.edad) : undefined)
 
         const data = {
             id: verdict.id,
@@ -208,10 +202,10 @@ export async function GET(
                 firstName: verdict.event.worker.firstName,
                 lastName: verdict.event.worker.lastName,
                 universalId: verdict.event.worker.universalId,
-                sexo,
-                edad,
-                puesto,
-                tipoExamen,
+                sexo: personal.sexo,
+                edad: personal.edad,
+                puesto: personal.puesto,
+                tipoExamen: personal.tipoExamen,
             },
             company: {
                 name: verdict.event.worker.company?.name || 'Clínica AMI'

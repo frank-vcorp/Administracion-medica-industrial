@@ -29,7 +29,7 @@
 
 export interface DictamenStudyEntry {
   serviceName: string
-  extractedData: unknown
+  extractedData?: unknown
 }
 
 export type StudyStatus = 'APLICADO' | 'PENDIENTE' | 'NO_APLICADO'
@@ -326,3 +326,149 @@ export function buildDictamenStudySummary(
     }
   })
 }
+
+export interface WorkerPersonalDetailsSource {
+  dob?: Date | string | null
+  universalId?: string | null
+  nationalId?: string | null
+  clinicalHistory?: { data?: unknown } | null
+}
+
+export interface ResolvedWorkerPersonalDetails {
+  sexo: string | null
+  puesto: string | null
+  area: string | null
+  edad: number | null
+  tipoExamen: string | null
+  turno?: string | null
+  direccion?: string | null
+  rawDatosPersonales: Record<string, unknown>
+}
+
+/**
+ * Resuelve de forma robusta los datos personales del trabajador (Sexo, Puesto, Área, Edad, Tipo de Examen)
+ * buscando tanto en la raíz de `physicalExamData` como en `antecedentes_captured.datos_personales`,
+ * `modulo1.m1_sexo`, `worker.universalId` (segmento -M- o -F-) y `worker.dob`.
+ */
+export function resolveWorkerPersonalDetails(
+  pedInput: Record<string, unknown> | null | undefined,
+  worker?: WorkerPersonalDetailsSource | null,
+  options?: {
+    defaultTipoExamen?: string
+  },
+): ResolvedWorkerPersonalDetails {
+  const ped = pedInput ?? {}
+  const antCaptured = (ped.antecedentes_captured as Record<string, unknown> | null | undefined) ?? {}
+
+  const chData = (worker?.clinicalHistory?.data as Record<string, unknown> | null | undefined) ?? {}
+  const chDp = (chData.datos_personales as Record<string, unknown> | null | undefined) ?? {}
+
+  const dp =
+    (ped.datos_personales as Record<string, unknown> | null | undefined) ||
+    (antCaptured.datos_personales as Record<string, unknown> | null | undefined) ||
+    chDp ||
+    {}
+
+  const m1 =
+    (ped.modulo1 as Record<string, unknown> | null | undefined) ||
+    (antCaptured.modulo1 as Record<string, unknown> | null | undefined) ||
+    (chData.modulo1 as Record<string, unknown> | null | undefined) ||
+    {}
+
+  // 1. Resolver Sexo
+  let rawSexo =
+    (ped.sexo as string | null | undefined) ||
+    (ped.genero as string | null | undefined) ||
+    (dp.sexo as string | null | undefined) ||
+    (dp.genero as string | null | undefined) ||
+    (m1.m1_sexo as string | null | undefined) ||
+    null
+
+  // Si no está capturado en campos directos, inferir desde universalId (formato: INIC-YYYYMMDD-G-AMI-CLI)
+  if (!rawSexo && worker?.universalId) {
+    const parts = worker.universalId.split('-')
+    if (parts.length >= 3) {
+      const g = parts[2]?.trim().toUpperCase()
+      if (g === 'M' || g === 'H') rawSexo = 'MASCULINO'
+      else if (g === 'F') rawSexo = 'FEMENINO'
+    }
+  }
+
+  // O desde CURP / nationalId (posición 11 estándar: H o M)
+  if (!rawSexo && worker?.nationalId && worker.nationalId.length >= 11) {
+    const curpChar = worker.nationalId.charAt(10).toUpperCase()
+    if (curpChar === 'H') rawSexo = 'MASCULINO'
+    else if (curpChar === 'M') rawSexo = 'FEMENINO'
+  }
+
+  let sexo: string | null = null
+  if (rawSexo) {
+    const sLower = rawSexo.toLowerCase().trim()
+    if (sLower === 'm' || sLower.startsWith('masc') || sLower === 'hombre' || sLower === 'h') {
+      sexo = 'MASCULINO'
+    } else if (sLower === 'f' || sLower.startsWith('fem') || sLower === 'mujer') {
+      sexo = 'FEMENINO'
+    } else {
+      sexo = rawSexo.trim().toUpperCase()
+    }
+  }
+
+  // 2. Resolver Puesto
+  const puesto =
+    (dp.puesto_actual as string | null | undefined) ||
+    (dp.puesto as string | null | undefined) ||
+    (dp.puesto_trabajo as string | null | undefined) ||
+    (dp.puesto_solicitado as string | null | undefined) ||
+    (ped.puesto_actual as string | null | undefined) ||
+    (ped.puesto as string | null | undefined) ||
+    (chDp.puesto_actual as string | null | undefined) ||
+    (chDp.puesto as string | null | undefined) ||
+    null
+
+  // 3. Resolver Área
+  const area =
+    (dp.area_departamento as string | null | undefined) ||
+    (dp.area as string | null | undefined) ||
+    (ped.area_departamento as string | null | undefined) ||
+    (ped.area as string | null | undefined) ||
+    (chDp.area_departamento as string | null | undefined) ||
+    null
+
+  // 4. Resolver Edad
+  let edad: number | null = null
+  if (worker?.dob) {
+    const dobDate = new Date(worker.dob)
+    if (!isNaN(dobDate.getTime())) {
+      const ageDiff = Date.now() - dobDate.getTime()
+      edad = Math.floor(ageDiff / (365.25 * 24 * 3600 * 1000))
+    }
+  }
+  if (edad === null && dp.edad) {
+    const parsed = Number(dp.edad)
+    if (!isNaN(parsed) && parsed > 0 && parsed < 120) {
+      edad = parsed
+    }
+  }
+
+  // 5. Tipo de examen
+  const tipoExamen =
+    (ped.tipo_examen as string | null | undefined) ||
+    (ped.tipoExamen as string | null | undefined) ||
+    options?.defaultTipoExamen ||
+    'INGRESO'
+
+  const turno = (dp.turno as string | null | undefined) || null
+  const direccion = (dp.direccion as string | null | undefined) || null
+
+  return {
+    sexo,
+    puesto: puesto ? String(puesto).trim() : null,
+    area: area ? String(area).trim() : null,
+    edad,
+    tipoExamen: tipoExamen ? String(tipoExamen).trim().toUpperCase() : null,
+    turno,
+    direccion,
+    rawDatosPersonales: dp,
+  }
+}
+

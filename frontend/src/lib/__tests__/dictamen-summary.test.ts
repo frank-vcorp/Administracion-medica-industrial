@@ -25,6 +25,7 @@ import {
   classifyStudyStatus,
   isAmiBaselineStudy,
   resolveStudiesFromEvent,
+  resolveWorkerPersonalDetails,
   summarizeExtractedData,
   type DictamenStudyEntry,
 } from '../dictamen-summary'
@@ -273,5 +274,65 @@ describe('IMPL-20260826-04: dictamen-summary helpers', () => {
     expect(notApplied).toContain('Radiografía de Tórax')
     expect(notApplied).toContain('Laboratorio Clínico')
     expect(notApplied).toContain('Electrocardiograma')
+  })
+
+  // ─── resolveWorkerPersonalDetails ──────────────────────────────────────
+  describe('resolveWorkerPersonalDetails', () => {
+    it('resuelve sexo y puesto anidados en antecedentes_captured y modulo1', () => {
+      const ped = {
+        antecedentes_captured: {
+          datos_personales: {
+            puesto_actual: 'Secretario',
+            area_departamento: 'Ventas',
+            turno: 'MIXTO',
+          },
+          modulo1: {
+            m1_sexo: 'Masculino',
+          },
+        },
+      }
+      const worker = {
+        universalId: 'DELE-19830914-M-AMI-CLI',
+        dob: '1983-09-14T00:00:00.000Z',
+      }
+
+      const res = resolveWorkerPersonalDetails(ped, worker)
+      expect(res.sexo).toBe('MASCULINO')
+      expect(res.puesto).toBe('Secretario')
+      expect(res.area).toBe('Ventas')
+      expect(res.turno).toBe('MIXTO')
+      expect(res.tipoExamen).toBe('INGRESO')
+      expect(res.edad).toBeGreaterThan(40)
+    })
+
+    it('infiere sexo desde universalId si no está capturado', () => {
+      const resM = resolveWorkerPersonalDetails({}, { universalId: 'TEST-19900101-M-AMI-CLI' })
+      expect(resM.sexo).toBe('MASCULINO')
+
+      const resF = resolveWorkerPersonalDetails({}, { universalId: 'TEST-19900101-F-AMI-CLI' })
+      expect(resF.sexo).toBe('FEMENINO')
+    })
+
+    it('infiere sexo desde CURP (nationalId) si no está en universalId', () => {
+      const res = resolveWorkerPersonalDetails({}, { nationalId: 'XXXX900101HDFR00' })
+      expect(res.sexo).toBe('MASCULINO')
+
+      const resMujer = resolveWorkerPersonalDetails({}, { nationalId: 'XXXX900101MDFR00' })
+      expect(resMujer.sexo).toBe('FEMENINO')
+    })
+
+    it('resuelve puesto de raíz si está disponible en datos_personales', () => {
+      const ped = {
+        datos_personales: {
+          puesto_actual: 'Operador de Montacargas',
+          edad: 35,
+        },
+        sexo: 'Femenino',
+      }
+      const res = resolveWorkerPersonalDetails(ped, null)
+      expect(res.sexo).toBe('FEMENINO')
+      expect(res.puesto).toBe('Operador de Montacargas')
+      expect(res.edad).toBe(35)
+    })
   })
 })

@@ -42,6 +42,7 @@ import {
   applyEventDictamenLabFilters,
   groupEventTestsByEventId,
 } from '@/lib/clinical/dictamen-lab-papeleta'
+import { resolveWorkerPersonalDetails } from '@/lib/dictamen-summary'
 
 /**
  * IMPL-20260826-08: helper de extracción segura de strings. Devuelve
@@ -291,13 +292,13 @@ export async function buildDictamenGeneralAmiConsolidado(
       lastName: event.worker.lastName ?? '',
       universalId: event.worker.universalId ?? '',
       dob: event.worker.dob ?? null,
-      sexo: s(physicalExamData.sexo ?? dp.sexo),
+      sexo: resolveWorkerPersonalDetails(physicalExamData, event.worker).sexo,
       identidadGenero: s(physicalExamData.identidad_genero ?? dp.identidad_genero),
       empresa: event.worker.company?.name ?? null,
-      puesto: s(dp.puesto_actual),
-      area: s(dp.area_departamento),
-      tipoExamen: s(physicalExamData.tipo_examen),
-      direccion: s(dp.direccion),
+      puesto: resolveWorkerPersonalDetails(physicalExamData, event.worker).puesto,
+      area: resolveWorkerPersonalDetails(physicalExamData, event.worker).area,
+      tipoExamen: resolveWorkerPersonalDetails(physicalExamData, event.worker).tipoExamen,
+      direccion: resolveWorkerPersonalDetails(physicalExamData, event.worker).direccion,
       estadoCivil: s(dp.estado_civil),
       escolaridad: s(dp.escolaridad),
       tipoSanguineo: s(apnp.grupo_y_rh),

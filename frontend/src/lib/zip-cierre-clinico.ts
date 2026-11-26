@@ -42,7 +42,11 @@ import {
 } from '@/lib/clinical/study-pdf-for-zip'
 import { renderPatientHealthDictamenToMemory } from '@/lib/patient-dictamen-pdf'
 import { readPatientHealthRecommendations } from '@/lib/clinical/dictamen-audience'
-import { resolveStudiesFromEvent, summarizeExtractedData } from '@/lib/dictamen-summary'
+import {
+  resolveStudiesFromEvent,
+  resolveWorkerPersonalDetails,
+  summarizeExtractedData,
+} from '@/lib/dictamen-summary'
 import { resolveSmeLogoDataUrl } from '@/lib/sme-brand'
 
 export {
@@ -526,12 +530,7 @@ export async function buildCierreClinicoZip(
       }
 
       if (!patientPdfBytes) {
-        const dp = (ped.datos_personales as Record<string, unknown> | null) ?? {}
-        const sexo = (ped.sexo ?? dp.sexo) as string | null
-        const puesto = (dp.puesto_actual ?? dp.puesto) as string | null
-        const edad = event.worker.dob
-          ? Math.floor((Date.now() - new Date(event.worker.dob).getTime()) / (365.25 * 24 * 3600 * 1000))
-          : (dp.edad ? Number(dp.edad) : null)
+        const personal = resolveWorkerPersonalDetails(ped, event.worker)
 
         const resolved = resolveStudiesFromEvent(
           [],
@@ -553,9 +552,9 @@ export async function buildCierreClinicoZip(
             lastName: event.worker.lastName,
             universalId: event.worker.universalId,
             companyName: event.worker.company?.name ?? null,
-            age: edad,
-            gender: sexo,
-            position: puesto,
+            age: personal.edad,
+            gender: personal.sexo,
+            position: personal.puesto,
           },
           healthRecommendations: patientRecs,
           validator: {
