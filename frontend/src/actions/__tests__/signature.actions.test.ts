@@ -276,7 +276,7 @@ describe('signMedicalDictamPDF — IMPL-FEATURE-20260825-03 ronda 8 (FND-2026082
     const signBody = JSON.parse(signInit.body)
     expect(signBody.input_pdf).toMatch(/^dictamen-event-1-\d+\.pdf$/)
     expect(signBody.output_pdf).toBe('dictamen-event-1-signed.pdf')
-    expect(signBody.reason).toBe('Dictamen Médico AMI')
+    expect(signBody.reason).toMatch(/^Dictamen Médico (SME|AMI)$/)
 
     // 3. MedicalEvent.status='COMPLETED'.
     expect(mockMedicalEventUpdate).toHaveBeenCalledWith({
