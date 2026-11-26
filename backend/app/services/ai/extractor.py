@@ -16,6 +16,7 @@ ARCH-20260519-15: ROLLBACK — Featherless/Qwen-VL desactivado del runtime extra
 
 import time
 import os
+import unicodedata
 from typing import Dict, Any, Union, Optional, Tuple
 from .base import GeminiBase, M3VisionBase, M3CredentialsUnavailableError
 from .study_type_mismatch import (
@@ -201,9 +202,41 @@ _ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
     "fet100_s", "fet100",
     "vext_l", "vext",
     "mvv_ind_l_min", "mvv_ind", "mvv",
-    "edad_pulmon_anios", "edad_pulmon",
+    "edad_pulmon_anios", "edad_pulmon_anos", "edad_del_pulmon", "edad_pulmon",
     "repetibilidad_fvc", "repetibilidad_fev1",
 })
+
+_ESPIROMETRIA_KEY_ALIASES: Dict[str, str] = {
+    "edad del pulmon": "edad_pulmon_anios",
+    "edad_del_pulmon": "edad_pulmon_anios",
+    "edad_pulmon_anos": "edad_pulmon_anios",
+    "edad_pulmon_anios": "edad_pulmon_anios",
+    "edad_del_pulmon_anios": "edad_pulmon_anios",
+    "edad_del_pulmon_anos": "edad_pulmon_anios",
+    "edad_pulmonar": "edad_pulmon_anios",
+    "lung_age": "edad_pulmon_anios",
+    "mvv ind": "mvv_ind_l_min",
+    "mvv_ind_l/min": "mvv_ind_l_min",
+    "mejor fvc": "mejor_fvc_l",
+    "mejor fev1": "mejor_fev1_l",
+    "fev1/fvc": "fev1_fvc_pct",
+    "fev1/fvc (%)": "fev1_fvc_pct",
+    "mfev1/mfvc": "mejor_fev1_fvc_pct",
+}
+
+
+def _canonicalize_espirometria_key(raw_key: Optional[str]) -> Optional[str]:
+    if raw_key is None:
+        return None
+    stripped = str(raw_key).strip()
+    if not stripped:
+        return None
+    ascii_norm = "".join(
+        ch for ch in unicodedata.normalize("NFKD", stripped.lower())
+        if not unicodedata.combining(ch)
+    )
+    ascii_collapsed = " ".join(ascii_norm.split())
+    return _ESPIROMETRIA_KEY_ALIASES.get(ascii_collapsed, stripped)
 
 
 class ExtractorService(GeminiBase):
@@ -466,8 +499,8 @@ class ExtractorService(GeminiBase):
             if not isinstance(row, dict):
                 continue
             label = str(row.get("label") or "").strip()
-            key = row.get("key")
-            key = str(key).strip() if key is not None else None
+            raw_key = row.get("key")
+            key = _canonicalize_espirometria_key(raw_key)
             unidad = row.get("unidad")
             unidad = str(unidad).strip() if unidad is not None else None
             normalized = {

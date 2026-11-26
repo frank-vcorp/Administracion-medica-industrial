@@ -69,7 +69,7 @@
  *   para ml, operación y flag ≤150 — nunca 0.
  * @backup context/SPECs/SPEC-FEATURE-20260824-01-ESPIROMETRIA-EVENT-CRITERIOS.md (rev. 1.3)
  */
-import type { CSSProperties, ReactElement } from "react"
+import type { CSSProperties } from "react"
 
 export type EspirometriaParametrosRow = {
   label?: string | null
@@ -368,7 +368,7 @@ export function computeRepetibilidadFromRow(
   const sorted = [...values].sort((a, b) => b - a)
   const diff = Math.abs(sorted[0] - sorted[1])
   const unit = readRowUnit(row)
-  const diffMl = unit === "l" ? diff * 1000 : null
+  const diffMl = unit === "l" ? Math.round(diff * 1000 * 100) / 100 : null
   // `topTwoNative` sólo es informativo cuando la unidad es 'L' (es decir,
   // cuando la fórmula `(max - secondMax) × 1000 = ml` aplica). En otro
   // caso lo devolvemos null para no inducir a pensar que la operación es
@@ -387,7 +387,7 @@ function isWithinAmiThreshold(diffMl: number | null): boolean | null {
   // BR-20260824-01: repetibilidad CUMPLE si diff ≤ 150 ml (0.15 L).
   // El umbral "≤ 150 ml" es inclusivo en el límite.
   if (diffMl === null) return null
-  return diffMl <= 150
+  return Math.round(diffMl * 100) / 100 <= AMI_REPETIBILIDAD_THRESHOLD_ML
 }
 
 /**
@@ -424,15 +424,6 @@ function asNotasCalidadText(value: unknown): string | null {
     }
   }
   return String(value)
-}
-
-function normalizeSiNo(value: unknown): "SI" | "NO" | null {
-  if (value === null || value === undefined) return null
-  const v = String(value).trim().toUpperCase()
-  if (!v) return null
-  if (v.startsWith("SÍ") || v === "SI" || v === "S") return "SI"
-  if (v === "NO" || v === "N") return "NO"
-  return null
 }
 
 /**
@@ -484,50 +475,6 @@ export function detectParamInconsistency(
 }
 
 // --- Componentes de presentación ---
-
-function Badge({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone: "ok" | "warn" | "neutral"
-}) {
-  const cls =
-    tone === "ok"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : tone === "warn"
-      ? "bg-amber-50 text-amber-800 border-amber-200"
-      : "bg-slate-50 text-slate-700 border-slate-200"
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border ${cls}`}
-      data-criteria-key={label}
-    >
-      <span className="text-slate-500">{label}:</span>
-      <span className="font-semibold">{value}</span>
-    </span>
-  )
-}
-
-function SiNoBadge({
-  label,
-  value,
-}: {
-  label: string
-  value: unknown
-}) {
-  const normalized = normalizeSiNo(value)
-  // Mostrar label + "—" cuando el payload no expone valor cualitativo
-  const displayValue = normalized ?? "—"
-  // Tono: SI → ok, NO → warn, ausente → neutral
-  const tone: "ok" | "warn" | "neutral" =
-    normalized === "SI" ? "ok" : normalized === "NO" ? "warn" : "neutral"
-  return (
-    <Badge label={label} value={displayValue} tone={tone} />
-  )
-}
 
 function NumberCell({
   label,
@@ -938,23 +885,16 @@ export default function EspirometriaClinicalCriteriaPanel({
 
   const c = resolveCriteria(extractedData)
 
-  // Bloque A: indicadores SI/NO (orden de la segunda imagen).
-  // Labels reflejan BR-20260824-01: umbral AMI ≤ 150 ml.
-  const booleanEntries: Array<{ label: string; value: unknown }> = [
-    { label: "Repetibilidad FVC ≤ 150 ml", value: c.repetibilidadFvcMenor150 },
-    { label: "Repetibilidad FEV1 ≤ 150 ml", value: c.repetibilidadFev1Menor150 },
-    { label: "Pico máximo", value: c.picoMaximo },
-    { label: "Forma triangular", value: c.formaTriangular },
-    { label: "Libre de artefactos", value: c.libreArtefactos },
-    { label: "Meseta", value: c.meseta },
-    { label: "Tiempo", value: c.tiempo },
-    { label: "Criterios para Dx", value: c.criteriosParaDx },
-  ]
-  const booleanBadges = booleanEntries
-    .map(({ label, value }) => (
-      <SiNoBadge key={label} label={label} value={value} />
-    ))
-    .filter((node): node is ReactElement => node !== null)
+  // Solo renderizar la tarjeta cuando BLOQUE 1 ("Repetibilidad numérica")
+  // tenga algún dato presentable; BLOQUE 2 (Indicadores de calidad) y BLOQUE 3
+  // (Resumen de aceptabilidad) fueron ocultados a petición del usuario aunque
+  // `resolveCriteria` sigue conservando sus valores para auditoría/compatibilidad.
+  const hasNumericRepetibilidad =
+    c.repetibilidadFvcMl !== null ||
+    c.repetibilidadFev1Ml !== null ||
+    c.fvcManeuverTripleNative !== null ||
+    c.fev1ManeuverTripleNative !== null
+  if (!hasNumericRepetibilidad) return null
 
   const headerStyle: CSSProperties = { fontSize: "10px" }
 
@@ -1081,45 +1021,9 @@ export default function EspirometriaClinicalCriteriaPanel({
         </div>
       ) : null}
 
-      {/* === BLOQUE 2: indicadores SI/NO (incluye <200, pico, forma, etc.) === */}
-      {booleanBadges.length > 0 ? (
-        <div
-          className="bg-white border border-sky-100 rounded-lg p-3 space-y-1.5"
-          data-criteria-group="boolean"
-        >
-          <p
-            className="text-[10px] font-semibold text-sky-700 pb-1"
-            style={headerStyle}
-          >
-            Indicadores de calidad
-          </p>
-          <div className="flex flex-wrap gap-2">{booleanBadges}</div>
-        </div>
-      ) : null}
-
-      {/* === BLOQUE 3: pruebas aceptables, criterios, calidad === */}
-      <div className="bg-white border border-sky-100 rounded-lg p-3 space-y-1">
-        <p
-          className="text-[10px] font-semibold text-sky-700 pb-1"
-          style={headerStyle}
-        >
-          Resumen de aceptabilidad
-        </p>
-        <NumberCell
-          label="#Pruebas aceptables"
-          value={c.pruebasAceptables}
-          testId="pruebas-aceptables"
-        />
-        <div
-          className="flex justify-between items-baseline gap-2 py-1 border-b border-slate-100 last:border-0"
-          data-criteria-key="Calidad"
-        >
-          <span className="text-xs text-slate-500">Calidad</span>
-          <span className="text-sm font-semibold text-slate-800">
-            {c.calidad ?? "—"}
-          </span>
-        </div>
-      </div>
+      {/* BLOQUE 2 ("Indicadores de calidad") y BLOQUE 3 ("Resumen de aceptabilidad")
+          ocultados visualmente a petición del usuario; `resolveCriteria` sigue
+          calculando y exponiendo esos campos para auditoría y compatibilidad. */}
 
 {/* === BLOQUE 4: notas de calidad — FEATURE-20260824-01 mini-corte ===
            OCULTO visualmente del panel: `notas_calidad` se SIGUE leyendo del

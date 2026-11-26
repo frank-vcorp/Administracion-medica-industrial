@@ -308,3 +308,86 @@ def test_case9_prediagnostic_service_inyecta_interpretacion_derivada_ami_sin_mut
     assert "interpretacion_derivada_ami" in rendered
     assert "PATRON_ESPIROMETRICO_SUGESTIVO_DE_RESTRICCION" in rendered
     assert enrich_espirometry_extracted_data(original_payload)["calidad"]["repetibilidad_fev1_ml"] == 10.0
+
+
+@patch("app.services.ai.prediagnostic._medgemma_enabled", return_value=True)
+@patch(
+    "app.services.ai.prediagnostic._resolve_m3_clinical_config",
+    return_value={
+        "api_key": "fake-key",
+        "base_url": "https://api.minimax.io/v1",
+        "model": "MiniMax-M3.1-Flash",
+        "key_source": "test",
+        "warning": None,
+    },
+)
+@patch.object(PrediagnosticService, "_call_m3_clinical_chat")
+def test_case10_prediagnostic_coerces_string_citations_and_clinical_basis(
+    mock_chat, _mock_cfg, _mock_enabled
+):
+    """Si MiniMax devuelve `citations` o `clinical_basis` como strings sueltos, se coerciona sin ParseError."""
+    mock_chat.return_value = {
+        "summary": "Patrón espirométrico normal con FEV1/FVC 81.07% y FVC 94%.",
+        "confidence": 0.84,
+        "clinical_state": "AI_PENDING_REVIEW",
+        "justification": "AMI Paso 1 y Paso 2 en rango normal.",
+        "clinical_basis": ["AMI DETERMINAR EL PATRÓN ESPIROMÉTRICO"],
+        "citations": ["AMI-DETERMINAR-PATRON-2024", "ATS-ERS-2022", "ATS-ERS-2019"],
+        "limitations": ["Sin post-broncodilatador."],
+        "red_flags": [],
+        "recommendation": "Continuar vigilancia periódica anual y uso adecuado de EPP.",
+        "non_conclusive_reason": None,
+    }
+    payload = {
+        "fvc": 4.86,
+        "fev1": 3.94,
+        "fev1_fvc_ratio": 0.8107,
+        "fvc_percent_predicho": 94,
+        "fev1_percent_predicho": 94,
+        "parametros": [
+            {"label": "FVC", "key": "fvc_l", "m1": 4.62, "m2": 4.71, "m3": 4.86, "m1_pct_ref": 90, "lln": 3.56},
+            {"label": "FEV1", "key": "fev1_l", "m1": 3.94, "m2": 3.77, "m3": 3.75, "m1_pct_ref": 94, "lln": 2.84},
+            {"label": "FEV1/FVC", "key": "fev1_fvc_pct", "m1": 81.07, "lln": 72.0},
+        ],
+    }
+    svc = PrediagnosticService(api_key="fake-gemini-key")
+    res = svc.generate_prediagnosis(
+        study_type="Espirometria",
+        extracted_data=payload,
+        ai_calibration={
+            "enabled": True,
+            "canonicalStudyType": "Espirometria",
+            "diagnosis": {
+                "prompt": "Criterios AMI:\n{extracted_json}",
+                "version": "espirometria-prediagnosis-v5",
+            },
+        },
+    )
+    assert res.clinical_state == "AI_PENDING_REVIEW"
+    assert len(res.citations) == 3
+    assert res.citations[0].source_id == "AMI-DETERMINAR-PATRON-2024"
+    assert "AMI" in res.citations[0].title
+    assert len(res.clinical_basis) == 1
+    assert res.clinical_basis[0].principle == "AMI DETERMINAR EL PATRÓN ESPIROMÉTRICO"
+    assert res.justification == ["AMI Paso 1 y Paso 2 en rango normal."]
+
+
+def test_case11_normaliza_edad_del_pulmon_sin_sospecha_mapeo():
+    """`key: 'Edad del pulmón'` se canonicaliza a `edad_pulmon_anios` sin disparar SOSPECHA_MAPEO."""
+    from app.services.ai.extractor import ExtractorService
+
+    ext = ExtractorService(api_key="fake-gemini-key")
+    raw = {
+        "paciente": "PACIENTE PRUEBA",
+        "fecha_estudio": "2026-11-26",
+        "parametros": [
+            {"label": "FVC", "key": "fvc_l", "unidad": "L", "m1": 4.62, "m2": 4.71, "m3": 4.86},
+            {"label": "FEV1", "key": "fev1_l", "unidad": "L", "m1": 3.94, "m2": 3.77, "m3": 3.75},
+            {"label": "Edad del pulmón", "key": "Edad del pulmón", "unidad": "años", "m1": 33.98, "m2": 39.4, "m3": 40.1},
+        ],
+        "notas_calidad": "Avisos ATS/ERS: M3: FP",
+    }
+    normalized = ext._normalize_espirometria_result(raw)
+    edad_row = [r for r in normalized["parametros"] if r["label"] == "Edad del pulmón"][0]
+    assert edad_row["key"] == "edad_pulmon_anios"
+    assert "SOSPECHA_MAPEO" not in (normalized.get("notas_calidad") or "")

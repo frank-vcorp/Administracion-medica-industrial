@@ -187,6 +187,125 @@ def _redact_provider_leak(text: str) -> str:
     return cleaned
 
 
+_KNOWN_CITATION_TITLES: Dict[str, str] = {
+    "AMI-DETERMINAR-PATRON-2024": "AMI — Determinar el Patrón Espirométrico (Criterios Institucionales)",
+    "ATS-ERS-2022": "ERS/ATS Technical Standard on Interpretive Strategies for Routine Lung Function Tests (2022)",
+    "ATS-ERS-2019": "Standardization of Spirometry 2019 Update (ATS/ERS)",
+    "NOM-010-STPS-2014": "NOM-010-STPS-2014 Agentes químicos contaminantes del ambiente laboral",
+    "NOM-011-STPS-2001": "NOM-011-STPS-2001 Condiciones de seguridad e higiene en los centros de trabajo donde se genere ruido",
+    "NOM-022-STPS-2015": "NOM-022-STPS-2015 Electricidad estática en los centros de trabajo",
+    "NIOSH-SPIRO-2020": "NIOSH Spirometry Training Guide",
+    "GOLD-2024": "Global Strategy for the Diagnosis, Management, and Prevention of COPD (GOLD 2024)",
+}
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    """Convierte string único o lista heterogénea en lista limpia de strings no vacíos."""
+    if value is None:
+        return []
+    items = [value] if isinstance(value, str) else (list(value) if isinstance(value, (list, tuple)) else [])
+    out: list[str] = []
+    for item in items:
+        if isinstance(item, str):
+            text = item.strip()
+            if text:
+                out.append(text)
+        elif isinstance(item, dict):
+            text = ""
+            for key in ("text", "description", "summary", "reason", "label", "title", "message"):
+                cand = item.get(key)
+                if isinstance(cand, str) and cand.strip():
+                    text = cand.strip()
+                    break
+            if not text:
+                text = json.dumps(item, ensure_ascii=False)
+            if text:
+                out.append(text)
+        elif item is not None:
+            text = str(item).strip()
+            if text:
+                out.append(text)
+    return out
+
+
+def _normalize_raw_prediagnosis_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Coerciona `citations`, `clinical_basis` y listas si el LLM devolvió strings sueltos."""
+    if not isinstance(raw, dict):
+        return raw
+    data = dict(raw)
+
+    raw_citations = data.get("citations")
+    if raw_citations is not None:
+        cit_items = (
+            [raw_citations]
+            if isinstance(raw_citations, (str, dict))
+            else (list(raw_citations) if isinstance(raw_citations, (list, tuple)) else [])
+        )
+        normalized_citations: list[Dict[str, Any]] = []
+        for item in cit_items:
+            if isinstance(item, str):
+                sid = item.strip()
+                if sid:
+                    normalized_citations.append({
+                        "source_id": sid,
+                        "title": _KNOWN_CITATION_TITLES.get(sid.upper(), sid),
+                    })
+            elif isinstance(item, dict):
+                sid_raw = (
+                    item.get("source_id")
+                    or item.get("id")
+                    or item.get("code")
+                    or item.get("title")
+                    or "REF"
+                )
+                sid = str(sid_raw).strip() or "REF"
+                title_raw = item.get("title")
+                title = (
+                    str(title_raw).strip()
+                    if isinstance(title_raw, str) and title_raw.strip()
+                    else _KNOWN_CITATION_TITLES.get(sid.upper(), sid)
+                )
+                entry: Dict[str, Any] = {"source_id": sid, "title": title}
+                for opt_k in ("section", "excerpt", "version_or_date"):
+                    opt_v = item.get(opt_k)
+                    if isinstance(opt_v, str) and opt_v.strip():
+                        entry[opt_k] = opt_v.strip()
+                normalized_citations.append(entry)
+        data["citations"] = normalized_citations
+
+    raw_basis = data.get("clinical_basis")
+    if raw_basis is not None:
+        basis_items = (
+            [raw_basis]
+            if isinstance(raw_basis, (str, dict))
+            else (list(raw_basis) if isinstance(raw_basis, (list, tuple)) else [])
+        )
+        normalized_basis: list[Dict[str, Any]] = []
+        for item in basis_items:
+            if isinstance(item, str):
+                principle = item.strip()
+                if principle:
+                    normalized_basis.append({"principle": principle, "applied_parameters": []})
+            elif isinstance(item, dict):
+                p_raw = item.get("principle") or item.get("criterion") or item.get("name") or "Criterio clínico"
+                principle = str(p_raw).strip() or "Criterio clínico"
+                params_raw = item.get("applied_parameters")
+                if isinstance(params_raw, str):
+                    applied = [params_raw.strip()] if params_raw.strip() else []
+                elif isinstance(params_raw, (list, tuple)):
+                    applied = [str(x).strip() for x in params_raw if x is not None and str(x).strip()]
+                else:
+                    applied = []
+                normalized_basis.append({"principle": principle, "applied_parameters": applied})
+        data["clinical_basis"] = normalized_basis
+
+    for list_field in ("justification", "limitations", "red_flags"):
+        if list_field in data:
+            data[list_field] = _normalize_string_list(data.get(list_field))
+
+    return data
+
+
 def _public_minimax_http_reason(status_code: str) -> str:
     """
     Motivo user-facing de un fallo HTTP de MiniMax.
@@ -954,7 +1073,8 @@ class PrediagnosticService(GeminiBase):
             )
 
         try:
-            result = AIPrediagnosisResult(**raw_result)
+            normalized_raw = _normalize_raw_prediagnosis_payload(raw_result)
+            result = AIPrediagnosisResult(**normalized_raw)
             result_fields = getattr(type(result), "model_fields", {})
             # IMPL-20260513-03: añadir proveedor clínico real
             # IMPL-20260518-03 + Fase 4: añadir fuente real del prompt clínico.
