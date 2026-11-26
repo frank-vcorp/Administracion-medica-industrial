@@ -40,4 +40,22 @@ describe('buildEspirometryPdfExtractionView', () => {
     expect(view.parametros[0]?.m2Pct).toBe('70')
     expect(view.repetibilidadAtsErs).toBe('FVC: No, FEV1: No')
   })
+
+  it('lee paciente_detalle cuando extracted_data.paciente viene como string', () => {
+    const view = buildEspirometryPdfExtractionView({
+      extracted_data: {
+        paciente: 'JUAREZ RAMOS RAUL ALBERTO',
+        paciente_detalle: {
+          nombre_completo: 'JUAREZ RAMOS RAUL ALBERTO',
+          sexo: 'Hombre',
+          edad_anios: 38,
+          imc: 30.1,
+        },
+        parametros: [],
+      },
+    })
+
+    expect(view.paciente.some(row => row.label === 'Nombre' && row.value === 'JUAREZ RAMOS RAUL ALBERTO')).toBe(true)
+    expect(view.paciente.some(row => row.label === 'IMC' && row.value === '30.10')).toBe(true)
+  })
 })

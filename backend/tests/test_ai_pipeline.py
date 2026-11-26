@@ -1466,6 +1466,20 @@ class TestEspirometriaExhaustiva_20260516_12_13:
         assert result.calidad.notas_calidad is not None
         assert "SOSPECHA_MAPEO" in result.calidad.notas_calidad
 
+    def test_mvv_ind_canonical_no_false_sospecha_mapeo(self, extractor):
+        """MVV Ind (`mvv_ind_l_min`) y `mejor_fev1_fvc_pct` son claves canónicas y no disparan SOSPECHA_MAPEO."""
+        normalized = extractor._normalize_espirometria_result({
+            "calidad": {"notas_calidad": None},
+            "parametros": [
+                {"label": "FVC", "key": "fvc_l", "unidad": "L", "m1": 3.01},
+                {"label": "FEV1", "key": "fev1_l", "unidad": "L", "m1": 2.74},
+                {"label": "MFev1/MFvc", "key": "mejor_fev1_fvc_pct", "unidad": "%", "m1": 91.03},
+                {"label": "MVV Ind", "key": "mvv_ind_l_min", "unidad": "l/min", "m1": 82.11},
+            ],
+        })
+        assert "SOSPECHA_MAPEO" not in (normalized.get("notas_calidad") or "")
+        assert "SOSPECHA_MAPEO" not in ((normalized.get("calidad") or {}).get("notas_calidad") or "")
+
     # --- Prediagnóstico: caso conflictivo FVC reducida + ratio conservado ---
 
     @patch('app.services.ai.prediagnostic.MEDGEMMA_ENABLED', True)

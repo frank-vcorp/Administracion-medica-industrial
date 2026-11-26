@@ -89,7 +89,12 @@ export function buildEspirometryPdfExtractionView(
   structuredData: unknown,
 ): EspirometryPdfExtractionView {
   const extracted = unwrapExtracted(structuredData)
-  const paciente = asRecord(extracted.paciente)
+  const paciente =
+    asRecord(extracted.paciente) ??
+    asRecord(extracted.paciente_detalle) ??
+    (typeof extracted.paciente === 'string' && extracted.paciente.trim()
+      ? { nombre_completo: extracted.paciente.trim() }
+      : null)
   const estudio = asRecord(extracted.estudio)
   const condiciones = asRecord(extracted.condiciones)
   const calidad = asRecord(extracted.calidad)

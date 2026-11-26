@@ -84,7 +84,7 @@ const espirometriaSchema: StudyPresentationSchema = {
     {
       kind: "keyValue",
       title: "Datos del paciente",
-      sourceKey: "paciente",
+      sourceKey: "paciente_detalle",
       fields: [
         "nombre_completo", "sexo", "edad_anios", "talla_cm",
         "peso_kg", "imc", "motivo", "procedencia", "fuma",
@@ -123,15 +123,15 @@ const espirometriaSchema: StudyPresentationSchema = {
       source: "parametros",
       columns: [
         { key: "label", label: "Parámetro" },
-        { key: "unit", label: "Unidad" },
-        { key: "m1_value", label: "M1" },
-        { key: "m2_value", label: "M2" },
-        { key: "m3_value", label: "M3" },
-        { key: "ref_value", label: "REF" },
-        { key: "lln_value", label: "LLN" },
+        { key: "unidad", label: "Unidad" },
+        { key: "m1", label: "M1" },
         { key: "m1_pct_ref", label: "%REF M1" },
+        { key: "m2", label: "M2" },
         { key: "m2_pct_ref", label: "%REF M2" },
+        { key: "m3", label: "M3" },
         { key: "m3_pct_ref", label: "%REF M3" },
+        { key: "ref", label: "REF" },
+        { key: "lln", label: "LLN" },
       ],
     },
     {

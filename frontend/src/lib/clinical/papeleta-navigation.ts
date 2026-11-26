@@ -119,7 +119,12 @@ export function replacePapeletaQuery(patch: {
 }): void {
   if (typeof window === 'undefined') return
   const url = buildPapeletaUrl(window.location.pathname, window.location.search, patch)
-  window.history.replaceState(window.history.state, '', url)
+  // No pasar `window.history.state`: incluye `__NA: true` y el wrapper de Next 16
+  // omite `applyUrlFromHistoryPushReplace`, dejando `canonicalUrl` congelado en
+  // el estudio previo tras `revalidatePath`/`router.refresh()`. Con `null`, Next
+  // conserva `__PRIVATE_NEXTJS_INTERNALS_TREE` vía `copyNextJsInternalHistoryState(null)`
+  // y sincroniza `canonicalUrl` sin pedir el Server Component.
+  window.history.replaceState(null, '', url)
 }
 
 /**

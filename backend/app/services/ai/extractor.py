@@ -191,13 +191,16 @@ _AUDIOMETRIA_CANONICAL_FREQS: frozenset = frozenset(
 # Claves canónicas para validación/normalización determinística post-extracción de Espirometría.
 _ESPIROMETRIA_CANONICAL_KEYS: frozenset = frozenset({
     "mejor_fvc_l", "mejor_fev1_l", "mejor_fvc", "mejor_fev1",
+    "mejor_fev1_fvc_pct", "mfev1_mfvc_pct", "mfev1_mfvc",
     "fef2575_l_s", "fef25_75_l_s", "fef25_75",
     "fvc_l", "fvc", "fev1_l", "fev1",
     "fev1_fvc_pct", "fev1_fvc", "fev1_fvc_ratio",
     "fef25_l_s", "fef50_l_s", "fef75_l_s",
     "fef25", "fef50", "fef75",
+    "pef_l_s", "pef",
     "fet100_s", "fet100",
     "vext_l", "vext",
+    "mvv_ind_l_min", "mvv_ind", "mvv",
     "edad_pulmon_anios", "edad_pulmon",
     "repetibilidad_fvc", "repetibilidad_fev1",
 })

@@ -112,6 +112,63 @@ function normalizeAudiometriaData(data: Record<string, unknown>): Record<string,
   return normalized
 }
 
+const ESPIROMETRIA_PARAM_KEY_ALIASES: ReadonlyArray<readonly [string, string]> = [
+  ["unidad", "unit"],
+  ["m1", "m1_value"],
+  ["m2", "m2_value"],
+  ["m3", "m3_value"],
+  ["ref", "ref_value"],
+  ["lln", "lln_value"],
+]
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+/**
+ * Normaliza `extractedData` de Espirometría para soportar tanto claves canónicas
+ * del backend (`paciente_detalle`, `m1`/`unidad`/`ref`/`lln`) como schemas
+ * congelados o legados (`paciente` objeto, `m1_value`/`unit`/`ref_value`/`lln_value`).
+ */
+function normalizeEspirometriaData(data: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = { ...data }
+
+  const detalleObj = isPlainRecord(normalized.paciente_detalle)
+    ? normalized.paciente_detalle
+    : null
+  const pacienteObj = isPlainRecord(normalized.paciente)
+    ? normalized.paciente
+    : null
+
+  if (!detalleObj) {
+    if (pacienteObj) {
+      normalized.paciente_detalle = pacienteObj
+    } else if (typeof normalized.paciente === "string" && normalized.paciente.trim()) {
+      normalized.paciente_detalle = { nombre_completo: normalized.paciente.trim() }
+    }
+  }
+  if (!pacienteObj && detalleObj) {
+    normalized.paciente = detalleObj
+  }
+
+  if (Array.isArray(normalized.parametros)) {
+    normalized.parametros = normalized.parametros.map((row) => {
+      if (!isPlainRecord(row)) return row
+      const nextRow: Record<string, unknown> = { ...row }
+      for (const [primary, legacy] of ESPIROMETRIA_PARAM_KEY_ALIASES) {
+        if (!hasRenderableValue(nextRow[primary]) && hasRenderableValue(nextRow[legacy])) {
+          nextRow[primary] = nextRow[legacy]
+        } else if (!hasRenderableValue(nextRow[legacy]) && hasRenderableValue(nextRow[primary])) {
+          nextRow[legacy] = nextRow[primary]
+        }
+      }
+      return nextRow
+    })
+  }
+
+  return normalized
+}
+
 function buildAudiometriaSummary(data: Record<string, unknown>): Record<string, unknown> {
   const right = resolveSource(data, "oido_derecho")
   const left = resolveSource(data, "oido_izquierdo")
@@ -576,7 +633,9 @@ export default function ClinicalExtractionRenderer({
   const renderData =
     studyType === "Audiometria"
       ? normalizeAudiometriaData(extractedData)
-      : extractedData
+      : studyType === "Espirometria"
+        ? normalizeEspirometriaData(extractedData)
+        : extractedData
 
   // Verificar si al menos una sección renderiza contenido útil
   // (se hace en el render mismo — SectionBlock retorna null si no hay datos)

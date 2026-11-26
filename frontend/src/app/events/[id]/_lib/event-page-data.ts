@@ -398,13 +398,11 @@ export async function fetchEventPageData(input: {
                     doctorNotes: latestPredx.doctorReviews[0].doctorNotes,
                     doctorRecommendations: latestPredx.doctorReviews[0].doctorRecommendations ?? null,
                     createdAt: latestPredx.doctorReviews[0].createdAt,
-                    // IMPL-FEATURE-20260825-01: sólo considerar PDF listo cuando
-                    // hay URL persistida Y NO hay error. `validatedPdfError`
-                    // puede estar presente en registros antiguos aún con URL
-                    // escrita por una corrida previa exitosa; mandamos `null`
-                    // en ese caso para no mostrar el banner de error.
+                    // En Vercel serverless el disco local es read-only (`validatedPdfUrl`
+                    // puede quedar null aunque la generación y hash/fecha hayan tenido éxito).
                     pdfGenerated: !!(
-                      latestPredx.doctorReviews[0].validatedPdfUrl &&
+                      (latestPredx.doctorReviews[0].validatedPdfUrl ||
+                        latestPredx.doctorReviews[0].validatedPdfGeneratedAt) &&
                       !latestPredx.doctorReviews[0].validatedPdfError
                     ),
                     pdfErrorMessage:

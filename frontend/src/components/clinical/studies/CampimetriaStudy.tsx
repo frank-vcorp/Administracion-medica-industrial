@@ -87,6 +87,7 @@ export default function CampimetriaStudy({
   longitudinalData,
   workerInfo,
   readonly = false,
+  hasValidatedReview = false,
   onStatusChange,
   registerLeaveGuard,
 }: {
@@ -100,6 +101,7 @@ export default function CampimetriaStudy({
   longitudinalData?: Record<string, unknown> | null
   workerInfo: WorkerBanner
   readonly?: boolean
+  hasValidatedReview?: boolean
   onStatusChange?: (status: string) => void
   registerLeaveGuard?: (fn: StudyLeaveGuardFn | null) => void
 }) {
@@ -327,9 +329,10 @@ export default function CampimetriaStudy({
       }
     }
 
+    const shouldTriggerPrediagnosis = complete && !hasValidatedReview
     const payload = buildQuestionnairePayload()
     const res = await saveCampimetriaQuestionnaire(eventTestId, payload, eventId, {
-      triggerPrediagnosis: complete,
+      triggerPrediagnosis: shouldTriggerPrediagnosis,
     })
     if (!res.success) {
       setFieldErrors(res.fieldErrors ?? {})
@@ -364,9 +367,11 @@ export default function CampimetriaStudy({
     onStatusChange?.(status)
     setMessage(
       complete
-        ? res.aiWarning
-          ? 'Campimetría completada (revisa el prediagnóstico IA a la derecha).'
-          : 'Campimetría completada. Revisa y valida el prediagnóstico IA a la derecha.'
+        ? hasValidatedReview
+          ? 'Cambios guardados. Se conservó la validación médica vigente; si modificaste hallazgos clínicos, usa «Reintentar prediagnóstico IA».'
+          : res.aiWarning
+            ? 'Campimetría completada (revisa el prediagnóstico IA a la derecha).'
+            : 'Campimetría completada. Revisa y valida el prediagnóstico IA a la derecha.'
         : 'Borrador guardado.',
     )
     if (res.aiWarning) {
@@ -767,7 +772,7 @@ export default function CampimetriaStudy({
               onClick={() => void save(true)}
               className="rounded-xl bg-violet-600 px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-violet-200 disabled:opacity-50"
             >
-              {saving ? 'Guardando…' : 'Completar campimetría'}
+              {saving ? 'Guardando…' : hasValidatedReview ? 'Guardar cambios' : 'Completar campimetría'}
             </button>
           </div>
         )}

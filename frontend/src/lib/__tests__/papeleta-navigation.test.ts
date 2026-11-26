@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildPapeletaUrl,
   examenMedicoNavSectionFromTabs,
   parseExamenMedicoNavSection,
   patchPapeletaSearchParams,
+  replacePapeletaQuery,
   resolveActiveEventTestAfterRefresh,
 } from '@/lib/clinical/papeleta-navigation'
 
@@ -78,5 +79,30 @@ describe('papeleta-navigation', () => {
     expect(
       resolveActiveEventTestAfterRefresh(null, false, valid, 'eliminado-id'),
     ).toBe(null)
+  })
+
+  it('replacePapeletaQuery pasa null en history.state para no propagar __NA de Next 16', () => {
+    const replaceState = vi.fn()
+    vi.stubGlobal('window', {
+      location: {
+        pathname: '/events/evt-1',
+        search: '?view=IN_PROGRESS&eventTest=campi-id',
+      },
+      history: {
+        state: { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ['mock-tree'] },
+        replaceState,
+      },
+    })
+    try {
+      replacePapeletaQuery({ eventTest: 'espiro-id' })
+      expect(replaceState).toHaveBeenCalledTimes(1)
+      expect(replaceState).toHaveBeenCalledWith(
+        null,
+        '',
+        '/events/evt-1?view=IN_PROGRESS&eventTest=espiro-id',
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

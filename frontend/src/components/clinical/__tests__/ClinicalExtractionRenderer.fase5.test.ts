@@ -279,4 +279,133 @@ describe('ARCH-20260820-01 Fase 5 — ClinicalExtractionRenderer con snapshot co
       ),
     ).not.toThrow()
   })
+
+  it('Espirometria Sibelmed W20s renderiza Datos del paciente y todas las columnas m1/m2/m3/ref/lln/unidad', () => {
+    const html = renderToStaticMarkup(
+      createElement(ClinicalExtractionRenderer, {
+        extractedData: {
+          fvc: 3.01,
+          fev1: 2.74,
+          fev1_fvc_ratio: 0.9103,
+          fvc_percent_predicho: 70,
+          fev1_percent_predicho: 79,
+          paciente: 'JUAREZ RAMOS RAUL ALBERTO',
+          paciente_detalle: {
+            nombre_completo: 'JUAREZ RAMOS RAUL ALBERTO',
+            sexo: 'Hombre',
+            edad_anios: 38,
+            talla_cm: 162,
+            peso_kg: 79,
+            imc: 30.1,
+          },
+          parametros: [
+            {
+              label: 'FVC',
+              key: 'fvc_l',
+              unidad: 'L',
+              m1: 3.01,
+              m1_pct_ref: 70,
+              m2: 3.01,
+              m2_pct_ref: 70,
+              m3: 2.86,
+              m3_pct_ref: 66,
+              ref: 4.31,
+              lln: 3.56,
+            },
+            {
+              label: 'FET100%',
+              key: 'fet100_s',
+              unidad: 's',
+              m1: 4.42,
+              m2: 4.34,
+              m3: 4.42,
+              ref: null,
+              lln: null,
+              m1_pct_ref: null,
+              m2_pct_ref: null,
+              m3_pct_ref: null,
+            },
+            {
+              label: 'Vext.',
+              key: 'vext_l',
+              unidad: 'L',
+              m1: 0.07,
+              m2: 0.06,
+              m3: 0.06,
+            },
+            {
+              label: 'MVV Ind',
+              key: 'mvv_ind_l_min',
+              unidad: 'l/min',
+              m1: 82.11,
+              m2: 81.9,
+              m3: 77.82,
+            },
+            {
+              label: 'Edad del pulmón',
+              key: null,
+              unidad: null,
+              m1: 58.14,
+              m2: 58.36,
+              m3: 62.61,
+            },
+          ],
+        },
+        missingFields: null,
+        version: 2,
+        studyType: 'Espirometria',
+      }),
+    )
+
+    expect(html).toContain('Datos del paciente')
+    expect(html).toContain('JUAREZ RAMOS RAUL ALBERTO')
+    expect(html).toContain('30.1')
+
+    expect(html).toContain('Parámetros espirométricos')
+    for (const header of ['Unidad', 'M1', '%REF M1', 'M2', '%REF M2', 'M3', '%REF M3', 'REF', 'LLN']) {
+      expect(html).toContain(header)
+    }
+    for (const val of ['4.42', '0.07', '82.11', '58.14', '4.31', '3.56']) {
+      expect(html).toContain(val)
+    }
+  })
+
+  it('Espirometria mantiene compatibilidad con frozenPresentationSchema usando m1_value/unit/ref_value/lln_value', () => {
+    const legacyFrozenEspiro = {
+      studyType: 'Espirometria',
+      sections: [
+        {
+          kind: 'table',
+          title: 'Parámetros legacy',
+          source: 'parametros',
+          columns: [
+            { key: 'label', label: 'Parámetro' },
+            { key: 'unit', label: 'Unidad' },
+            { key: 'm1_value', label: 'M1' },
+            { key: 'ref_value', label: 'REF' },
+            { key: 'lln_value', label: 'LLN' },
+          ],
+        },
+      ],
+    }
+
+    const html = renderToStaticMarkup(
+      createElement(ClinicalExtractionRenderer, {
+        extractedData: {
+          parametros: [
+            { label: 'FVC', key: 'fvc_l', unidad: 'L', m1: 3.01, ref: 4.31, lln: 3.56 },
+          ],
+        },
+        missingFields: null,
+        version: 1,
+        studyType: 'Espirometria',
+        frozenPresentationSchema: legacyFrozenEspiro,
+      }),
+    )
+
+    expect(html).toContain('Parámetros legacy')
+    expect(html).toContain('3.01')
+    expect(html).toContain('4.31')
+    expect(html).toContain('3.56')
+  })
 })

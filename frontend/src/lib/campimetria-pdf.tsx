@@ -28,6 +28,7 @@ import {
   resolvePatientIdentificationForPdf,
   type PatientIdentificationPdf,
 } from '@/lib/pdf/patient-identification'
+import { uploadPdfBuffer } from '@/lib/upload-pdf-buffer'
 
 const REPO_UPLOAD_DIR = path.join(process.cwd(), '..', 'uploads')
 
@@ -263,6 +264,28 @@ export async function generateCampimetriaValidatedPdf(input: {
       '[campimetria-pdf] No se pudo persistir PDF en disco:',
       err instanceof Error ? err.message : err,
     )
+  }
+
+  if (!url) {
+    try {
+      const uploaded = await uploadPdfBuffer(
+        buffer,
+        `campimetria-pdfs/${input.reviewId}.pdf`,
+      )
+      if (uploaded.success) {
+        url = uploaded.key
+      } else {
+        console.warn(
+          '[campimetria-pdf] Fallback uploadPdfBuffer no persistió PDF:',
+          uploaded.error || 'error desconocido',
+        )
+      }
+    } catch (err) {
+      console.warn(
+        '[campimetria-pdf] Error en fallback uploadPdfBuffer:',
+        err instanceof Error ? err.message : err,
+      )
+    }
   }
 
   return { buffer, hash, url }

@@ -151,6 +151,8 @@ interface StudyAIPrediagnosisPanelProps {
    * comportamiento previo al incremento.
    */
   studyType?: string | null
+  /** Callback opcional para que el workspace padre refresque datos tras validar. */
+  onReviewed?: () => void
 }
 
 // ---------------------------------------------------------------------------
@@ -258,7 +260,7 @@ function DoctorReviewForm({
   suggestedSummary: string
   /** Recomendación práctica — pre-llena el cuadro editable (R-06). */
   suggestedPracticalRecommendations: string
-  onSubmitted: () => void
+  onSubmitted: (review: DoctorReviewSummary) => void
 }) {
   const [doctorDiagnosis, setDoctorDiagnosis] = useState(() => suggestedSummary.trim())
   const [doctorRecommendations, setDoctorRecommendations] = useState(
@@ -310,7 +312,16 @@ function DoctorReviewForm({
         } else {
           setError('')
         }
-        onSubmitted()
+        onSubmitted({
+          id: result.reviewId ?? '',
+          doctorStatus,
+          doctorDiagnosis: trimmedDiagnosis,
+          doctorNotes: doctorNotes || null,
+          doctorRecommendations: doctorRecommendations || null,
+          createdAt: new Date(),
+          pdfGenerated: result.pdfGenerated ?? null,
+          pdfErrorMessage: result.pdfErrorMessage ?? null,
+        })
       } else {
         setError(result.error || 'Error al guardar la revisión')
       }
@@ -439,18 +450,32 @@ export default function StudyAIPrediagnosisPanel({
   existingReview,
   readonly = false,
   studyType = null,
+  onReviewed,
 }: StudyAIPrediagnosisPanelProps) {
-  const [reviewed, setReviewed] = useState(!!existingReview)
+  const [submittedReviewState, setSubmittedReviewState] = useState<{
+    snapshotId: string
+    review: DoctorReviewSummary
+  } | null>(null)
   const [showReviewForm, setShowReviewForm] = useState(false)
   const canReview = canEmitMedicalReview(reviewerRole)
 
   const predxData = snapshot.prediagnosisData as AIPrediagnosisData | null
   if (!predxData) return null
 
+  const localReview =
+    submittedReviewState?.snapshotId === prediagnosisSnapshotId
+      ? submittedReviewState.review
+      : null
+  const effectiveReview: DoctorReviewSummary | null =
+    existingReview ?? (localReview && localReview.id ? localReview : null)
+
   const stateDisplay = getStateDisplay(snapshot.clinicalState)
   const hasRedFlags = (predxData.red_flags ?? []).length > 0
   const isNonConclusive = snapshot.clinicalState === 'AI_NON_CONCLUSIVE'
-  const isReviewed = reviewed || ['REVIEWED_ACCEPTED', 'REVIEWED_EDITED', 'REVIEWED_REJECTED'].includes(snapshot.clinicalState)
+  const isReviewed =
+    !!localReview ||
+    !!existingReview ||
+    ['REVIEWED_ACCEPTED', 'REVIEWED_EDITED', 'REVIEWED_REJECTED'].includes(snapshot.clinicalState)
   const clinicalProvider = predxData.clinical_provider
   const clinicalModel = predxData.clinical_model_used
   // DEC-20260824-02 / IMPL-20260824-06: lista unificada de recomendaciones
@@ -645,28 +670,28 @@ export default function StudyAIPrediagnosisPanel({
         )}
 
         {/* Revisión existente */}
-        {isReviewed && existingReview && (
+        {isReviewed && effectiveReview && (
           <div className="bg-white border border-slate-200 rounded-lg px-3 py-3">
             <p className="text-[11px] font-bold text-slate-500 mb-2">Revisión médica registrada</p>
             <p className="text-xs font-semibold text-slate-700">
               Decisión: <span className={
-                existingReview.doctorStatus === 'REVIEWED_ACCEPTED' ? 'text-emerald-600' :
-                existingReview.doctorStatus === 'REVIEWED_EDITED' ? 'text-blue-600' :
+                effectiveReview.doctorStatus === 'REVIEWED_ACCEPTED' ? 'text-emerald-600' :
+                effectiveReview.doctorStatus === 'REVIEWED_EDITED' ? 'text-blue-600' :
                 'text-red-600'
-              }>{existingReview.doctorStatus.replace('REVIEWED_', '')}</span>
+              }>{effectiveReview.doctorStatus.replace('REVIEWED_', '')}</span>
             </p>
-            {existingReview.doctorDiagnosis && (
+            {effectiveReview.doctorDiagnosis && (
               <p className="text-xs text-slate-600 mt-1">
-                <strong>Diagnóstico médico:</strong> {existingReview.doctorDiagnosis}
+                <strong>Diagnóstico médico:</strong> {effectiveReview.doctorDiagnosis}
               </p>
             )}
-            {existingReview.doctorRecommendations && (
+            {effectiveReview.doctorRecommendations && (
               <p className="text-xs text-slate-600 mt-1">
-                <strong>Recomendaciones:</strong> {existingReview.doctorRecommendations}
+                <strong>Recomendaciones:</strong> {effectiveReview.doctorRecommendations}
               </p>
             )}
-            {existingReview.doctorNotes && (
-              <p className="text-xs text-slate-500 mt-1 italic">{existingReview.doctorNotes}</p>
+            {effectiveReview.doctorNotes && (
+              <p className="text-xs text-slate-500 mt-1 italic">{effectiveReview.doctorNotes}</p>
             )}
 
             {/* IMPL-FEATURE-20260825-01: botón de descarga del PDF validado.
@@ -675,8 +700,8 @@ export default function StudyAIPrediagnosisPanel({
                 IMPL-FEATURE-20260825-02: la ruta de descarga se elige por
                 tipo canónico del estudio (Espirometría o Audiometría).
                 Estudios sin template propio NO muestran el botón. */}
-            {(existingReview.doctorStatus === 'REVIEWED_ACCEPTED' ||
-              existingReview.doctorStatus === 'REVIEWED_EDITED') && (
+            {(effectiveReview.doctorStatus === 'REVIEWED_ACCEPTED' ||
+              effectiveReview.doctorStatus === 'REVIEWED_EDITED') && (
               (() => {
                 const pdfKind =
                   studyType === 'Audiometria'
@@ -695,9 +720,9 @@ export default function StudyAIPrediagnosisPanel({
                     className="mt-3 pt-3 border-t border-slate-100"
                     data-testid={`${testIdPrefix}-pdf-download-block`}
                   >
-                    {existingReview.pdfGenerated || !existingReview.pdfErrorMessage ? (
+                    {effectiveReview.pdfGenerated || !effectiveReview.pdfErrorMessage ? (
                       <a
-                        href={`/api/pdf/${pdfKind}/${existingReview.id}`}
+                        href={`/api/pdf/${pdfKind}/${effectiveReview.id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 text-xs font-semibold text-white bg-teal-600 hover:bg-teal-700 px-3 py-2 rounded-lg transition-colors"
@@ -712,9 +737,9 @@ export default function StudyAIPrediagnosisPanel({
                         data-testid={`${testIdPrefix}-pdf-error`}
                       >
                         ⚠️ PDF no disponible.
-                        {existingReview.pdfErrorMessage ? (
+                        {effectiveReview.pdfErrorMessage ? (
                           <span className="block mt-1">
-                            <strong>Motivo:</strong> {existingReview.pdfErrorMessage}
+                            <strong>Motivo:</strong> {effectiveReview.pdfErrorMessage}
                           </span>
                         ) : (
                           <span className="block mt-1">
@@ -757,9 +782,13 @@ export default function StudyAIPrediagnosisPanel({
                 eventId={eventId}
                 suggestedSummary={predxData.summary ?? ''}
                 suggestedPracticalRecommendations={practicalRecommendationText}
-                onSubmitted={() => {
-                  setReviewed(true)
+                onSubmitted={(submitted) => {
+                  setSubmittedReviewState({
+                    snapshotId: prediagnosisSnapshotId,
+                    review: submitted,
+                  })
                   setShowReviewForm(false)
+                  onReviewed?.()
                 }}
               />
             )}

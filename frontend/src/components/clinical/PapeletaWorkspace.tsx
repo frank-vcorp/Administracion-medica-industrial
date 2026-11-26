@@ -1748,6 +1748,12 @@ function StudyPanel({
             longitudinalData={longitudinalData}
             workerInfo={workerInfo}
             readonly={readonly}
+            hasValidatedReview={
+              Boolean(test.aiSnapshot?.existingReview) ||
+              ['REVIEWED_ACCEPTED', 'REVIEWED_EDITED', 'REVIEWED_REJECTED'].includes(
+                test.aiSnapshot?.snapshot?.clinicalState ?? '',
+              )
+            }
             onStatusChange={(status) =>
               onExamenMedicoStatusChange(status, { skipRefresh: true })
             }
@@ -1765,6 +1771,7 @@ function StudyPanel({
                   existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
                   readonly={readonly}
                   studyType="Campimetria"
+                  onReviewed={() => router.refresh()}
                 />
                 {hasCampiCapture && !readonly && (
                   <button
@@ -1855,6 +1862,7 @@ function StudyPanel({
                     existingReview={test.aiSnapshot.existingReview as unknown as Parameters<typeof StudyAIPrediagnosisPanel>[0]['existingReview']}
                     readonly={readonly}
                     studyType="ExamenMedico"
+                    onReviewed={() => router.refresh()}
                   />
                   {!readonly && (
                     <button
@@ -2299,6 +2307,7 @@ function StudyPanel({
                 // la ruta correcta (`/api/pdf/espirometry` o
                 // `/api/pdf/audiometry`).
                 studyType={getCanonicalAIStudyType(test)}
+                onReviewed={() => router.refresh()}
               />
             )}
           </div>
