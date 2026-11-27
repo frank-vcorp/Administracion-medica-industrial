@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react'
 import { ProjectStatus } from '@prisma/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ExternalLink, Wrench } from 'lucide-react'
+import { ExternalLink, UserPlus, Wrench } from 'lucide-react'
 import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
 import ProjectFormModal, { MobileUnitOption, ProjectForEdit } from '@/components/ProjectFormModal'
 import ProjectsTable from '@/components/ProjectsTable'
@@ -315,11 +315,37 @@ export default function ProjectsCalendar({
     setEditOpen(true)
   }
 
-  function handleProjectCreated(projectId: string, projectName: string, companyId?: string) {
+  function handleProjectCreated(
+    projectId: string,
+    projectName: string,
+    companyId?: string,
+    startDateISO?: string
+  ) {
+    if (startDateISO) {
+      const parsedDate = new Date(startDateISO)
+      if (!Number.isNaN(parsedDate.getTime())) {
+        setVisibleMonth(startOfMonth(parsedDate))
+      }
+    }
     router.refresh()
     if (!companyId) return
     setBulkImportContext({ projectId, projectName, companyId })
     setShowBulkImportBanner(true)
+  }
+
+  function openWorkersForProject(
+    project: { id: string; name: string; companyId: string | null },
+    mode: 'excel' | 'quick' = 'quick'
+  ) {
+    if (!project.companyId) return
+    setShowBulkImportBanner(false)
+    setBulkImportContext({
+      projectId: project.id,
+      projectName: project.name,
+      companyId: project.companyId,
+    })
+    setBulkImportMode(mode)
+    setBulkImportOpen(true)
   }
 
   function handleStartBulkImport() {
@@ -607,22 +633,37 @@ export default function ProjectsCalendar({
                                 </Link>
                               </div>
                             )}
-                            <div className="mt-2 grid grid-cols-2 gap-1.5 border-t border-white/70 pt-2">
-                              <button
-                                type="button"
-                                onClick={() => setReceptionProjectId(project.id)}
-                                className="rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold tracking-[0.08em] text-slate-700 hover:bg-white"
-                              >
-                                Recepción
-                              </button>
-                              <Link
-                                href={`/projects/${project.id}`}
-                                onClick={(event) => event.stopPropagation()}
-                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#592c82]/20 bg-white/90 px-2 py-1.5 text-[10px] font-bold text-[#592c82] hover:bg-white"
-                              >
-                                Entregables
-                                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-                              </Link>
+                            <div className="mt-2 space-y-1.5 border-t border-white/70 pt-2">
+                              {project.companyId && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    openWorkersForProject(project, 'quick')
+                                  }}
+                                  className="inline-flex w-full items-center justify-center gap-1 rounded-lg border border-emerald-200 bg-white/95 px-2 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                >
+                                  <UserPlus className="h-3 w-3 shrink-0" />
+                                  + Trabajadores
+                                </button>
+                              )}
+                              <div className="grid grid-cols-2 gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setReceptionProjectId(project.id)}
+                                  className="rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold tracking-[0.06em] text-slate-700 hover:bg-white"
+                                >
+                                  Recepción
+                                </button>
+                                <Link
+                                  href={`/projects/${project.id}`}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#592c82]/20 bg-white/90 px-2 py-1.5 text-[10px] font-bold text-[#592c82] hover:bg-white"
+                                >
+                                  Abrir
+                                  <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                                </Link>
+                              </div>
                             </div>
                           </div>
                           )
@@ -652,6 +693,7 @@ export default function ProjectsCalendar({
                 companies={companies}
                 branches={branches}
                 mobileUnits={mobileUnits}
+                onAddWorkers={(proj) => openWorkersForProject(proj, 'quick')}
               />
             </div>
           )}
@@ -682,11 +724,21 @@ export default function ProjectsCalendar({
                     <p className="text-lg font-black text-emerald-700">{receptionMetrics.checkedIn}</p>
                   </div>
                 </div>
+                {selectedReceptionProject.companyId && (
+                  <button
+                    type="button"
+                    onClick={() => openWorkersForProject(selectedReceptionProject, 'quick')}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    + Agregar trabajadores
+                  </button>
+                )}
                 <Link
                   href={`/projects/${selectedReceptionProject.id}`}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#592c82] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#49226b]"
                 >
-                  Abrir proyecto / Entregables
+                  Abrir ficha / Entregables
                   <ExternalLink className="h-3.5 w-3.5" />
                 </Link>
               </div>
@@ -699,6 +751,32 @@ export default function ProjectsCalendar({
             )}
 
             <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              {receptionWorkers.length === 0 ? (
+                <div className="px-6 py-8 text-center space-y-3">
+                  <p className="text-sm font-medium text-slate-600">
+                    Este proyecto aún no tiene trabajadores registrados.
+                  </p>
+                  {selectedReceptionProject.companyId && (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openWorkersForProject(selectedReceptionProject, 'quick')}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Captura manual (1–20)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openWorkersForProject(selectedReceptionProject, 'excel')}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                      >
+                        Subir Excel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
               <table className="min-w-full divide-y divide-slate-100">
                 <thead className="bg-slate-50">
                   <tr className="text-left text-[11px] font-black tracking-[0.14em] text-slate-400">
@@ -765,6 +843,7 @@ export default function ProjectsCalendar({
                   })}
                 </tbody>
               </table>
+              )}
             </div>
           </div>
         )}

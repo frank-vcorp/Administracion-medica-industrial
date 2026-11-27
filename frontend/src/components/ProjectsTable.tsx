@@ -9,7 +9,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ExternalLink, FolderKanban } from 'lucide-react'
+import { ExternalLink, FolderKanban, UserPlus } from 'lucide-react'
 import { updateProjectStatus } from '@/actions/project.actions'
 import ProjectFormModal, { MobileUnitOption, ProjectForEdit } from '@/components/ProjectFormModal'
 import { ProjectStatus } from '@prisma/client'
@@ -38,6 +38,7 @@ interface ProjectsTableProps {
   companies: CompanyOption[]
   branches: BranchOption[]
   mobileUnits?: MobileUnitOption[]
+  onAddWorkers?: (project: { id: string; name: string; companyId: string | null }) => void
 }
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
@@ -66,7 +67,13 @@ function formatDate(d: Date) {
   })
 }
 
-export default function ProjectsTable({ projects, companies, branches, mobileUnits = [] }: ProjectsTableProps) {
+export default function ProjectsTable({
+  projects,
+  companies,
+  branches,
+  mobileUnits = [],
+  onAddWorkers,
+}: ProjectsTableProps) {
   const router = useRouter()
   const [editProject, setEditProject] = useState<ProjectForEdit | null>(null)
   const [editOpen, setEditOpen] = useState(false)
@@ -175,15 +182,27 @@ export default function ProjectsTable({ projects, companies, branches, mobileUni
                   </select>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <div className="inline-flex items-center gap-3">
+                  <div className="inline-flex flex-wrap items-center justify-center gap-2.5">
+                    {onAddWorkers && (
+                      <button
+                        type="button"
+                        disabled={!p.companyId}
+                        onClick={() => onAddWorkers({ id: p.id, name: p.name, companyId: p.companyId })}
+                        className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <UserPlus className="h-3 w-3" />
+                        Trabajadores
+                      </button>
+                    )}
                     <Link
                       href={`/projects/${p.id}`}
                       className="inline-flex items-center gap-1 text-xs font-semibold text-[#592c82] hover:underline"
                     >
-                      Abrir / Reportes
+                      Abrir ficha
                       <ExternalLink className="h-3 w-3" />
                     </Link>
                     <button
+                      type="button"
                       onClick={() => handleEdit(p)}
                       className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline"
                     >

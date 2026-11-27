@@ -54,7 +54,7 @@ interface ProjectFormModalProps {
   /** Callback de cierre (modo controlado) */
   onClose?: () => void
   /** Callback tras crear/actualizar exitosamente */
-  onSuccess?: (projectId: string, projectName: string, companyId?: string) => void
+  onSuccess?: (projectId: string, projectName: string, companyId?: string, startDateISO?: string) => void
   /** Texto del botón trigger (solo en modo no controlado) */
   triggerLabel?: string
 }
@@ -278,9 +278,9 @@ export default function ProjectFormModal({
 
       closeModal()
       if (!isEditMode && result.project) {
-        onSuccess?.(result.project.id, result.project.name, payload.companyId)
+        onSuccess?.(result.project.id, result.project.name, payload.companyId, payload.startDate)
       } else if (isEditMode && projectToEdit) {
-        onSuccess?.(projectToEdit.id, projectToEdit.name, projectToEdit.companyId ?? undefined)
+        onSuccess?.(projectToEdit.id, projectToEdit.name, projectToEdit.companyId ?? undefined, payload.startDate)
       }
     })
   }
