@@ -2265,6 +2265,7 @@ function StudyPanel({
           longitudinalData={longitudinalData ?? null}
           somatometryData={(examData?.somatometryData as Record<string, unknown>) ?? null}
           eyeAcuityData={(examData?.eyeAcuityData as Record<string, unknown>) ?? null}
+          examModulo1={(examData?.physicalExamData?.modulo1 as Record<string, unknown>) ?? null}
           readonly={readonly}
         />
       )}

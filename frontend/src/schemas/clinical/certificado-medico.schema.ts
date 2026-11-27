@@ -92,6 +92,7 @@ export const CertificadoMedicoPayloadSchema = z.object({
   dictamen_laboral: z.enum(DICTAMEN_LABORAL_VALUES),
   dictamen_laboral_texto: freeText(2000, 3),
   antecedentes: ClinicalHistoryDataSchema.optional(),
+  modulo1: z.record(z.string(), z.any()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
 
@@ -119,6 +120,7 @@ export const CertificadoMedicoDraftSchema = z.object({
   dictamen_laboral: z.enum(DICTAMEN_LABORAL_VALUES).optional(),
   dictamen_laboral_texto: draftText(2000).optional(),
   antecedentes: ClinicalHistoryDataSchema.optional(),
+  modulo1: z.record(z.string(), z.any()).optional(),
   cerrada_at: z.string().datetime().optional(),
 })
 

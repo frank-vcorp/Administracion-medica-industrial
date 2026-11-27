@@ -134,6 +134,7 @@ export default function CertificadoMedicoEstudio({
   longitudinalData,
   somatometryData = null,
   eyeAcuityData = null,
+  examModulo1 = null,
   readonly = false,
 }: {
   eventId: string
@@ -145,6 +146,7 @@ export default function CertificadoMedicoEstudio({
   longitudinalData?: Record<string, unknown> | null
   somatometryData?: Record<string, unknown> | null
   eyeAcuityData?: Record<string, unknown> | null
+  examModulo1?: Record<string, unknown> | null
   readonly?: boolean
 }) {
   const { data: session } = useSession()
@@ -221,6 +223,24 @@ export default function CertificadoMedicoEstudio({
   const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
     deepMergeAntecedentes(longitudinalData, parsed?.antecedentes as Record<string, unknown> | undefined),
   )
+  const [modulo1, setModulo1] = useState<Record<string, any>>(() => {
+    if (parsed && typeof parsed === 'object' && 'modulo1' in parsed) {
+      const m1 = (parsed as any).modulo1
+      if (m1 && typeof m1 === 'object' && Object.keys(m1).length > 0) {
+        return m1
+      }
+    }
+    if (examModulo1 && typeof examModulo1 === 'object' && Object.keys(examModulo1).length > 0) {
+      return examModulo1
+    }
+    if (longitudinalData && typeof longitudinalData === 'object' && 'modulo1' in longitudinalData) {
+      const lm1 = (longitudinalData as any).modulo1
+      if (lm1 && typeof lm1 === 'object') {
+        return lm1
+      }
+    }
+    return {}
+  })
   const [adjetivosState, setAdjetivosState] = useState<OrganosAdjetivosState>(() =>
     buildDefaultOrganosAdjetivosState(),
   )
@@ -230,9 +250,6 @@ export default function CertificadoMedicoEstudio({
       : buildExploracionNarrativaDesdeAdjetivos(buildDefaultOrganosAdjetivosState(), longitudinalData),
   )
   const [showOrganosChecklist, setShowOrganosChecklist] = useState(true)
-  const [integracion, setIntegracion] = useState(parsed?.integracion_diagnostica ?? '')
-  const integracionManualRef = useRef(false)
-  const lastAutoIntegracionRef = useRef('')
   const [dictamen, setDictamen] = useState<DictamenLaboralValue>(
     parsed?.dictamen_laboral ?? 'APTO',
   )
@@ -265,7 +282,6 @@ export default function CertificadoMedicoEstudio({
       cancelled = true
     }
   }, [])
-
   const { imc, imcValue } = useMemo(
     () => computeBmi(signos.peso_kg, signos.talla_m),
     [signos.peso_kg, signos.talla_m],
@@ -285,22 +301,36 @@ export default function CertificadoMedicoEstudio({
     [antecedentes, signos, imc, complexion],
   )
 
+  const [integracion, setIntegracion] = useState(() => {
+    const saved = parsed?.integracion_diagnostica?.trim()
+    if (saved && !isIntegracionDiagnosticaPlaceholder(saved)) {
+      return saved
+    }
+    return integracionPropuesta.trim()
+  })
+
+  const lastPropuestaRef = useRef(integracionPropuesta.trim())
+
   useEffect(() => {
     if (formReadonly) return
-    if (integracionManualRef.current) return
     const propuesta = integracionPropuesta.trim()
     if (!propuesta) return
-    setIntegracion((current) => {
-      const trimmed = current.trim()
-      const lastAuto = lastAutoIntegracionRef.current
-      const replaceable =
-        isIntegracionDiagnosticaPlaceholder(trimmed) ||
-        (lastAuto !== '' && trimmed === lastAuto)
-      if (!replaceable || trimmed === propuesta) return current
-      lastAutoIntegracionRef.current = propuesta
-      return propuesta
-    })
-  }, [integracionPropuesta, formReadonly])
+
+    // Si los antecedentes o signos cambiaron, la propuesta cambia -> actualizar en tiempo real
+    if (lastPropuestaRef.current !== propuesta) {
+      lastPropuestaRef.current = propuesta
+      setIntegracion(propuesta)
+      return
+    }
+
+    // Si el texto actual está vacío o es un placeholder genérico, poblarlo con la propuesta
+    const currentTrimmed = integracion.trim()
+    if (!currentTrimmed || isIntegracionDiagnosticaPlaceholder(currentTrimmed)) {
+      if (currentTrimmed !== propuesta) {
+        setIntegracion(propuesta)
+      }
+    }
+  }, [integracionPropuesta, formReadonly, integracion])
 
   const resolvedMetadata = useMemo(
     () =>
@@ -341,6 +371,7 @@ export default function CertificadoMedicoEstudio({
       dictamen_laboral: dictamen,
       dictamen_laboral_texto: dictamenTexto.trim(),
       antecedentes: antecedentes as CertificadoMedicoPayload['antecedentes'],
+      modulo1,
       cerrada_at: cerradaAt || undefined,
     }
   }, [
@@ -353,6 +384,7 @@ export default function CertificadoMedicoEstudio({
     dictamen,
     dictamenTexto,
     antecedentes,
+    modulo1,
     cerradaAt,
   ])
 
@@ -513,8 +545,8 @@ export default function CertificadoMedicoEstudio({
             workerId={workerId}
             readonly={formReadonly}
             captureLayout="certificado"
-            modulo1={{}}
-            onModulo1Change={() => {}}
+            modulo1={modulo1}
+            onModulo1Change={setModulo1}
           />
         </section>
       )}
@@ -918,20 +950,6 @@ export default function CertificadoMedicoEstudio({
                   Diagnósticos clínicos encontrados. Clic en las píldoras para agregar rápidamente.
                 </p>
               </div>
-              {!formReadonly && integracionPropuesta.trim() && (
-                <button
-                  type="button"
-                  className="text-xs font-bold text-teal-700 underline self-start sm:self-auto cursor-pointer"
-                  onClick={() => {
-                    integracionManualRef.current = false
-                    const p = integracionPropuesta.trim()
-                    lastAutoIntegracionRef.current = p
-                    setIntegracion(p)
-                  }}
-                >
-                  ↺ Regenerar desde signos y antecedentes
-                </button>
-              )}
             </div>
 
             {/* Píldoras de diagnósticos frecuentes */}
@@ -950,7 +968,6 @@ export default function CertificadoMedicoEstudio({
                     key={diag}
                     type="button"
                     onClick={() => {
-                      integracionManualRef.current = true
                       setIntegracion((prev) => {
                         const trimmed = prev.trim()
                         if (!trimmed || trimmed.toLowerCase().includes('clínicamente sano')) {
@@ -973,7 +990,6 @@ export default function CertificadoMedicoEstudio({
               value={integracion}
               onChange={(v) => {
                 setMissingFieldsBanner('')
-                integracionManualRef.current = true
                 setIntegracion(v)
               }}
               placeholder="Ej. Clínicamente sano al momento de la valoración."
