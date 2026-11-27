@@ -1129,27 +1129,15 @@ Tandem: ${tandemVal}`
             prominent
             onBeforeOpen={handleDraftPreviewClick}
           />
-          {!formReadonly && (
-            <>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => runSave(false)}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-              >
-                Guardar borrador
-              </button>
-              {!cerradaAt && (
-                <button
-                  type="button"
-                  disabled={isPending}
-                  onClick={() => runSave(true)}
-                  className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-                >
-                  Cerrar certificado
-                </button>
-              )}
-            </>
+          {!formReadonly && !cerradaAt && (
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => runSave(true)}
+              className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
+            >
+              Cerrar certificado
+            </button>
           )}
           {saveMsg && <span className="text-xs text-emerald-700 font-medium">{saveMsg}</span>}
           {saveError && (
