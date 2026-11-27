@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
-import { saveCertificadoMedico, generateExploracionFisicaIA } from '@/actions/certificado-medico.actions'
+import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import {
   ClinicalSomaSignosVitalesCapture,
@@ -33,37 +33,17 @@ import {
   DEFAULT_DICTAMEN_LABORAL_TEXTO,
   DICTAMEN_LABORAL_VALUES,
   DICTAMEN_LABORAL_LABELS,
-  buildDefaultExploracionCertificado,
-  buildExploracionNarrativa,
-  buildExploracionPorSistemas,
   type CertificadoMedicoPayload,
   type DictamenLaboralValue,
 } from '@/schemas/clinical/certificado-medico.schema'
 import { visionFieldSelectOptions } from '@/lib/clinical/agudeza-visual'
 import { updateAgudezaVisual } from '@/actions/medical-exam.actions'
-
-interface OrganoItem {
-  id: string
-  organo: string
-  label: string
-}
-
-const CHECKLIST_ORGANOS: OrganoItem[] = [
-  { id: 'craneo', organo: 'Cráneo', label: 'Normocéfalo, sin hundimientos' },
-  { id: 'ojos', organo: 'Ojos', label: 'Pupilas isocóricas normorreflécticas' },
-  { id: 'oidos', organo: 'Oídos', label: 'Conductos auditivos permeables' },
-  { id: 'nariz', organo: 'Nariz', label: 'Mucosa y fosas normales' },
-  { id: 'boca', organo: 'Boca / Faringe', label: 'Mucosa hidratada, sin caries ni sarro' },
-  { id: 'cuello', organo: 'Cuello', label: 'Cilíndrico, sin adenopatías' },
-  { id: 'torax', organo: 'Tórax', label: 'Mesomórfico, amplexión y amplexación normales' },
-  { id: 'cardiopulmonar', organo: 'Cardiopulmonar', label: 'Auscultación cardiopulmonar normal' },
-  { id: 'abdomen', organo: 'Abdomen', label: 'Globoso, depresible, no doloroso' },
-  { id: 'extremidades', organo: 'Extremidades', label: 'Íntegras, eutróficas, sin edema' },
-  { id: 'fuerza', organo: 'Fuerza Daniels', label: 'Escala 5/5 bilateral' },
-  { id: 'neurologico', organo: 'Neurológico', label: 'Consciente, orientado en 4 esferas' },
-  { id: 'romberg_tandem', organo: 'Romberg y Tándem', label: 'Romberg negativo, marcha tándem normal' },
-  { id: 'piel', organo: 'Piel y anexos', label: 'Tegumentos (tatuajes / cicatrices)' },
-]
+import {
+  ORGANOS_ADJETIVOS,
+  buildDefaultOrganosAdjetivosState,
+  buildExploracionNarrativaDesdeAdjetivos,
+  type OrganosAdjetivosState,
+} from '@/lib/clinical/exploracion-adjetivos'
 
 type TabId = 'antecedentes' | 'vitales' | 'exploracion' | 'dictamen'
 
@@ -241,11 +221,15 @@ export default function CertificadoMedicoEstudio({
   const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
     deepMergeAntecedentes(longitudinalData, parsed?.antecedentes as Record<string, unknown> | undefined),
   )
+  const [adjetivosState, setAdjetivosState] = useState<OrganosAdjetivosState>(() =>
+    buildDefaultOrganosAdjetivosState(),
+  )
   const [exploracion, setExploracion] = useState(
     parsed?.exploracion_fisica && parsed.exploracion_fisica.trim() !== ''
       ? parsed.exploracion_fisica
-      : '',
+      : buildExploracionNarrativaDesdeAdjetivos(buildDefaultOrganosAdjetivosState(), longitudinalData),
   )
+  const [showOrganosChecklist, setShowOrganosChecklist] = useState(true)
   const [integracion, setIntegracion] = useState(parsed?.integracion_diagnostica ?? '')
   const integracionManualRef = useRef(false)
   const lastAutoIntegracionRef = useRef('')
@@ -255,58 +239,6 @@ export default function CertificadoMedicoEstudio({
   const [dictamenTexto, setDictamenTexto] = useState(
     parsed?.dictamen_laboral_texto ?? DEFAULT_DICTAMEN_LABORAL_TEXTO.APTO,
   )
-
-  const [organosState, setOrganosState] = useState<
-    Record<string, { estado: 'NORMAL' | 'ANORMAL'; detalle: string }>
-  >(() => {
-    const init: Record<string, { estado: 'NORMAL' | 'ANORMAL'; detalle: string }> = {}
-    for (const item of CHECKLIST_ORGANOS) {
-      init[item.id] = { estado: 'NORMAL', detalle: '' }
-    }
-    return init
-  })
-  const [showOrganosChecklist, setShowOrganosChecklist] = useState(true)
-  const [isGeneratingIA, setIsGeneratingIA] = useState(false)
-  const [iaFeedback, setIaFeedback] = useState<string | null>(null)
-
-  const handleOrganoChange = (id: string, estado: 'NORMAL' | 'ANORMAL', detalle: string) => {
-    setOrganosState((prev) => ({
-      ...prev,
-      [id]: { estado, detalle },
-    }))
-  }
-
-  const handleGenerateIA = async () => {
-    setIsGeneratingIA(true)
-    setIaFeedback(null)
-    try {
-      const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
-      const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
-      const espTattoos =
-        typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
-          ? np.tatuajes_especifique.trim()
-          : hasTattoos
-            ? 'presencia de tatuajes'
-            : undefined
-
-      const res = await generateExploracionFisicaIA({
-        organos: organosState,
-        tatuajes: espTattoos,
-        formato: 'sistemas',
-      })
-      if (res.ok && res.texto) {
-        setExploracion(res.texto)
-        setIaFeedback(
-          res.source === 'minimax'
-            ? '✨ Redactado con IA'
-            : '📋 Generado con plantilla clínica',
-        )
-        setTimeout(() => setIaFeedback(null), 5000)
-      }
-    } finally {
-      setIsGeneratingIA(false)
-    }
-  }
 
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
   const editorRole = session?.user?.role
@@ -809,122 +741,144 @@ export default function CertificadoMedicoEstudio({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
             <div>
               <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span>🩺</span> Exploración física (V)
+                <span>🩺</span> Exploración física (V) — Adjetivos por órgano
               </p>
               <p className="text-[11px] text-slate-500">
-                Usa el checklist de revisión por órganos para no omitir nada o carga una plantilla predeterminada.
+                Selecciona los adjetivos de cada órgano. El formato narrativo oficial se genera automáticamente en tiempo real.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  const s = buildExploracionPorSistemas(antecedentes)
-                  setExploracion(s)
+                  const def = buildDefaultOrganosAdjetivosState()
+                  setAdjetivosState(def)
+                  setExploracion(buildExploracionNarrativaDesdeAdjetivos(def, antecedentes))
                 }}
                 disabled={formReadonly}
-                className="px-2.5 py-1 text-[11px] font-semibold bg-teal-50 border border-teal-200 text-teal-800 rounded-lg hover:bg-teal-100 transition-colors cursor-pointer"
-                title="Carga la plantilla estructurada de la Dra. Erika"
+                className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors cursor-pointer"
+                title="Restablece todos los órganos a su valor normal estándar"
               >
-                📋 Formato por sistemas
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const s = buildExploracionNarrativa(antecedentes)
-                  setExploracion(s)
-                }}
-                disabled={formReadonly}
-                className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
-                title="Carga la plantilla en párrafo narrativo corrido"
-              >
-                📄 Formato narrativo
-              </button>
-              <button
-                type="button"
-                onClick={() => setExploracion('')}
-                disabled={formReadonly}
-                className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-red-600 rounded-lg cursor-pointer"
-              >
-                Limpiar
+                ↺ Restablecer todo normal
               </button>
             </div>
           </div>
 
-          {/* Checklist interactivo por órganos */}
+          {/* Selector de Adjetivos por Órgano */}
           <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <span>📋</span> Lista de verificación por órganos (Checklist)
+                <span>📋</span> Revisión por órganos (adjetivos clínicos)
               </span>
               <button
                 type="button"
                 onClick={() => setShowOrganosChecklist((v) => !v)}
                 className="text-[11px] font-semibold text-teal-700 hover:underline cursor-pointer"
               >
-                {showOrganosChecklist ? 'Ocultar checklist ▲' : 'Mostrar checklist ▼'}
+                {showOrganosChecklist ? 'Ocultar panel ▲' : 'Mostrar panel ▼'}
               </button>
             </div>
 
             {showOrganosChecklist && (
-              <div className="space-y-4 pt-1">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  {CHECKLIST_ORGANOS.map((item) => {
-                    const current = organosState[item.id] ?? { estado: 'NORMAL', detalle: '' }
-                    const isAnormal = current.estado === 'ANORMAL'
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-2.5 rounded-lg border transition-colors ${
-                          isAnormal ? 'bg-amber-50/80 border-amber-200' : 'bg-white border-slate-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <span className="text-xs font-semibold text-slate-800 block">
-                              {item.organo}
-                            </span>
-                            <span className="text-[10px] text-slate-500">{item.label}</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <label className="flex items-center gap-1 text-[11px] font-medium text-slate-700 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`organo_${item.id}`}
-                                checked={!isAnormal}
-                                onChange={() => handleOrganoChange(item.id, 'NORMAL', current.detalle)}
-                                disabled={formReadonly}
-                                className="text-teal-600 focus:ring-teal-500 h-3.5 w-3.5"
-                              />
-                              Normal
-                            </label>
-                            <label className="flex items-center gap-1 text-[11px] font-medium text-amber-700 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={`organo_${item.id}`}
-                                checked={isAnormal}
-                                onChange={() => handleOrganoChange(item.id, 'ANORMAL', current.detalle)}
-                                disabled={formReadonly}
-                                className="text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
-                              />
-                              Anormal
-                            </label>
-                          </div>
-                        </div>
-                        {isAnormal && (
-                          <input
-                            type="text"
-                            placeholder="Describir hallazgo anormal..."
-                            value={current.detalle}
-                            onChange={(e) => handleOrganoChange(item.id, 'ANORMAL', e.target.value)}
-                            disabled={formReadonly}
-                            className="mt-2 w-full text-xs bg-white border border-amber-300 rounded px-2.5 py-1 focus:ring-2 focus:ring-amber-500/20 outline-none"
-                          />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {ORGANOS_ADJETIVOS.map((organo) => {
+                  const st = adjetivosState[organo.id] ?? { selectedIds: [], notaLibre: '' }
+                  const hasAbnormal =
+                    organo.opciones.some(
+                      (opt) => !opt.esNormal && st.selectedIds.includes(opt.id),
+                    ) || Boolean(st.notaLibre?.trim())
+
+                  return (
+                    <div
+                      key={organo.id}
+                      className={`p-3 rounded-xl border transition-colors ${
+                        hasAbnormal ? 'bg-amber-50/70 border-amber-300' : 'bg-white border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <span>{organo.icono}</span>
+                          <span>{organo.nombre}</span>
+                        </span>
+                        {hasAbnormal && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                            Hallazgo
+                          </span>
                         )}
                       </div>
-                    )
-                  })}
-                </div>
+
+                      {/* Chips de adjetivos */}
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {organo.opciones.map((opt) => {
+                          const isSelected = st.selectedIds.includes(opt.id)
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              disabled={formReadonly}
+                              onClick={() => {
+                                let nextIds: string[]
+                                if (opt.esNormal) {
+                                  nextIds = [opt.id]
+                                } else {
+                                  const withoutNormal = st.selectedIds.filter(
+                                    (id) => !organo.opciones.find((o) => o.id === id)?.esNormal,
+                                  )
+                                  if (withoutNormal.includes(opt.id)) {
+                                    nextIds = withoutNormal.filter((id) => id !== opt.id)
+                                    if (nextIds.length === 0) {
+                                      const normalDef = organo.opciones.find((o) => o.esNormal)
+                                      if (normalDef) nextIds = [normalDef.id]
+                                    }
+                                  } else {
+                                    nextIds = [...withoutNormal, opt.id]
+                                  }
+                                }
+                                const nextState = {
+                                  ...adjetivosState,
+                                  [organo.id]: { ...st, selectedIds: nextIds },
+                                }
+                                setAdjetivosState(nextState)
+                                setExploracion(
+                                  buildExploracionNarrativaDesdeAdjetivos(nextState, antecedentes),
+                                )
+                              }}
+                              className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+                                isSelected
+                                  ? opt.esNormal
+                                    ? 'bg-teal-50 border-teal-500 text-teal-800 font-semibold'
+                                    : 'bg-amber-100 border-amber-500 text-amber-900 font-semibold shadow-xs'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                              }`}
+                            >
+                              {isSelected && <span>✓ </span>}
+                              {opt.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Campo opcional de observación específica */}
+                      <input
+                        type="text"
+                        placeholder="Anotar detalle u observación específica..."
+                        value={st.notaLibre}
+                        disabled={formReadonly}
+                        onChange={(e) => {
+                          const nextState = {
+                            ...adjetivosState,
+                            [organo.id]: { ...st, notaLibre: e.target.value },
+                          }
+                          setAdjetivosState(nextState)
+                          setExploracion(
+                            buildExploracionNarrativaDesdeAdjetivos(nextState, antecedentes),
+                          )
+                        }}
+                        className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none"
+                      />
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -932,44 +886,20 @@ export default function CertificadoMedicoEstudio({
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
               <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                Texto de Exploración física (se imprimirá en el PDF):
+                Texto narrativo de Exploración física (se imprimirá en el PDF):
               </label>
-              <div className="flex items-center gap-2">
-                {iaFeedback && (
-                  <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md animate-pulse">
-                    {iaFeedback}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleGenerateIA}
-                  disabled={formReadonly || isGeneratingIA}
-                  className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                  title="Sintetiza la exploración física usando IA"
-                >
-                  {isGeneratingIA ? (
-                    <>
-                      <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
-                      <span>Sintetizando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>✨</span>
-                      <span>Sintetizar con IA</span>
-                    </>
-                  )}
-                </button>
-                <span className="text-[10px] text-slate-400 hidden sm:inline">Puedes editar libremente</span>
-              </div>
+              <span className="text-[10px] text-slate-400">
+                Se actualiza automáticamente al tocar los adjetivos. Puedes editarlo libremente.
+              </span>
             </div>
             <ClinicalTextarea
-              className={`${inputClass} min-h-[180px] font-sans`}
+              className={`${inputClass} min-h-[190px] font-sans`}
               value={exploracion}
               onChange={(v) => {
                 setMissingFieldsBanner('')
                 setExploracion(v)
               }}
-              placeholder="Completa el checklist y presiona '✨ Sintetizar con IA' para generar la exploración automáticamente, o usa una plantilla arriba."
+              placeholder="El formato narrativo se genera automáticamente a partir de los adjetivos seleccionados arriba..."
               disabled={formReadonly}
             />
           </div>
