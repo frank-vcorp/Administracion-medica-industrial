@@ -27,7 +27,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from pypdf import PdfReader, PdfWriter
+from pypdf import PageObject, PdfReader, PdfWriter, Transformation
 from pypdf.annotations import Link
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
@@ -301,9 +301,29 @@ def _build_styles():
 # Helpers de tablas y cuadros de recomendaciones
 # ------------------------------------------------------------------
 
-def _crear_tabla_conteos(data: List[List[str]], col_widths: Optional[List[float]] = None):
+def _crear_tabla_conteos(data: List[List[Any]], col_widths: Optional[List[float]] = None):
     widths = col_widths or [4.2 * inch, 2.3 * inch]
-    tabla = Table(data, colWidths=widths)
+    wrap_style = ParagraphStyle(
+        "EbookTblWrap",
+        fontName=FONT_NAME,
+        fontSize=8.5,
+        leading=11,
+        textColor=SME_DARK,
+    )
+    formatted_rows: List[List[Any]] = []
+    for row_idx, row in enumerate(data):
+        if row_idx == 0:
+            formatted_rows.append(list(row))
+            continue
+        new_row: List[Any] = []
+        for col_idx, cell in enumerate(row):
+            if col_idx == 0 and isinstance(cell, str) and len(cell) > 42:
+                new_row.append(Paragraph(_esc(cell), wrap_style))
+            else:
+                new_row.append(cell)
+        formatted_rows.append(new_row)
+
+    tabla = Table(formatted_rows, colWidths=widths)
     tabla.setStyle(
         TableStyle(
             [
@@ -1617,6 +1637,21 @@ def _build_pdf_bytes(
     return buf.getvalue()
 
 
+def _normalize_page_to_letter(src_page: PageObject) -> PageObject:
+    """Escala y centra cualquier pagina adjunta (p.ej. A4) a tamano Carta (612x792 pt)."""
+    target_w, target_h = float(letter[0]), float(letter[1])
+    src_w = float(src_page.mediabox.width or target_w)
+    src_h = float(src_page.mediabox.height or target_h)
+    if abs(src_w - target_w) <= 2.0 and abs(src_h - target_h) <= 2.0:
+        return src_page
+    scale = min(target_w / max(src_w, 1.0), target_h / max(src_h, 1.0))
+    tx = (target_w - src_w * scale) / 2.0
+    ty = (target_h - src_h * scale) / 2.0
+    blank = PageObject.create_blank_page(width=target_w, height=target_h)
+    blank.merge_transformed_page(src_page, Transformation().scale(scale, scale).translate(tx, ty))
+    return blank
+
+
 def _compute_final_page_mapping(
     num_rl_pages: int,
     trabajadores_ordenados: List[Dict[str, Any]],
@@ -1801,7 +1836,7 @@ def generar_ebook(
             try:
                 sub_reader = PdfReader(BytesIO(pbytes))
                 for sub_pg in sub_reader.pages:
-                    writer.add_page(sub_pg)
+                    writer.add_page(_normalize_page_to_letter(sub_pg))
             except Exception as exc:
                 logger.warning("Error intercalando página PDF nativa: %s", exc)
 

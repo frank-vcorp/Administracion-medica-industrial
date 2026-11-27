@@ -140,6 +140,18 @@ def _norm_text(s: str) -> str:
     )
 
 
+def _clean_clinical_text(val: str) -> str:
+    if not val:
+        return ""
+    cleaned = re.sub(
+        r"^\s*IA\s+generada\s*\([^)]*\)\s*:\s*",
+        "",
+        val,
+        flags=re.IGNORECASE,
+    ).strip()
+    return cleaned
+
+
 def _calc_age(dob: Any) -> Optional[int]:
     if dob is None or _is_mock(dob):
         return None
@@ -299,18 +311,19 @@ def _audiometria(et: Any, validated_map: Dict[str, str]) -> Dict[str, Any]:
     oi = _as_dict(ed.get("oido_izquierdo"))
     res_oido = _as_dict(pred.get("resumen_por_oido"))
     res_bil = _as_dict(pred.get("resumen_bilateral"))
+    perdida = _as_dict(ed.get("porcentaje_perdida_por_oido"))
 
     pta_od = _num_val(od, "pta", "pta_visible")
     pta_oi = _num_val(oi, "pta", "pta_visible")
 
-    dx = (
+    dx = _clean_clinical_text(
         _str_val(rev, "doctorDiagnosis")
         or _str_val(ed, "dx", "diagnostico")
         or _str_val(res_bil, "clasificacion", "diagnostico")
         or _str_val(pred, "summary")
         or _str_val(et, "resultNotes")
-        or "N/A"
-    )
+        or ""
+    ) or "N/A"
     od_dx = (
         _str_val(ed, "oido_derecho_dx")
         or _str_val(res_oido, "od", "oido_derecho")
@@ -323,11 +336,17 @@ def _audiometria(et: Any, validated_map: Dict[str, str]) -> Dict[str, Any]:
         or _str_val(oi, "umbral", "diagnostico")
         or (f"PTA {pta_oi:.1f} dB" if pta_oi is not None else "N/A")
     )
-    hbc = (
-        _num_val(ed, "hbc_porcentaje", "hbc")
-        or _num_val(res_bil, "hbc_porcentaje", "hbc")
-        or _estimate_hbc_from_ptas(pta_od, pta_oi)
-    )
+    hbc = _num_val(ed, "hbc_porcentaje", "hbc")
+    if hbc is None:
+        hbc = _num_val(res_bil, "hbc_porcentaje", "hbc")
+    if hbc is None:
+        p_od = _num_val(perdida, "od")
+        p_oi = _num_val(perdida, "oi")
+        if p_od is not None and p_oi is not None:
+            better, worse = (p_od, p_oi) if p_od <= p_oi else (p_oi, p_od)
+            hbc = round((7.0 * better + worse) / 8.0, 2)
+    if hbc is None:
+        hbc = _estimate_hbc_from_ptas(pta_od, pta_oi)
     return {
         "dx": dx,
         "oidoDerecho": od_dx,
@@ -342,28 +361,37 @@ def _espirometria(et: Any, validated_map: Dict[str, str], default_tabaquismo: st
     ed, pred, rev, src_url, _ = _first_extracted(et)
     cal = _as_dict(ed.get("calidad"))
     pac = _as_dict(ed.get("paciente_detalle"))
-    fvc = _num_val(ed, "fvc", "fvc_percent_predicho")
+    fvc_l = _num_val(ed, "fvc")
+    fvc_pct = _num_val(ed, "fvc_percent_predicho")
     fev1_pct = _num_val(ed, "fev1_percent_predicho")
     ratio = _num_val(ed, "fev1_fvc_ratio")
 
-    patron = (
+    patron = _clean_clinical_text(
         _str_val(rev, "doctorDiagnosis")
         or _str_val(ed, "patron", "interpretacion")
         or _str_val(cal, "impresion_diagnostica_texto", "impresion_diagnostica")
         or _str_val(pred, "summary")
         or _str_val(et, "resultNotes")
     )
-    if not patron and ratio is not None and fvc is not None:
-        if ratio < 70:
+    if not patron and ratio is not None and (fvc_pct is not None or fvc_l is not None):
+        ratio_pct = ratio * 100.0 if ratio <= 1.5 else ratio
+        if ratio_pct < 70:
             patron = "PATRÓN ESPIROMÉTRICO OBSTRUCTIVO"
-        elif fvc < 80 or (fev1_pct is not None and fev1_pct < 80):
+        elif (fvc_pct is not None and fvc_pct < 80) or (fev1_pct is not None and fev1_pct < 80):
             patron = "PATRÓN ESPIROMÉTRICO RESTRICTIVO"
         else:
             patron = "NORMAL"
 
+    if fvc_l is not None and fvc_pct is not None and fvc_l <= 15.0 and fvc_pct > 15.0:
+        fvc_val: Any = f"{fvc_l:.2f} L ({int(round(fvc_pct))}%)"
+    elif fvc_l is not None:
+        fvc_val = fvc_l
+    else:
+        fvc_val = fvc_pct
+
     return {
         "patron": patron or "N/A",
-        "fvc": fvc,
+        "fvc": fvc_val,
         "tabaquismo": _str_val(ed, "tabaquismo") or _str_val(pac, "fuma") or default_tabaquismo,
         "fileUrl": src_url,
         "validatedPdfUrl": _validated_pdf(rev, validated_map),
@@ -374,14 +402,14 @@ def _rx_columna(et: Any, validated_map: Dict[str, str]) -> Dict[str, Any]:
     ed, pred, rev, src_url, _ = _first_extracted(et)
     hallazgos = _as_list(ed.get("hallazgos"))
     hallazgos_txt = "; ".join(str(h) for h in hallazgos if h).strip()
-    impresion = (
+    impresion = _clean_clinical_text(
         _str_val(rev, "doctorDiagnosis")
         or _str_val(ed, "impresion_diagnostica", "impresion")
         or hallazgos_txt
         or _str_val(pred, "summary")
         or _str_val(et, "resultNotes")
-        or "N/A"
-    )
+        or ""
+    ) or "N/A"
     return {
         "escoliosis": _num_val(ed, "escoliosis_grados", "escoliosis"),
         "lordosis": _num_val(ed, "lordosis_grados", "lordosis"),
@@ -399,14 +427,14 @@ def _rx_torax(et: Any, validated_map: Dict[str, str]) -> Dict[str, Any]:
     ed, pred, rev, src_url, _ = _first_extracted(et)
     hallazgos = _as_list(ed.get("hallazgos"))
     hallazgos_txt = "; ".join(str(h) for h in hallazgos if h).strip()
-    impresion = (
+    impresion = _clean_clinical_text(
         _str_val(rev, "doctorDiagnosis")
         or _str_val(ed, "impresion_diagnostica", "impresion")
         or hallazgos_txt
         or _str_val(pred, "summary")
         or _str_val(et, "resultNotes")
-        or "N/A"
-    )
+        or ""
+    ) or "N/A"
     return {
         "impresion": impresion,
         "fileUrl": src_url,
@@ -418,14 +446,14 @@ def _ecg(et: Any, validated_map: Dict[str, str]) -> Dict[str, Any]:
     ed, pred, rev, src_url, _ = _first_extracted(et)
     hallazgos = _as_list(ed.get("hallazgos"))
     hallazgos_txt = "; ".join(str(h) for h in hallazgos if h).strip()
-    impresion = (
+    impresion = _clean_clinical_text(
         _str_val(rev, "doctorDiagnosis")
         or _str_val(ed, "impresion_diagnostica", "impresion", "interpretacion", "diagnostico")
         or hallazgos_txt
         or _str_val(pred, "summary")
         or _str_val(et, "resultNotes")
-        or "N/A"
-    )
+        or ""
+    ) or "N/A"
     return {
         "impresion": impresion,
         "fileUrl": src_url,
@@ -433,9 +461,15 @@ def _ecg(et: Any, validated_map: Dict[str, str]) -> Dict[str, Any]:
     }
 
 
-def _campimetria(et: Any, validated_map: Dict[str, str], eye_acuity: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _campimetria(
+    et: Any,
+    validated_map: Dict[str, str],
+    eye_acuity: Optional[Dict[str, Any]] = None,
+    phys: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     ed, pred, rev, src_url, _ = _first_extracted(et)
     eye = _as_dict(eye_acuity)
+    phys_d = _as_dict(phys)
     ag_res = _as_dict(ed.get("agudeza_resumen"))
 
     vl_od = _str_val(ed, "vision_lejana_od") or _str_val(eye, "vision_lejana_od")
@@ -443,14 +477,21 @@ def _campimetria(et: Any, validated_map: Dict[str, str], eye_acuity: Optional[Di
     vlc_od = _str_val(ed, "lejana_corregida_od") or _str_val(eye, "lejana_corregida_od")
     vlc_oi = _str_val(ed, "lejana_corregida_oi") or _str_val(eye, "lejana_corregida_oi")
 
-    ag_av = (
+    raw_ag = (
         _str_val(ed, "agudeza_visual", "agudezaVisual", "agudeza_resumen")
         or _str_val(ag_res, "resumen", "diagnostico")
+        or _str_val(phys_d, "agudeza_visual_resumen")
     )
+    if raw_ag.upper() in ("", "N/A", "NA", "PENDIENTE", "POR DEFINIR", "SIN DATO"):
+        raw_ag = ""
+
+    ag_av = raw_ag
     if not ag_av and (vl_od or vl_oi):
         ag_av = f"VL {vl_od or '—'} OD / {vl_oi or '—'} OI"
         if vlc_od or vlc_oi:
             ag_av += f" (Corregida {vlc_od or '—'} / {vlc_oi or '—'})"
+    if not ag_av:
+        ag_av = _str_val(ed, "agudeza_resumen") or "N/A"
 
     campos = _str_val(ed, "campos_visuales", "camposVisuales") or _str_val(eye, "campimetria")
     if not campos:
@@ -595,6 +636,7 @@ def _build_examen_medico(event: Any, rev: Any = None, validated_map: Optional[Di
 def project_to_snapshot(
     project: Any,
     validated_pdf_by_review: Optional[Dict[str, str]] = None,
+    mobile_unit_override: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Convierte un objeto Project de Prisma (incluyendo relaciones) en el
@@ -603,7 +645,7 @@ def project_to_snapshot(
     validated_map = validated_pdf_by_review or {}
     trabajadores_raw = _as_list(_attr(project, "workers", None))
     company = _attr(project, "company", None)
-    mobile_unit = _attr(project, "mobileUnit", None)
+    mobile_unit = mobile_unit_override or _attr(project, "mobileUnit", None)
 
     empresa = _str_val(company, "name")
     empresa_legal = _str_val(company, "legalName") or empresa
@@ -705,7 +747,7 @@ def project_to_snapshot(
                     _add_doc("Electrocardiograma (Validado)", parsed_ecg.get("validatedPdfUrl"))
                     _add_doc("Electrocardiograma (Archivo)", parsed_ecg.get("fileUrl"))
                 elif "campimetr" in tn or "agudeza" in tn or "visual" in tn or "campimetr" in stype_norm:
-                    parsed_cam = _campimetria(et, validated_map, eye_acuity)
+                    parsed_cam = _campimetria(et, validated_map, eye_acuity, phys)
                     estudios["campimetria"] = _merge_study_dict(estudios.get("campimetria") or {}, parsed_cam)
                     _add_doc("Campimetría / Visual (Validada)", parsed_cam.get("validatedPdfUrl"))
                     _add_doc("Campimetría / Visual (Archivo)", parsed_cam.get("fileUrl"))
@@ -903,6 +945,32 @@ def _collect_review_ids(project: Any) -> List[str]:
     return ids
 
 
+async def _fetch_project_mobile_unit(prisma_client: Any, project_id: str) -> Optional[Dict[str, str]]:
+    """
+    backend/prisma/schema.prisma puede no declarar Project.mobileUnit; consulta por SQL crudo
+    las columnas reales name y plate en mobile_units.
+    """
+    if not project_id or not hasattr(prisma_client, "query_raw"):
+        return None
+    try:
+        res = prisma_client.query_raw(
+            'SELECT mu.name, mu.plate FROM projects p LEFT JOIN mobile_units mu ON p."mobileUnitId" = mu.id WHERE p.id = $1',
+            project_id,
+        )
+        rows = await res if inspect.isawaitable(res) else res
+        if isinstance(rows, list) and rows:
+            r = rows[0]
+            if isinstance(r, dict) and r.get("name"):
+                return {
+                    "name": str(r.get("name") or ""),
+                    "plate": str(r.get("plate") or ""),
+                }
+        return None
+    except Exception as exc:
+        logger.debug("_fetch_project_mobile_unit omitted: %s", exc)
+        return None
+
+
 async def run_generation_job(
     *,
     prisma_client: Any,
@@ -924,7 +992,7 @@ async def run_generation_job(
 
         rich_include = {
             "company": True,
-            "mobileUnit": True,
+            "branch": True,
             "workers": {
                 "include": {
                     "worker": {
@@ -963,7 +1031,8 @@ async def run_generation_job(
                 where={"id": project_id},
                 include=rich_include,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("rich_include fallback para project=%s: %s", project_id, exc)
             project = await prisma_client.project.find_unique(
                 where={"id": project_id},
                 include={
@@ -972,7 +1041,11 @@ async def run_generation_job(
                         "include": {
                             "worker": True,
                             "event": {
-                                "include": {"eventTests": True},
+                                "include": {
+                                    "exam": True,
+                                    "verdict": True,
+                                    "eventTests": True,
+                                },
                             },
                         },
                     },
@@ -984,8 +1057,13 @@ async def run_generation_job(
 
         review_ids = _collect_review_ids(project)
         validated_map = await _fetch_validated_pdfs_by_review(prisma_client, review_ids)
+        mobile_unit_override = await _fetch_project_mobile_unit(prisma_client, project_id)
 
-        snapshot = project_to_snapshot(project, validated_pdf_by_review=validated_map)
+        snapshot = project_to_snapshot(
+            project,
+            validated_pdf_by_review=validated_map,
+            mobile_unit_override=mobile_unit_override,
+        )
         paths = generar_reporte_masivo(snapshot, project_id, report_id, format)
 
         await prisma_client.projectreport.update(

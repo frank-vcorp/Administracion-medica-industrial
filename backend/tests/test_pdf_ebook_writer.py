@@ -340,14 +340,15 @@ def test_ebook_includes_8_estadisticas(project_completo, tmp_path):
 
 
 def test_ebook_interleaves_worker_native_pdfs_in_order_and_sets_bookmarks(tmp_path):
-    """Intercala los PDFs nativos de cada trabajador inmediatamente tras su sección y crea bookmarks."""
+    """Intercala los PDFs nativos de cada trabajador en Carta (612x792) tras su sección y crea bookmarks."""
+    from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas as rl_canvas
 
     native_pdf_path = tmp_path / "dictamen_w1.pdf"
-    c = rl_canvas.Canvas(str(native_pdf_path))
-    c.drawString(72, 720, "DICTAMEN NATIVO AGUILAR PAG 1")
+    c = rl_canvas.Canvas(str(native_pdf_path), pagesize=A4)
+    c.drawString(72, 760, "DICTAMEN NATIVO AGUILAR PAG 1")
     c.showPage()
-    c.drawString(72, 720, "DICTAMEN NATIVO AGUILAR PAG 2")
+    c.drawString(72, 760, "DICTAMEN NATIVO AGUILAR PAG 2")
     c.showPage()
     c.save()
     native_bytes = native_pdf_path.read_bytes()
@@ -420,3 +421,6 @@ def test_ebook_interleaves_worker_native_pdfs_in_order_and_sets_bookmarks(tmp_pa
         f"El PDF nativo de III.1 debe intercalarse antes de III.2 (p1={p_native_1}, p2={p_native_2}, zapata={p_zapata})"
     )
     assert len(reader.outline) >= 3
+    for pg in reader.pages:
+        assert abs(float(pg.mediabox.width) - 612.0) <= 2.0
+        assert abs(float(pg.mediabox.height) - 792.0) <= 2.0

@@ -144,11 +144,33 @@ def calcular_trauma_acustico_por_area(project: Dict[str, Any]) -> List[Dict[str,
     return [{"area": a, "conteo": c} for a, c in sorted(mapa.items())]
 
 
+def _clasificar_patron_espirometrico(raw: Any) -> str:
+    """Normaliza descripciones extensas a categorias concisas para tablas/graficas."""
+    if not _has_value(raw):
+        return "N/A"
+    clean = str(raw).strip()
+    up = clean.upper()
+    if len(clean) <= 32 and "IA GENERADA" not in up:
+        return clean
+    if "MIXTO" in up:
+        return "PATRÓN MIXTO"
+    if "RESTRICTIV" in up:
+        return "PATRÓN RESTRICTIVO"
+    if "OBSTRUCTIV" in up:
+        return "PATRÓN OBSTRUCTIVO"
+    if "NO CONCLUYENTE" in up or "NO CUMPLE" in up or "REPETI" in up:
+        return "NO CONCLUYENTE / REPETIR"
+    if "NORMAL" in up or "CONSERVAD" in up:
+        return "NORMAL"
+    return clean[:36].rstrip() + "..." if len(clean) > 36 else clean
+
+
 def calcular_espirometria_distribucion(project: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Distribucion del patron espirometrico."""
     mapa: Dict[str, int] = {}
     for w in project.get("trabajadores", []):
-        patron = (w.get("espirometria") or {}).get("patron") or "N/A"
+        patron_raw = (w.get("espirometria") or {}).get("patron") or "N/A"
+        patron = _clasificar_patron_espirometrico(patron_raw)
         mapa[patron] = mapa.get(patron, 0) + 1
     return [{"patron": p, "conteo": c} for p, c in sorted(mapa.items())]
 
