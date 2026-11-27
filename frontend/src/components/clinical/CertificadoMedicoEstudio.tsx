@@ -355,9 +355,7 @@ export default function CertificadoMedicoEstudio({
 
   const onDictamenChange = (value: DictamenLaboralValue) => {
     setDictamen(value)
-    if (!dictamenTexto.trim() || dictamenTexto === DEFAULT_DICTAMEN_LABORAL_TEXTO[dictamen]) {
-      setDictamenTexto(DEFAULT_DICTAMEN_LABORAL_TEXTO[value])
-    }
+    setDictamenTexto(DEFAULT_DICTAMEN_LABORAL_TEXTO[value] || '')
   }
 
   const buildPayload = useCallback((): CertificadoMedicoPayload => {
@@ -369,7 +367,9 @@ export default function CertificadoMedicoEstudio({
       exploracion_fisica: exploracion.trim(),
       integracion_diagnostica: integracion.trim(),
       dictamen_laboral: dictamen,
-      dictamen_laboral_texto: dictamenTexto.trim(),
+      dictamen_laboral_texto:
+        (dictamen === 'OTRO' ? dictamenTexto.trim() : DEFAULT_DICTAMEN_LABORAL_TEXTO[dictamen]) ||
+        DEFAULT_DICTAMEN_LABORAL_TEXTO.APTO,
       antecedentes: antecedentes as CertificadoMedicoPayload['antecedentes'],
       modulo1,
       cerrada_at: cerradaAt || undefined,
@@ -1013,21 +1013,21 @@ export default function CertificadoMedicoEstudio({
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-800 block mb-1">
-              Frase del dictamen para el PDF
-            </label>
-            <ClinicalTextarea
-              className={`${inputClass} min-h-[72px]`}
-              value={dictamenTexto}
-              onChange={(v) => {
-                setMissingFieldsBanner('')
-                setDictamenTexto(v)
-              }}
-              disabled={formReadonly}
-            />
+            {dictamen === 'OTRO' && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={dictamenTexto}
+                  onChange={(e) => {
+                    setMissingFieldsBanner('')
+                    setDictamenTexto(e.target.value)
+                  }}
+                  placeholder="Especifica el dictamen para el PDF..."
+                  disabled={formReadonly}
+                />
+              </div>
+            )}
           </div>
           {!isDraft && (
             <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
