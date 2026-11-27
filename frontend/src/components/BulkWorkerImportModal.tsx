@@ -11,13 +11,16 @@
  */
 
 import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
+  ExternalLink,
   FileSpreadsheet,
   Search,
+  UserPlus,
   XCircle,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
@@ -429,7 +432,11 @@ export default function BulkWorkerImportModal({
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}
         >
-          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <div
+            className={`w-full ${
+              captureMode === 'quick' && step === 'upload' ? 'max-w-4xl' : 'max-w-2xl'
+            } bg-white rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col transition-all`}
+          >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 flex-shrink-0">
               <div>
@@ -454,27 +461,27 @@ export default function BulkWorkerImportModal({
               {/* ── PASO 1: Seleccionar Proyecto ── */}
               {step === 'project' && (
                 <div className="space-y-4">
-                  {!lockProjectContext && (
-                    <div>
-                      <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500">Modo de captura</p>
-                      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
-                        <button
-                          type="button"
-                          onClick={() => setCaptureMode('excel')}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${captureMode === 'excel' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-                        >
-                          Carga masiva Excel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCaptureMode('quick')}
-                          className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${captureMode === 'quick' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
-                        >
-                          Alta rápida hoy
-                        </button>
-                      </div>
+                  <div>
+                    <p className="mb-2 text-xs font-semibold tracking-wide text-slate-500">Modo de captura</p>
+                    <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+                      <button
+                        type="button"
+                        onClick={() => setCaptureMode('excel')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${captureMode === 'excel' ? 'bg-emerald-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        Carga masiva Excel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCaptureMode('quick')}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${captureMode === 'quick' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Captura manual rápida (1–20)
+                      </button>
                     </div>
-                  )}
+                  </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -559,6 +566,45 @@ export default function BulkWorkerImportModal({
                 <div className="space-y-4">
                   <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-700">
                     Proyecto: <strong>{selectedProject?.name}</strong> — {selectedProject?.company.name}
+                  </div>
+
+                  {/* Selector rápido entre carga Excel y captura manual fila por fila */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold tracking-wide text-slate-500">
+                      Método de registro
+                    </span>
+                    <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setParseError(null)
+                          setCaptureMode('excel')
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                          captureMode === 'excel'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                        }`}
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5" />
+                        Subir archivo Excel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setParseError(null)
+                          setCaptureMode('quick')
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                          captureMode === 'quick'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'text-slate-600 hover:bg-white hover:text-slate-900'
+                        }`}
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                        Captura manual rápida (1–20)
+                      </button>
+                    </div>
                   </div>
 
                   {captureMode === 'excel' ? (
@@ -830,6 +876,17 @@ export default function BulkWorkerImportModal({
                   >
                     {isPending ? 'Registrando...' : `Registrar ${quickValidCount} trabajador(es)`}
                   </button>
+                )}
+
+                {step === 'result' && selectedProjectId && (
+                  <Link
+                    href={`/projects/${selectedProjectId}`}
+                    onClick={closeModal}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 bg-[#592c82] hover:bg-[#49226b] text-white text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    <span>Ir al proyecto</span>
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
                 )}
               </div>
             </div>

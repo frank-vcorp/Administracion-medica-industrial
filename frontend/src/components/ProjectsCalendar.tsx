@@ -328,6 +328,12 @@ export default function ProjectsCalendar({
     setBulkImportOpen(true)
   }
 
+  function handleStartQuickIntakeForCreatedProject() {
+    setShowBulkImportBanner(false)
+    setBulkImportMode('quick')
+    setBulkImportOpen(true)
+  }
+
   function handleStartQuickIntake() {
     setBulkImportContext(null)
     setShowBulkImportBanner(false)
@@ -387,9 +393,9 @@ export default function ProjectsCalendar({
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <p className="text-sm font-bold text-emerald-800">Proyecto creado: {bulkImportContext.projectName}</p>
-                <p className="text-xs font-medium text-emerald-700">Puedes iniciar la alta masiva inmediata con empresa y proyecto preseleccionados.</p>
+                <p className="text-xs font-medium text-emerald-700">Elige cómo cargar a los trabajadores con empresa y proyecto preseleccionados.</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -402,11 +408,25 @@ export default function ProjectsCalendar({
                 </button>
                 <button
                   type="button"
+                  onClick={handleStartQuickIntakeForCreatedProject}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                >
+                  Captura manual (1–20)
+                </button>
+                <button
+                  type="button"
                   onClick={handleStartBulkImport}
                   className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                 >
-                  Iniciar alta masiva
+                  Subir Excel
                 </button>
+                <Link
+                  href={`/projects/${bulkImportContext.projectId}`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-[#592c82]/30 bg-white px-3 py-2 text-xs font-semibold text-[#592c82] transition-colors hover:bg-[#592c82]/5"
+                >
+                  Abrir proyecto
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
               </div>
             </div>
           </div>
