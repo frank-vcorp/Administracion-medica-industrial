@@ -16,9 +16,12 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 
 from app.services.reports.conteos import (
+    calcular_aptitud_distribucion,
     calcular_escoliosis_distribucion,
     calcular_espirometria_distribucion,
     calcular_hbc_por_rango,
+    calcular_imc_distribucion,
+    calcular_presion_arterial_distribucion,
     calcular_qs6_niveles,
     calcular_trauma_acustico_por_area,
 )
@@ -44,6 +47,7 @@ def _fila_concentrado(w: Dict[str, Any]) -> List[Any]:
     rxt = w.get("rxTorax") or {}
     ecg = w.get("ecg") or {}
     c = w.get("campimetria") or {}
+    em = w.get("examenMedico") or {}
     return [
         _str_or_na(w.get("folio")),
         _str_or_na(w.get("nombre")),
@@ -67,6 +71,13 @@ def _fila_concentrado(w: Dict[str, Any]) -> List[Any]:
         _str_or_na(rxc.get("basculacion")),
         _str_or_na(rxc.get("impresion")),
         _str_or_na(rxt.get("impresion")),
+        _str_or_na(em.get("peso")),
+        _str_or_na(em.get("talla")),
+        _str_or_na(em.get("imc")),
+        _str_or_na(em.get("presionArterial")),
+        _str_or_na(em.get("saludBucal")),
+        _str_or_na(em.get("aptitud")),
+        _str_or_na(em.get("diagnostico")),
     ]
 
 
@@ -93,6 +104,13 @@ CONCENTRADO_HEADERS = [
     "BASCULACIÓN PELVICA (cms)",
     "IMPRESIÓN DIAGNOSTICA COLUMNA",
     "IMPRESIÓN DIAGNOSTICA TORAX",
+    "PESO (kg)",
+    "TALLA (m)",
+    "IMC",
+    "TA",
+    "SALUD BUCAL",
+    "APTITUD",
+    "DIAGNÓSTICO GENERAL",
 ]
 
 
@@ -150,6 +168,17 @@ def _estilo_header(ws, n_cols: int) -> None:
         cell.alignment = CENTER
 
 
+def _autofit_columns(ws) -> None:
+    for col in ws.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            val = "" if cell.value is None else str(cell.value)
+            if len(val) > max_len:
+                max_len = len(val)
+        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 48)
+
+
 def generar_xlsx(project: Dict[str, Any], output_path: str) -> str:
     """
     Genera el archivo XLSX de 3 hojas en `output_path`.
@@ -165,6 +194,7 @@ def generar_xlsx(project: Dict[str, Any], output_path: str) -> str:
     for w in project.get("trabajadores", []):
         ws1.append(_fila_concentrado(w))
     _estilo_header(ws1, len(CONCENTRADO_HEADERS))
+    _autofit_columns(ws1)
 
     # Hoja 2: LABORATORIOS
     ws2 = wb.create_sheet("LABORATORIOS")
@@ -172,6 +202,7 @@ def generar_xlsx(project: Dict[str, Any], output_path: str) -> str:
     for w in project.get("trabajadores", []):
         ws2.append(_fila_laboratorio(w))
     _estilo_header(ws2, len(LABORATORIOS_HEADERS))
+    _autofit_columns(ws2)
 
     # Hoja 3: GRAFICAS (agregados)
     ws3 = wb.create_sheet("GRAFICAS")
@@ -180,6 +211,9 @@ def generar_xlsx(project: Dict[str, Any], output_path: str) -> str:
     espiro = calcular_espirometria_distribucion(project)
     escolio = calcular_escoliosis_distribucion(project)
     qs6 = calcular_qs6_niveles(project)
+    imc = calcular_imc_distribucion(project)
+    pa = calcular_presion_arterial_distribucion(project)
+    apt = calcular_aptitud_distribucion(project)
 
     rows: List[List[Any]] = []
     rows.append(["TRAUMA ACUSTICO POR AREA"])
@@ -221,9 +255,32 @@ def generar_xlsx(project: Dict[str, Any], output_path: str) -> str:
     rows.append(["Normal (<150 mg/dL)", qs6["trigliceridos"]["normal"]])
     rows.append(["Limite (150-199 mg/dL)", qs6["trigliceridos"]["limite"]])
     rows.append(["Alto (>=200 mg/dL)", qs6["trigliceridos"]["alto"]])
+    rows.append([])
+    rows.append(["ESTADO NUTRICIONAL (IMC)"])
+    rows.append(["CATEGORIA", "TRABAJADORES"])
+    rows.append(["Bajo Peso (<18.5)", imc["bajoPeso"]])
+    rows.append(["Normal (18.5-24.9)", imc["normal"]])
+    rows.append(["Sobrepeso (25-29.9)", imc["sobrepeso"]])
+    rows.append(["Obesidad I (30-34.9)", imc["obesidadI"]])
+    rows.append(["Obesidad II (35-39.9)", imc["obesidadII"]])
+    rows.append(["Obesidad III (>=40)", imc["obesidadIII"]])
+    rows.append([])
+    rows.append(["PRESION ARTERIAL"])
+    rows.append(["CATEGORIA", "TRABAJADORES"])
+    rows.append(["Normal (<120/80)", pa["normal"]])
+    rows.append(["Normal Alta (120-129/<80)", pa["normalAlta"]])
+    rows.append(["Elevada (>=130 o >=80)", pa["elevada"]])
+    rows.append([])
+    rows.append(["APTITUD LABORAL"])
+    rows.append(["DICTAMEN", "TRABAJADORES"])
+    rows.append(["Apto", apt["apto"]])
+    rows.append(["Apto con restricciones", apt["conRestricciones"]])
+    rows.append(["No Apto", apt["noApto"]])
+    rows.append(["Pendiente", apt["pendiente"]])
 
     for row in rows:
         ws3.append(row)
+    _autofit_columns(ws3)
 
     wb.save(output_path)
     return output_path

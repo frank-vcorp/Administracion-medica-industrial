@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from app.services.reports.massive_report import (
     UPLOAD_DIR,
@@ -145,17 +145,32 @@ async def download_report(
     if not full_path.startswith(upload_abs + os.sep) and full_path != upload_abs:
         raise HTTPException(status_code=400, detail="Ruta invalida")
 
-    if not os.path.isfile(full_path):
-        raise HTTPException(status_code=404, detail="Archivo fisico no encontrado")
-
     media_type = (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         if format == "xlsx"
         else "application/pdf"
     )
     filename = os.path.basename(full_path)
-    return FileResponse(
-        path=full_path,
-        media_type=media_type,
-        filename=filename,
-    )
+
+    if os.path.isfile(full_path):
+        return FileResponse(
+            path=full_path,
+            media_type=media_type,
+            filename=filename,
+        )
+
+    # Fallback S3 cuando el archivo se generó en otro deploy/contenedor Railway.
+    try:
+        from app.main import _download_file_from_s3
+        s3_bytes = _download_file_from_s3(rel_path)
+    except Exception:
+        s3_bytes = None
+
+    if s3_bytes:
+        return Response(
+            content=s3_bytes,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    raise HTTPException(status_code=404, detail="Archivo fisico no encontrado")

@@ -337,3 +337,86 @@ def test_ebook_includes_8_estadisticas(project_completo, tmp_path):
         assert sub in full_text, (
             f"Falta subsección de estadísticas en el PDF: {sub!r}"
         )
+
+
+def test_ebook_interleaves_worker_native_pdfs_in_order_and_sets_bookmarks(tmp_path):
+    """Intercala los PDFs nativos de cada trabajador inmediatamente tras su sección y crea bookmarks."""
+    from reportlab.pdfgen import canvas as rl_canvas
+
+    native_pdf_path = tmp_path / "dictamen_w1.pdf"
+    c = rl_canvas.Canvas(str(native_pdf_path))
+    c.drawString(72, 720, "DICTAMEN NATIVO AGUILAR PAG 1")
+    c.showPage()
+    c.drawString(72, 720, "DICTAMEN NATIVO AGUILAR PAG 2")
+    c.showPage()
+    c.save()
+    native_bytes = native_pdf_path.read_bytes()
+
+    class _DummyFetcher:
+        def fetch(self, _url):
+            return native_bytes
+
+    project = {
+        "id": "test-interleave",
+        "empresa": "SYSTRON INDUSTRIAL",
+        "empresaLegal": "SYSTRON INDUSTRIAL S.A. DE C.V.",
+        "unidadMovil": "Unidad Móvil 1 (ABC-123)",
+        "fecha": "2026-11-26",
+        "trabajadores": [
+            {
+                "folio": "200",
+                "nombre": "ZAPATA GOMEZ LUIS",
+                "sexo": "M",
+                "edad": 35,
+                "area": "MANTENIMIENTO",
+                "antiguedad": "4 ANOS",
+                "examenMedico": {
+                    "peso": 75,
+                    "talla": 175,
+                    "imc": 24.5,
+                    "presionArterial": "118/78",
+                    "aptitud": "APTO",
+                    "diagnostico": "SANO",
+                },
+                "documentosPdf": [],
+            },
+            {
+                "folio": "100",
+                "nombre": "AGUILAR PEREZ JUAN",
+                "sexo": "M",
+                "edad": 31,
+                "area": "SOLDADURA",
+                "antiguedad": "2 ANOS",
+                "audiometria": {"dx": "NORMAL", "oidoDerecho": "Normal", "oidoIzquierdo": "Normal", "hbc": 1.0},
+                "documentosPdf": [
+                    {
+                        "titulo": "Dictamen Médico Laboral",
+                        "url": "/uploads/dictamen_w1.pdf",
+                        "esDictamen": True,
+                    }
+                ],
+            },
+        ],
+    }
+
+    out = tmp_path / "ebook_interleaved.pdf"
+    generar_ebook(project, str(out), image_fetcher_instance=_DummyFetcher())
+
+    reader = PdfReader(str(out))
+    page_texts = [p.extract_text() or "" for p in reader.pages]
+    joined = "\n".join(page_texts)
+
+    assert "[ LOGO SOLUCIONES ]" not in joined
+    assert "Diagnóstico Situacional" in joined
+
+    p_native_1 = next(i for i, t in enumerate(page_texts) if "DICTAMEN NATIVO AGUILAR PAG 1" in t)
+    p_native_2 = next(i for i, t in enumerate(page_texts) if "DICTAMEN NATIVO AGUILAR PAG 2" in t)
+    p_zapata = next(
+        i for i in range(2, len(page_texts))
+        if "III.2" in page_texts[i] and "ZAPATA GOMEZ LUIS" in page_texts[i]
+    )
+
+    assert p_native_1 < p_native_2 < p_zapata, (
+        f"El PDF nativo de III.1 debe intercalarse antes de III.2 (p1={p_native_1}, p2={p_native_2}, zapata={p_zapata})"
+    )
+    assert len(reader.outline) >= 3

@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react'
 import { ProjectStatus } from '@prisma/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { ExternalLink, Wrench } from 'lucide-react'
 import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
 import ProjectFormModal, { ProjectForEdit } from '@/components/ProjectFormModal'
 import ProjectsTable from '@/components/ProjectsTable'
@@ -559,7 +560,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                                 <span>{formatRange(project.startDate, project.endDate)}</span>
                               </div>
                             </button>
-                            {/* ARCH-20260804-03 — Fase 4 / §8.3: badge 🔧 Mant. con Link al calendario de la unidad. */}
+                            {/* ARCH-20260804-03 — Fase 4 / §8.3: badge Mant. con Link al calendario de la unidad. */}
                             {maintenancesInRange.length > 0 && unitId && (
                               <div className="mt-2">
                                 <Link
@@ -568,18 +569,27 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                                   className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-violet-700 transition-colors hover:bg-violet-100"
                                   onClick={(event) => event.stopPropagation()}
                                 >
-                                  🔧 {maintenancesInRange.length} mant.
+                                  <Wrench className="h-3 w-3 shrink-0" />
+                                  {maintenancesInRange.length} mant.
                                 </Link>
                               </div>
                             )}
-                            <div className="mt-2 border-t border-white/70 pt-2">
+                            <div className="mt-2 grid grid-cols-2 gap-1.5 border-t border-white/70 pt-2">
                               <button
                                 type="button"
                                 onClick={() => setReceptionProjectId(project.id)}
-                                className="w-full rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold tracking-[0.14em] text-slate-700 hover:bg-white"
+                                className="rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold tracking-[0.08em] text-slate-700 hover:bg-white"
                               >
                                 Recepción
                               </button>
+                              <Link
+                                href={`/projects/${project.id}`}
+                                onClick={(event) => event.stopPropagation()}
+                                className="inline-flex items-center justify-center gap-1 rounded-lg border border-[#592c82]/20 bg-white/90 px-2 py-1.5 text-[10px] font-bold text-[#592c82] hover:bg-white"
+                              >
+                                Entregables
+                                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                              </Link>
                             </div>
                           </div>
                           )
@@ -619,19 +629,28 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
                   {selectedReceptionProject.company?.name ?? '— sin empresa —'} · {getUnitLabel(selectedReceptionProject)}
                 </p>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center">
-                  <p className="text-[10px] font-black tracking-[0.14em] text-slate-400">Pendientes</p>
-                  <p className="text-lg font-black text-slate-700">{receptionMetrics.pending}</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center">
+                    <p className="text-[10px] font-black tracking-[0.14em] text-slate-400">Pendientes</p>
+                    <p className="text-lg font-black text-slate-700">{receptionMetrics.pending}</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center">
+                    <p className="text-[10px] font-black tracking-[0.14em] text-amber-500">Llegados</p>
+                    <p className="text-lg font-black text-amber-700">{receptionMetrics.arrived}</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">
+                    <p className="text-[10px] font-black tracking-[0.14em] text-emerald-500">Ingresados</p>
+                    <p className="text-lg font-black text-emerald-700">{receptionMetrics.checkedIn}</p>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center">
-                  <p className="text-[10px] font-black tracking-[0.14em] text-amber-500">Llegados</p>
-                  <p className="text-lg font-black text-amber-700">{receptionMetrics.arrived}</p>
-                </div>
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">
-                  <p className="text-[10px] font-black tracking-[0.14em] text-emerald-500">Ingresados</p>
-                  <p className="text-lg font-black text-emerald-700">{receptionMetrics.checkedIn}</p>
-                </div>
+                <Link
+                  href={`/projects/${selectedReceptionProject.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#592c82] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#49226b]"
+                >
+                  Abrir proyecto / Entregables
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </Link>
               </div>
             </div>
 

@@ -503,5 +503,86 @@ def test_api_accepts_ebook_format(monkeypatch):
     assert body["projectId"] == "proj-1"
 
 
+def test_project_to_snapshot_extracts_nested_snapshots_and_verdict_pdfs():
+    """Extrae snapshots anidados, examen fisico, sexo y ordena PDFs con Dictamen primero."""
+    from types import SimpleNamespace
+    from app.services.reports.massive_report import project_to_snapshot
+
+    review = SimpleNamespace(id="rev-1", doctorDiagnosis="AUDICIÓN NORMAL BILATERAL")
+    ai_pred = SimpleNamespace(
+        prediagnosisData={
+            "summary": "Normoacusia bilateral",
+            "resumen_por_oido": {"derecho": "Normal", "izquierdo": "Normal"},
+        },
+        doctorReviews=[review],
+    )
+    snap_ext = SimpleNamespace(
+        structuredData={"extracted_data": {"hbc_porcentaje": 4.2}},
+        aiPrediagnoses=[ai_pred],
+    )
+    aud_test = SimpleNamespace(
+        testNameSnapshot="AUDIOMETRIA",
+        categorySnapshot="AUDIOMETRIA",
+        status="RESULT_REGISTERED",
+        resultNotes=None,
+        fileUrl="/api/files/audiometry-pdfs/aud1.pdf",
+        extractionSnapshots=[snap_ext],
+    )
+    event = SimpleNamespace(
+        exam=SimpleNamespace(
+            weight=82.0,
+            height=172.0,
+            bloodPressure="128/82",
+            somatometryData={},
+            vitalSignsData={},
+            physicalExamData={"modulo1": {"m1_sexo": "M", "m1_puesto_actual": "SOLDADOR"}},
+            eyeAcuityData={},
+            pdfUrl=None,
+        ),
+        verdict=SimpleNamespace(
+            finalDiagnosis="APTO CON RECOMENDACIONES",
+            recommendations="Usar protección auditiva",
+            pdfUrl="dictamen-ev1-signed.pdf",
+        ),
+        eventTests=[aud_test],
+        labs=[],
+        studies=[],
+    )
+    worker = SimpleNamespace(
+        id="w-1",
+        universalId="EXP-2026001-M-1990",
+        firstName="Juan",
+        lastName="Perez",
+        dob=datetime(1990, 5, 10),
+        jobPosition=SimpleNamespace(name="SOLDADOR"),
+        clinicalHistory=None,
+    )
+    project = SimpleNamespace(
+        id="proj-umm-1",
+        name="Campaña UMM Prueba",
+        company=SimpleNamespace(name="SYSTRON", legalName="SYSTRON S.A. DE C.V."),
+        mobileUnit=SimpleNamespace(name="Unidad Móvil 1", plate="ABC-123"),
+        unitRef=None,
+        startDate=datetime(2026, 11, 26),
+        endDate=datetime(2026, 11, 27),
+        workers=[SimpleNamespace(worker=worker, event=event)],
+    )
+
+    snap = project_to_snapshot(
+        project,
+        validated_pdf_by_review={"rev-1": "audiometry-pdfs/aud1-firmado.pdf"},
+    )
+    w_snap = snap["trabajadores"][0]
+    assert w_snap["sexo"] == "MASCULINO"
+    assert w_snap["audiometria"]["dx"] == "AUDICIÓN NORMAL BILATERAL"
+    assert w_snap["audiometria"]["hbc"] == 4.2
+    assert w_snap["examenMedico"]["imc"] == round(82.0 / (1.72 ** 2), 1)
+    assert w_snap["examenMedico"]["aptitud"] != "N/A"
+    assert len(w_snap["documentosPdf"]) == 3
+    assert w_snap["documentosPdf"][0]["url"] == "dictamen-ev1-signed.pdf"
+    assert w_snap["documentosPdf"][1]["url"] == "audiometry-pdfs/aud1-firmado.pdf"
+    assert w_snap["documentosPdf"][2]["url"] == "/api/files/audiometry-pdfs/aud1.pdf"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

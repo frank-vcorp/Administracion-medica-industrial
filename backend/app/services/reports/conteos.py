@@ -220,3 +220,162 @@ def calcular_qs6_niveles(project: Dict[str, Any]) -> Dict[str, Dict[str, int]]:
         "colesterol": {"normal": col_n, "limite": col_l, "alto": col_a},
         "trigliceridos": {"normal": trig_n, "limite": trig_l, "alto": trig_a},
     }
+
+
+def _to_float(v: Any) -> Optional[float]:
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, str):
+        import re
+        m = re.search(r"-?\d+(?:\.\d+)?", v.replace(",", "."))
+        if m:
+            try:
+                return float(m.group(0))
+            except ValueError:
+                return None
+    return None
+
+
+def calcular_imc_distribucion(project: Dict[str, Any]) -> Dict[str, int]:
+    """Clasifica estado nutricional / IMC segun OMS."""
+    res = {
+        "bajoPeso": 0,
+        "normal": 0,
+        "sobrepeso": 0,
+        "obesidadI": 0,
+        "obesidadII": 0,
+        "obesidadIII": 0,
+    }
+    for w in project.get("trabajadores", []):
+        em = w.get("examenMedico") or {}
+        imc_val = _to_float(em.get("imc"))
+        if imc_val is not None and imc_val > 0:
+            if imc_val < 18.5:
+                res["bajoPeso"] += 1
+            elif imc_val < 25:
+                res["normal"] += 1
+            elif imc_val < 30:
+                res["sobrepeso"] += 1
+            elif imc_val < 35:
+                res["obesidadI"] += 1
+            elif imc_val < 40:
+                res["obesidadII"] += 1
+            else:
+                res["obesidadIII"] += 1
+            continue
+        est = str(em.get("estadoNutricional") or "").upper()
+        if not est or est in ("N/A", "NA"):
+            continue
+        if "OBESIDAD" in est and ("III" in est or "3" in est or "MORB" in est):
+            res["obesidadIII"] += 1
+        elif "OBESIDAD" in est and ("II" in est or "2" in est):
+            res["obesidadII"] += 1
+        elif "OBESIDAD" in est:
+            res["obesidadI"] += 1
+        elif "SOBREPESO" in est:
+            res["sobrepeso"] += 1
+        elif "BAJO" in est:
+            res["bajoPeso"] += 1
+        elif "NORMAL" in est or "EUTROF" in est:
+            res["normal"] += 1
+    return res
+
+
+def calcular_presion_arterial_distribucion(project: Dict[str, Any]) -> Dict[str, int]:
+    """Clasifica presion arterial: normal, normalAlta, elevada."""
+    res = {"normal": 0, "normalAlta": 0, "elevada": 0}
+    for w in project.get("trabajadores", []):
+        em = w.get("examenMedico") or {}
+        sis = _to_float(em.get("taSistolica"))
+        dia = _to_float(em.get("taDiastolica"))
+        if sis is None or dia is None:
+            pa = str(em.get("presionArterial") or "")
+            if "/" in pa:
+                parts = pa.split("/", 1)
+                sis = _to_float(parts[0])
+                dia = _to_float(parts[1])
+        if sis is not None and dia is not None and sis > 0 and dia > 0:
+            if sis >= 130 or dia >= 80:
+                res["elevada"] += 1
+            elif sis >= 120:
+                res["normalAlta"] += 1
+            else:
+                res["normal"] += 1
+            continue
+        dx_pa = str(em.get("dxPresion") or "").upper()
+        if not dx_pa or dx_pa in ("N/A", "NA"):
+            continue
+        if "ALTA" in dx_pa and "NORMAL" in dx_pa:
+            res["normalAlta"] += 1
+        elif "ALTA" in dx_pa or "HIPERTEN" in dx_pa or "ELEVAD" in dx_pa:
+            res["elevada"] += 1
+        elif "NORMAL" in dx_pa:
+            res["normal"] += 1
+    return res
+
+
+def calcular_salud_bucal_distribucion(project: Dict[str, Any]) -> Dict[str, int]:
+    """Clasifica salud bucal reportada en examen medico."""
+    res = {"normal": 0, "cariesSarro": 0}
+    for w in project.get("trabajadores", []):
+        sb = str((w.get("examenMedico") or {}).get("saludBucal") or "").upper().strip()
+        if not sb or sb in ("N/A", "NA"):
+            continue
+        if any(tok in sb for tok in ("CARIES", "SARRO", "GINGIV", "EDENT", "HALITOS", "PROTES")):
+            res["cariesSarro"] += 1
+        elif any(tok in sb for tok in ("SANA", "NORMAL", "BUENA", "LIMPIA", "SIN ALTER")):
+            res["normal"] += 1
+        else:
+            res["cariesSarro"] += 1
+    return res
+
+
+def calcular_aptitud_distribucion(project: Dict[str, Any]) -> Dict[str, int]:
+    """Clasifica aptitud laboral global."""
+    res = {"apto": 0, "conRestricciones": 0, "noApto": 0, "pendiente": 0}
+    for w in project.get("trabajadores", []):
+        apt = str((w.get("examenMedico") or {}).get("aptitud") or "").upper().strip()
+        if not apt or apt in ("N/A", "NA"):
+            res["pendiente"] += 1
+        elif "NO APTO" in apt or "NO_APTO" in apt:
+            res["noApto"] += 1
+        elif "RESTRIC" in apt or "CONDIC" in apt or "OBSERV" in apt:
+            res["conRestricciones"] += 1
+        elif "APTO" in apt:
+            res["apto"] += 1
+        else:
+            res["pendiente"] += 1
+    return res
+
+
+def calcular_conteo_estudios(project: Dict[str, Any]) -> Dict[str, int]:
+    """Cuenta cuantos trabajadores tienen datos registrados por modalidad de estudio."""
+    counts = {
+        "examenMedico": 0,
+        "audiometria": 0,
+        "espirometria": 0,
+        "ecg": 0,
+        "rxColumna": 0,
+        "rxTorax": 0,
+        "campimetria": 0,
+        "laboratorio": 0,
+    }
+    for w in project.get("trabajadores", []):
+        for key in counts:
+            grp = w.get(key) or {}
+            has_any = False
+            for k, val in grp.items():
+                if k in ("fileUrl", "fileUrlAP", "fileUrlLateral", "validatedPdfUrl", "dictamenPdfUrl"):
+                    continue
+                if isinstance(val, dict):
+                    if any(_has_value(sub_v) for sub_v in val.values()):
+                        has_any = True
+                        break
+                elif _has_value(val):
+                    has_any = True
+                    break
+            if has_any:
+                counts[key] += 1
+    return counts

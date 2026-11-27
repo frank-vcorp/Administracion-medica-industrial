@@ -66,22 +66,64 @@ def is_supported_format(image_bytes: bytes) -> bool:
         return False
 
 
+def _extract_rel_key(file_url: str) -> Optional[str]:
+    """
+    Normaliza `/uploads/{key}`, `/api/files/{key}` o keys relativas directas
+    (p. ej. `dictamen-xxx-signed.pdf`, `rayos-x-pdfs/yyy.pdf`) a una key limpia.
+    Rechaza path traversal (`..`).
+    """
+    if not file_url or not isinstance(file_url, str):
+        return None
+    raw = file_url.strip()
+    if not raw or raw.startswith("http://") or raw.startswith("https://"):
+        return None
+    for prefix in ("/uploads/", "uploads/", "/api/files/", "api/files/"):
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):]
+            break
+    rel = raw.lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        return None
+    return rel
+
+
+def _local_path_candidates(rel: str) -> list[str]:
+    """Rutas candidatas locales para una key relativa."""
+    candidates: list[str] = []
+    upload_dir = os.getenv("UPLOAD_DIR") or "/uploads"
+    candidates.append(os.path.join(upload_dir, rel))
+    # Fallback al directorio uploads/ junto al repo en desarrollo local.
+    repo_uploads = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "uploads")
+    )
+    repo_candidate = os.path.join(repo_uploads, rel)
+    if repo_candidate not in candidates:
+        candidates.append(repo_candidate)
+    return candidates
+
+
 def _local_path_from_url(file_url: str) -> Optional[str]:
     """
-    Si file_url apunta a /uploads/{key} en el mismo backend,
-    resuelve a la ruta absoluta del filesystem.
+    Retrocompatibilidad: si file_url apunta a /uploads/{key} o una key relativa,
+    resuelve la ruta dentro de UPLOAD_DIR.
     """
-    if not file_url:
+    if not file_url or not file_url.startswith("/uploads/"):
         return None
-    prefix = "/uploads/"
-    if file_url.startswith(prefix):
-        rel = file_url[len(prefix):]
-        # Defensa contra path traversal: bloquear '..' o absolutas.
-        if ".." in rel.split("/") or rel.startswith("/"):
-            return None
-        upload_dir = os.getenv("UPLOAD_DIR") or "/uploads"
-        return os.path.join(upload_dir, rel)
-    return None
+    rel = _extract_rel_key(file_url)
+    if not rel:
+        return None
+    upload_dir = os.getenv("UPLOAD_DIR") or "/uploads"
+    return os.path.join(upload_dir, rel)
+
+
+def _try_s3_download(rel_key: str) -> Optional[bytes]:
+    """Descarga en memoria desde el bucket S3 de app.main (si está habilitado)."""
+    try:
+        from app.main import _download_file_from_s3
+        data = _download_file_from_s3(rel_key)
+        return data if data else None
+    except Exception:
+        return None
 
 
 def fetch_image(file_url: str, base_url: Optional[str] = None) -> Optional[bytes]:
@@ -89,54 +131,67 @@ def fetch_image(file_url: str, base_url: Optional[str] = None) -> Optional[bytes
     Descarga los bytes de un archivo a partir de un fileUrl.
 
     Estrategias soportadas:
-      1. /uploads/{key} en el mismo backend -> lee del filesystem local.
-      2. /api/files/{key} en el mismo backend -> hace GET al endpoint.
-      3. http(s)://... -> hace GET directo.
+      1. URL http(s)://... -> GET directo.
+      2. /uploads/{key}, /api/files/{key} o key relativa directa:
+         a) Filesystem local (`UPLOAD_DIR` y fallback repo `uploads/`).
+         b) Bucket S3 del backend (`_download_file_from_s3`).
+         c) Endpoint HTTP `{base_url}/api/files/{key}` si está configurado.
 
     Retorna None si no se puede acceder (no se debe romper la generación
-    del EBOOK por una imagen faltante; se loggea warning).
-
-    En Fase 1 esta función se usa principalmente con URLs dummy / locales.
-    En Fase 2 se conectará con EventTest.fileUrl real (que ya vive en /uploads).
+    del EBOOK por una imagen o PDF faltante; se loggea warning).
     """
     if not file_url or not isinstance(file_url, str):
         return None
 
+    raw = file_url.strip()
+    if not raw:
+        return None
+
     try:
-        # 1) Local filesystem (/uploads).
-        local = _local_path_from_url(file_url)
-        if local and os.path.exists(local) and os.path.isfile(local):
-            with open(local, "rb") as fh:
-                data = fh.read()
-            if data:
-                return data
-
-        # 2) Endpoint /api/files/{key} o URL absoluta.
-        url = file_url
-        if url.startswith("/api/files/"):
-            if base_url:
-                url = base_url.rstrip("/") + url
-            # Si no hay base_url y no se puede resolver local, fallback vacío.
-            if not base_url:
-                logger.warning(
-                    "fetch_image: /api/files/ sin base_url, no se puede resolver: %s",
-                    file_url,
-                )
-                return None
-
-        if url.startswith("http://") or url.startswith("https://"):
-            resp = requests.get(url, timeout=10)
+        if raw.startswith("http://") or raw.startswith("https://"):
+            resp = requests.get(raw, timeout=15)
             if resp.status_code == 200 and resp.content:
                 return resp.content
-            logger.warning(
-                "fetch_image: HTTP %s al descargar %s", resp.status_code, url
-            )
+            logger.warning("fetch_image: HTTP %s al descargar %s", resp.status_code, raw)
             return None
 
-        logger.warning("fetch_image: esquema no soportado para %s", file_url)
+        rel_key = _extract_rel_key(raw)
+        if not rel_key:
+            logger.warning("fetch_image: ruta inválida para %s", raw)
+            return None
+
+        # 1) Local filesystem (UPLOAD_DIR o repo uploads/).
+        for local in _local_path_candidates(rel_key):
+            if os.path.exists(local) and os.path.isfile(local):
+                with open(local, "rb") as fh:
+                    data = fh.read()
+                if data:
+                    return data
+
+        # 2) Bucket S3 en el mismo proceso FastAPI.
+        s3_bytes = _try_s3_download(rel_key)
+        if s3_bytes:
+            return s3_bytes
+
+        # 3) Endpoint /api/files/{key} vía HTTP si existe base_url o BACKEND_PUBLIC_URL.
+        effective_base = (
+            base_url
+            or os.getenv("BACKEND_PUBLIC_URL")
+            or os.getenv("INTERNAL_BACKEND_URL")
+            or ""
+        ).strip().rstrip("/")
+        if effective_base:
+            url = f"{effective_base}/api/files/{rel_key}"
+            resp = requests.get(url, timeout=15)
+            if resp.status_code == 200 and resp.content:
+                return resp.content
+            logger.warning("fetch_image: HTTP %s al descargar %s", resp.status_code, url)
+            return None
+
+        logger.warning("fetch_image: archivo no encontrado en local ni S3: %s", raw)
         return None
     except Exception as exc:
-        logger.warning("fetch_image: error descargando %s: %s", file_url, exc)
+        logger.warning("fetch_image: error descargando %s: %s", raw, exc)
         return None
 
 

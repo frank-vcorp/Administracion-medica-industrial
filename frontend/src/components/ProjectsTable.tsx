@@ -7,6 +7,8 @@
  */
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { ExternalLink, FolderKanban } from 'lucide-react'
 import { updateProjectStatus } from '@/actions/project.actions'
 import ProjectFormModal, { ProjectForEdit } from '@/components/ProjectFormModal'
 import { ProjectStatus } from '@prisma/client'
@@ -92,7 +94,9 @@ export default function ProjectsTable({ projects, companies, branches }: Project
   if (projects.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 py-16 text-center">
-        <div className="text-slate-400 text-4xl mb-3">📋</div>
+        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#592c82]/12 text-[#592c82]">
+          <FolderKanban className="h-6 w-6" />
+        </div>
         <p className="text-slate-600 font-semibold">No hay proyectos registrados aún.</p>
         <p className="text-slate-400 text-sm mt-1">Usa &quot;Nuevo Proyecto&quot; para crear el primero.</p>
       </div>
@@ -118,7 +122,12 @@ export default function ProjectsTable({ projects, companies, branches }: Project
             {projects.map((p) => (
               <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-slate-800">{p.name}</p>
+                  <Link
+                    href={`/projects/${p.id}`}
+                    className="font-semibold text-slate-800 hover:text-[#592c82] hover:underline"
+                  >
+                    {p.name}
+                  </Link>
                   {p.notes && (
                     <p className="text-xs text-slate-400 truncate max-w-[180px]" title={p.notes}>
                       {p.notes}
@@ -154,12 +163,21 @@ export default function ProjectsTable({ projects, companies, branches }: Project
                   </select>
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <button
-                    onClick={() => handleEdit(p)}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline"
-                  >
-                    Editar
-                  </button>
+                  <div className="inline-flex items-center gap-3">
+                    <Link
+                      href={`/projects/${p.id}`}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-[#592c82] hover:underline"
+                    >
+                      Abrir / Reportes
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                    <button
+                      onClick={() => handleEdit(p)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium hover:underline"
+                    >
+                      Editar
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

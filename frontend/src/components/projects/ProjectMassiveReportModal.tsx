@@ -4,6 +4,7 @@
 // ARCH-20260623-01: Modulo de Reportes Masivos.
 
 import { useEffect, useMemo, useState } from 'react';
+import { Download, FileSpreadsheet, FileText, Info } from 'lucide-react';
 
 import { useProjectReportStatus } from '@/hooks/useProjectReportStatus';
 import { calcularConteos } from '@/lib/reports/conteos';
@@ -32,7 +33,7 @@ type GenerationState =
   | { kind: 'IDLE' }
   | { kind: 'CREATING' }
   | { kind: 'POLLING'; reportId: string }
-  | { kind: 'READY'; xlsxUrl: string | null; pdfUrl: string | null }
+  | { kind: 'READY'; reportId: string; xlsxUrl: string | null; pdfUrl: string | null }
   | { kind: 'ERROR'; message: string };
 
 function sanitizeFilename(texto: string): string {
@@ -75,10 +76,24 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
   useEffect(() => {
     if (generation.kind !== 'POLLING') return;
     if (statusState.status === 'READY') {
+      const completedReportId = generation.reportId;
       setGeneration({
         kind: 'READY',
+        reportId: completedReportId,
         xlsxUrl: statusState.xlsxUrl,
         pdfUrl: statusState.pdfUrl,
+      });
+      void getProjectReportsHistoryAction(projectId).then((res) => {
+        if (res.success && res.data) {
+          setHistory(
+            res.data.map((r) => ({
+              id: r.id,
+              format: r.format,
+              status: r.status,
+              generatedAt: r.generatedAt,
+            })),
+          );
+        }
       });
     } else if (statusState.status === 'FAILED') {
       setGeneration({
@@ -86,7 +101,7 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
         message: statusState.error || 'Error generando reporte',
       });
     }
-  }, [generation.kind, statusState]);
+  }, [generation, projectId, statusState]);
 
   // Cargar historial al abrir el modal.
   useEffect(() => {
@@ -170,43 +185,94 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                 Formato de salida
               </h3>
               <div className="flex flex-col gap-2">
-                {(['XLSX', 'EBOOK', 'BOTH'] as const).map((f) => (
-                  <label
-                    key={f}
-                    className={`flex items-start gap-3 p-3 rounded border cursor-pointer ${
-                      formato === f
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="proj-formato"
-                      value={f}
-                      checked={formato === f}
-                      onChange={() => setFormato(f)}
-                      className="mt-1"
-                      data-testid={`format-${f}`}
-                    />
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">
-                        {f === 'EBOOK' ? 'EBOOK (PDF navegable)' : f}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {f === 'XLSX' && '3 hojas: CONCENTRADO, LABORATORIOS, GRAFICAS'}
-                        {f === 'EBOOK' &&
-                          'Documento unico con indice, bookmarks, estadisticas con mini-graficas y una seccion por trabajador con sus estudios e imagenes embebidas. Reemplaza la carpeta fisica.'}
-                        {f === 'BOTH' && 'Genera XLSX + EBOOK en la misma corrida'}
-                      </div>
+                <label
+                  className={`flex items-start gap-3 p-3 rounded border cursor-pointer ${
+                    formato === 'BOTH'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="proj-formato"
+                    value="BOTH"
+                    checked={formato === 'BOTH'}
+                    onChange={() => setFormato('BOTH')}
+                    className="mt-1"
+                    data-testid="format-BOTH"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      Paquete Completo UMM (Ebook PDF + Concentrado XLSX)
                     </div>
-                  </label>
-                ))}
+                    <div className="text-xs text-slate-500">
+                      Genera en una sola corrida el Diagnóstico Situacional + Expedientes (PDF imprimible y navegable) y el Concentrado General en Excel.
+                    </div>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3 rounded border cursor-pointer ${
+                    formato === 'EBOOK'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="proj-formato"
+                    value="EBOOK"
+                    checked={formato === 'EBOOK'}
+                    onChange={() => setFormato('EBOOK')}
+                    className="mt-1"
+                    data-testid="format-EBOOK"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      EBOOK — Diagnóstico Situacional y Expedientes (PDF)
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Documento único tamaño Carta listo para impresión y carpeta digital navegable: portada institucional, gráficas epidemiológicas, recomendaciones médicas y expedientes individuales con dictámenes y estudios intercalados por trabajador.
+                    </div>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3 rounded border cursor-pointer ${
+                    formato === 'XLSX'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="proj-formato"
+                    value="XLSX"
+                    checked={formato === 'XLSX'}
+                    onChange={() => setFormato('XLSX')}
+                    className="mt-1"
+                    data-testid="format-XLSX"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">
+                      XLSX — Concentrado General de Datos
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      Libro Excel con 3 hojas (CONCENTRADO, LABORATORIOS, GRAFICAS) para análisis y consumo de datos por la empresa.
+                    </div>
+                  </div>
+                </label>
               </div>
               {/* IMPL-20260701-04: nota de traduccion via browser built-in (SPEC seccion 3, decision 15). */}
-              <p className="text-xs italic text-slate-500 mt-2">
-                💡 Los EBOOKs estan en espanol. Si necesita traducirlo, abralo en
-                Chrome/Edge y use la funcion de traduccion del navegador
-                (click derecho &rarr; Traducir).
+              <p className="mt-2 flex items-start gap-2 text-xs italic text-slate-500">
+                <span className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#592c82]/15 text-[#592c82]">
+                  <Info className="h-3 w-3" />
+                </span>
+                <span>
+                  Los EBOOKs estan en espanol. Si necesita traducirlo, abralo en
+                  Chrome/Edge y use la funcion de traduccion del navegador
+                  (click derecho &rarr; Traducir).
+                </span>
               </p>
             </section>
           ) : null}
@@ -230,25 +296,29 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
               <h3 className="text-sm font-semibold text-slate-700">
                 Archivos generados
               </h3>
-              <div className="flex flex-col gap-2">
-                {generation.xlsxUrl && pollingReportId && (
-                  <a
-                    href={downloadUrl(projectId, pollingReportId, 'xlsx')}
-                    download={`REPORTE_${slug}.xlsx`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm w-fit"
-                  >
-                    Descargar XLSX
-                  </a>
-                )}
-                {generation.pdfUrl && pollingReportId && (
-                  <a
-                    href={downloadUrl(projectId, pollingReportId, 'pdf')}
-                    download={`EBOOK_${slug}.pdf`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm w-fit"
-                  >
-                    Descargar EBOOK (PDF)
-                  </a>
-                )}
+              <div className="flex flex-wrap gap-3">
+                {(generation.xlsxUrl || formato === 'XLSX' || formato === 'BOTH') &&
+                  generation.reportId && (
+                    <a
+                      href={downloadUrl(projectId, generation.reportId, 'xlsx')}
+                      download={`REPORTE_${slug}.xlsx`}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium w-fit"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Descargar Concentrado XLSX
+                    </a>
+                  )}
+                {(generation.pdfUrl || formato === 'EBOOK' || formato === 'BOTH') &&
+                  generation.reportId && (
+                    <a
+                      href={downloadUrl(projectId, generation.reportId, 'pdf')}
+                      download={`EBOOK_${slug}.pdf`}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[#592c82] text-white rounded-lg hover:bg-[#49226b] text-sm font-medium w-fit"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Descargar EBOOK (PDF)
+                    </a>
+                  )}
               </div>
             </section>
           )}
@@ -280,25 +350,27 @@ export function ProjectMassiveReportModal({ projectId, workers, open, onClose }:
                       </div>
                       {/* FIX-UI-20260706-19: links de descarga cuando status=READY */}
                       {h.status === 'READY' && h.id && (
-                        <div className="flex gap-3">
+                        <div className="flex flex-wrap gap-3">
                           {(h.format === 'XLSX' || h.format === 'BOTH') && (
                             <a
-                              href={`${(process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '')}/api/v2/projects/${projectId}/reports/${h.id}/download?format=xlsx`}
-                              className="text-blue-600 hover:underline"
+                              href={downloadUrl(projectId, h.id, 'xlsx')}
+                              className="inline-flex items-center gap-1.5 text-emerald-700 font-medium hover:underline"
                               target="_blank"
                               rel="noopener noreferrer"
                             >
-                              ⬇ XLSX
+                              <Download className="h-3.5 w-3.5" />
+                              XLSX
                             </a>
                           )}
                           {(h.format === 'EBOOK' || h.format === 'BOTH') && (
                             <a
-                              href={`${(process.env.NEXT_PUBLIC_BACKEND_URL || '').trim().replace(/\/+$/, '')}/api/v2/projects/${projectId}/reports/${h.id}/download?format=pdf`}
-                              className="text-blue-600 hover:underline"
+                              href={downloadUrl(projectId, h.id, 'pdf')}
+                              className="inline-flex items-center gap-1.5 text-[#592c82] font-medium hover:underline"
                               target="_blank"
                               rel="noopener noreferrer"
                             >
-                              ⬇ PDF (EBOOK)
+                              <Download className="h-3.5 w-3.5" />
+                              PDF (EBOOK)
                             </a>
                           )}
                         </div>

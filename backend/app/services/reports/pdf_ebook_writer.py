@@ -1,66 +1,34 @@
 """
-IMPL-20260630-05: Generador del PDF Ebook (Fase 3: II.2-II.8 estadísticas
-agregadas con mini-gráficas matplotlib).
+Generador del EBOOK PDF Ejecutivo por Proyecto (Diagnóstico Situacional + Expedientes).
 
-SPEC: context/SPECs/SPEC_ARCH-20260630-01-EBOOK-PDF.md
-Handoff Fase 1: context/interconsultas/HANDOFF_IMPL-20260701-01_SOFIA_EBOOK-PDF-FASE-1.md
-Handoff Fase 2: context/interconsultas/HANDOFF_IMPL-20260701-02_SOFIA_EBOOK-PDF-FASE-2.md
-Handoff Fase 3: context/interconsultas/HANDOFF_IMPL-20260701-03_SOFIA_EBOOK-PDF-FASE-3.md
-
-Decisiones arquitectónicas aplicadas (ver SPEC sección 3):
-  1.  Stack: reportlab (Python) + pypdf + matplotlib Agg.
-  2.  Tamaño Carta (8.5x11in = letter).
-  3.  Max 300 trabajadores (validación en runtime, no hardcoded).
-  4.  Mini-gráficas matplotlib para estadísticas (Agg backend).
-  5.  Imágenes embebidas inline por sección de trabajador.
-  6.  Un solo PDF autocontenido.
-  7.  PIL thumbnail max 1500px + JPEG 80% si >500KB.
-  8.  PDFs de estudios se mergean con pypdf (Fase 2: las imágenes JPG/PNG
-      de cada EventTest se embeben inline; PDFs nativos se mergean al final).
-  9.  Sin streaming: se espera el PDF completo.
-  10. Sin historial en el ebook (solo proyecto actual).
-  11. Sin traducción server-side.
-  12. Orden alfabético por apellido, luego nombre.
-  13. Sin estudios -> placeholder.
-  14. Logo placeholder (texto hasta feedback Leticia).
-  15. Unicode (ñ, á, é) via TTF DejaVu registrado.
-
-Alcance de Fase 3 (esta fase):
-  - 7 subsecciones II.2-II.8 con mini-gráficas matplotlib:
-      II.2 Trauma acústico por área (barras horizontales).
-      II.3 Espirometría distribución patrón (pastel).
-      II.4 RX Columna escoliosis (barras por severidad).
-      II.5 RX Tórax (tabla conteos).
-      II.6 ECG (tabla conteos).
-      II.7 Campimetría agudeza visual (pastel).
-      II.8 Laboratorio (3 mini-barras: glucosa/colesterol/triglicéridos).
-  - Helpers genéricos: _generar_grafica_barras, _generar_grafica_barras_categorias,
-    _generar_grafica_pastel, _crear_tabla_conteos.
-  - Reutiliza funciones de conteos.py: calcular_trauma_acustico_por_area,
-    calcular_espirometria_distribucion, calcular_escoliosis_distribucion,
-    calcular_qs6_niveles.
-  - II.5 RX Tórax e II.6 ECG son solo tablas (sin gráfica) según SPEC.
-  - II.7 campimetría se calcula inline (no hay función en conteos.py).
-  - Cada subsección tiene bookmark y PageBreak entre ellas.
-
-Alcance de Fase 2 (preservado):
-  - 8 funciones _render_X() para las secciones clínicas.
-  - Render condicional: solo aparece la sección si tiene datos.
-  - Loop por TODOS los trabajadores con PageBreak entre ellos (no antes del primero).
-  - Helper _render_imagen_estudio() con descarga + compresión para imágenes
-    (PDFs nativos se mergean al final con pypdf).
-  - Si image_fetcher_instance is None: skip imágenes silenciosamente.
-  - Si falla descarga: skip + log warning, NO romper el PDF.
-  - Si image_fetcher_instance is None, se preserva el comportamiento de Fase 1
-    (compatible con los 7 tests existentes).
+Combina:
+  1. Portada institucional SME (Soluciones Médico Empresariales) + tabla de cobertura.
+  2. Índice navegable (hipervínculos clicables a cada sección y trabajador con
+     número de página real post-ensamblado).
+  3. I. Resumen Ejecutivo (demografía, edad, sexo, aptitud global).
+  4. II. Diagnóstico Situacional (II.1 a II.10) con gráficas matplotlib y
+     Cuadros de Recomendaciones Médicas por modalidad (audiometría + LFT Art. 514,
+     espirometría, columna NOM-036, tórax, ECG, visual, laboratorio, IMC/TA/bucal).
+  5. III. Reportes Individuales en orden alfabético por apellido:
+     Cada capítulo de trabajador incluye su ficha clínica, imágenes embebidas e
+     INMEDIATAMENTE después (en orden de impresión) su Dictamen firmado y los
+     PDFs de sus estudios validados, con Bookmarks jerárquicos apuntando a la
+     página exacta de cada sección y trabajador.
 """
 from __future__ import annotations
 
 import logging
 import os
 import tempfile
-from typing import Any, Dict, List, Optional
+from io import BytesIO
+from typing import Any, Dict, List, Optional, Tuple
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from pypdf import PdfReader, PdfWriter
+from pypdf.annotations import Link
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -68,6 +36,7 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
+    Flowable,
     Image as RLImage,
     PageBreak,
     Paragraph,
@@ -77,27 +46,36 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-import matplotlib
-
-matplotlib.use("Agg")  # CRÍTICO: backend non-interactive (sin display).
-import matplotlib.pyplot as plt
-
 from app.services.reports.conteos import (
+    calcular_aptitud_distribucion,
+    calcular_conteo_estudios,
+    calcular_distribuciones,
     calcular_escoliosis_distribucion,
     calcular_espirometria_distribucion,
     calcular_hbc_por_rango,
+    calcular_imc_distribucion,
+    calcular_presion_arterial_distribucion,
     calcular_qs6_niveles,
+    calcular_salud_bucal_distribucion,
     calcular_trauma_acustico_por_area,
 )
 
 logger = logging.getLogger(__name__)
 
-# Máximo de trabajadores soportados por el ebook (Decisión 3 del SPEC).
 MAX_TRABAJADORES = 300
 
+SME_TEAL = colors.HexColor("#0f766e")
+SME_TEAL_LIGHT = colors.HexColor("#f0fdfa")
+SME_PURPLE = colors.HexColor("#592c82")
+SME_DARK = colors.HexColor("#0f172a")
+SME_SLATE = colors.HexColor("#475569")
+SME_BORDER = colors.HexColor("#cbd5e1")
+SME_BG_SOFT = colors.HexColor("#f8fafc")
+SME_AMBER_BG = colors.HexColor("#fffbeb")
+SME_AMBER_BORDER = colors.HexColor("#f59e0b")
+
 # ------------------------------------------------------------------
-# Tipografía: registrar TTF DejaVu para unicode (ñ, á, é, í, ó, ú).
-# Fallback a Helvetica si no está disponible.
+# Tipografía unicode
 # ------------------------------------------------------------------
 try:
     pdfmetrics.registerFont(
@@ -112,257 +90,206 @@ try:
     FONT_NAME = "DejaVu"
     FONT_NAME_BOLD = "DejaVu-Bold"
 except Exception as exc:
-    logger.warning(
-        "No se pudo registrar DejaVu TTF, fallback a Helvetica: %s", exc
-    )
+    logger.warning("Fallback a Helvetica por fuente DejaVu no disponible: %s", exc)
     FONT_NAME = "Helvetica"
     FONT_NAME_BOLD = "Helvetica-Bold"
 
 
-# ------------------------------------------------------------------
-# API pública
-# ------------------------------------------------------------------
-def generar_ebook(
-    project: Dict[str, Any],
-    output_path: str,
-    image_fetcher_instance: Optional[Any] = None,
-) -> str:
-    """
-    Genera el PDF ebook completo (Fase 2) en `output_path`.
-    Retorna el path del archivo generado.
-
-    Args:
-      project: snapshot del proyecto (dict con `trabajadores`, `empresa`, etc.).
-      output_path: ruta absoluta del PDF de salida.
-      image_fetcher_instance: módulo o adaptador con métodos
-        `fetch(url)`, `compress(bytes)` y `is_pdf(bytes)` para descargar
-        imágenes reales desde EventTest.fileUrl. Si es None (default), el
-        PDF se genera solo con datos estructurados (sin imágenes embebidas).
-
-    Validaciones:
-      - Crea directorio padre si no existe.
-      - Advierte (warning) si hay más de MAX_TRABAJADORES.
-    """
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-
-    trabajadores = project.get("trabajadores", []) or []
-    if len(trabajadores) > MAX_TRABAJADORES:
-        logger.warning(
-            "generar_ebook: %d trabajadores excede el máximo de %d "
-            "(puede degradar performance)",
-            len(trabajadores),
-            MAX_TRABAJADORES,
-        )
-
-    doc = SimpleDocTemplate(
-        output_path,
-        pagesize=letter,  # 8.5×11in = 612×792pt
-        topMargin=2 * inch,
-        bottomMargin=2 * inch,
-        leftMargin=2 * inch,
-        rightMargin=2 * inch,
-        title=f"EBOOK {project.get('empresa', 'Proyecto')}",
-        author="Soluciones Medico Empresariales",
-    )
-
-    styles = _build_styles()
-
-    # Bookmarks: name -> (page_number_after_build).
-    bookmarks: Dict[str, str] = {}
-
-    # Tempfiles (PNG matplotlib) que se generan durante el render y deben
-    # existir hasta que reportlab los haya incrustado. Se limpian post-build.
-    tempfiles: List[str] = []
-
-    story: List[Any] = []
-
-    # 1) Portada
-    story.extend(_render_portada(project, styles))
-    story.append(PageBreak())
-
-    # 2) TOC placeholder
-    story.extend(_render_toc(project, styles, bookmarks))
-    story.append(PageBreak())
-
-    # 3) Resumen Ejecutivo
-    story.extend(_render_resumen_ejecutivo(project, styles, bookmarks))
-    story.append(PageBreak())
-
-    # 4) II.1 Audiometría con mini-gráfica
-    story.extend(
-        _render_estadistica_audiometria(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    # 4.b) II.2 - II.8 Estadísticas restantes con mini-gráficas (Fase 3)
-    story.extend(
-        _render_estadistica_trauma_acustico(
-            project, styles, bookmarks, tempfiles
-        )
-    )
-    story.append(PageBreak())
-
-    story.extend(
-        _render_estadistica_espirometria(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    story.extend(
-        _render_estadistica_rx_columna(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    story.extend(
-        _render_estadistica_rx_torax(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    story.extend(
-        _render_estadistica_ecg(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    story.extend(
-        _render_estadistica_campimetria(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    story.extend(
-        _render_estadistica_laboratorio(project, styles, bookmarks, tempfiles)
-    )
-    story.append(PageBreak())
-
-    # 5) III. Reportes Individuales — TODOS los trabajadores (Fase 2)
-    #    Ordenados alfabéticamente por apellido. PageBreak entre ellos
-    #    (no antes del primero).
-    story.append(
-        Paragraph("III. Reportes Individuales", styles["EbookH1"])
-    )
-
-    trabajadores_ordenados = sorted(
-        trabajadores,
-        key=lambda w: (_apellido_de(w), w.get("nombre", "")),
-    )
-
-    for idx, trabajador in enumerate(trabajadores_ordenados, 1):
-        if idx > 1:
-            story.append(PageBreak())
-        story.extend(
-            _render_seccion_trabajador(
-                trabajador,
-                styles,
-                bookmarks,
-                tempfiles,
-                image_fetcher_instance=image_fetcher_instance,
-                indice=idx,
+def _resolve_sme_logo_path() -> Optional[str]:
+    candidates = [
+        os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sme-logo.png")
+        ),
+        os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "..",
+                "..",
+                "frontend",
+                "public",
+                "branding",
+                "SOLUCIONES MEDICO EMPRESRIALES-06.png",
             )
-        )
+        ),
+    ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    return None
 
-    # Footer con número de página en cada página (excepto portada).
-    doc.build(
-        story,
-        onFirstPage=_footer_portada,
-        onLaterPages=_footer_normal,
+
+def _esc(text: Any) -> str:
+    s = "" if text is None else str(text)
+    return (
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
     )
 
-    # Post-build: limpiar tempfiles de matplotlib (ya incrustados en el PDF).
-    for tmp in tempfiles:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
 
-    # Post-build: mergear PDFs nativos pendientes (audiometría, labs) si hay.
-    _merge_pending_pdfs(output_path, image_fetcher_instance)
-
-    # Post-build: registrar bookmarks reales en el PDF.
-    _register_bookmarks(output_path, bookmarks)
-
-    logger.info("EBOOK generado: %s", output_path)
-    return output_path
-
-
-# ------------------------------------------------------------------
-# Helpers de ordenamiento (Decisión 5/15)
-# ------------------------------------------------------------------
 def _apellido_de(trabajador: Dict[str, Any]) -> str:
-    """
-    Devuelve el apellido de un trabajador para ordenar alfabéticamente.
-    Convención: el último token del campo `nombre` (formato "APELLIDO NOMBRES"
-    según el snapshot de massive_report.py).
-    Fallback al campo completo si no hay espacios.
-    """
-    nombre = (trabajador.get("nombre") or "").strip()
-    if not nombre:
-        return ""
-    partes = nombre.split()
-    return partes[-1] if len(partes) > 1 else nombre
+    """Ordenamiento alfabético por apellidos (`nombre` viene como `APELLIDO NOMBRE`)."""
+    return (trabajador.get("nombre") or "").strip().upper()
+
+
+# ------------------------------------------------------------------
+# Flowables de rastreo de páginas y links clicables en TOC
+# ------------------------------------------------------------------
+
+class _MarkerFlowable(Flowable):
+    """Flowable invisible (0x0) que registra la página ReportLab (0-based) del marcador."""
+
+    def __init__(self, key: str, tracker: Dict[str, int]):
+        super().__init__()
+        self.key = key
+        self.tracker = tracker
+        self.width = 0
+        self.height = 0
+
+    def draw(self):
+        if self.key not in self.tracker:
+            self.tracker[self.key] = max(0, self.canv.getPageNumber() - 1)
+
+
+class _TocLinkRow(Flowable):
+    """Fila de Índice con texto a la izquierda, número de página a la derecha y rectángulo clicable."""
+
+    def __init__(
+        self,
+        label: str,
+        page_display: str,
+        dest_key: str,
+        link_rects: List[Tuple[int, Tuple[float, float, float, float], str]],
+        width: float,
+        indent: int = 0,
+        bold: bool = False,
+    ):
+        super().__init__()
+        self.label = label
+        self.page_display = page_display
+        self.dest_key = dest_key
+        self.link_rects = link_rects
+        self.width = width
+        self.height = 17 if bold else 15
+        self.indent = indent
+        self.bold = bold
+
+    def draw(self):
+        c = self.canv
+        c.saveState()
+        font = FONT_NAME_BOLD if self.bold else FONT_NAME
+        size = 9.5 if self.bold else 8.8
+        color = SME_PURPLE if self.bold else SME_DARK
+        c.setFont(font, size)
+        c.setFillColor(color)
+
+        x_left = self.indent * 12
+        y_text = 4
+        max_chars = max(20, int((self.width - x_left - 50) / (size * 0.52)))
+        txt = self.label if len(self.label) <= max_chars else self.label[: max_chars - 1] + "…"
+        c.drawString(x_left, y_text, txt)
+
+        # Página alineada a la derecha
+        c.setFont(FONT_NAME_BOLD if self.bold else FONT_NAME, size)
+        c.setFillColor(SME_TEAL if self.page_display else SME_SLATE)
+        if self.page_display:
+            c.drawRightString(self.width - 2, y_text, f"Pág. {self.page_display}")
+
+        # Línea guía punteada sutil
+        c.setStrokeColor(colors.HexColor("#e2e8f0"))
+        c.setLineWidth(0.5)
+        c.line(0, 1, self.width, 1)
+
+        # Coordenadas absolutas PDF para registrar Link en pypdf
+        try:
+            ax, ay = c.absolutePosition(0, 0)
+            rl_page_idx = max(0, c.getPageNumber() - 1)
+            self.link_rects.append(
+                (rl_page_idx, (ax, ay, ax + self.width, ay + self.height), self.dest_key)
+            )
+        except Exception:
+            pass
+        c.restoreState()
 
 
 # ------------------------------------------------------------------
 # Estilos
 # ------------------------------------------------------------------
+
 def _build_styles():
-    """Crea los ParagraphStyle necesarios para el ebook."""
     styles = getSampleStyleSheet()
     styles.add(
         ParagraphStyle(
             name="EbookTitle",
             fontName=FONT_NAME_BOLD,
-            fontSize=24,
-            leading=28,
-            spaceAfter=12,
-            alignment=1,  # centro
+            fontSize=22,
+            leading=26,
+            spaceAfter=8,
+            alignment=1,
+            textColor=SME_DARK,
         )
     )
     styles.add(
         ParagraphStyle(
             name="EbookSubtitle",
-            fontName=FONT_NAME,
-            fontSize=14,
-            leading=18,
+            fontName=FONT_NAME_BOLD,
+            fontSize=13,
+            leading=17,
             alignment=1,
-            textColor=colors.HexColor("#475569"),
-            spaceAfter=24,
+            textColor=SME_TEAL,
+            spaceAfter=14,
         )
     )
     styles.add(
         ParagraphStyle(
             name="EbookH1",
             fontName=FONT_NAME_BOLD,
-            fontSize=18,
-            leading=22,
-            spaceBefore=6,
-            spaceAfter=12,
-            textColor=colors.HexColor("#1e293b"),
+            fontSize=15,
+            leading=19,
+            spaceBefore=4,
+            spaceAfter=8,
+            textColor=SME_PURPLE,
         )
     )
     styles.add(
         ParagraphStyle(
             name="EbookH2",
             fontName=FONT_NAME_BOLD,
-            fontSize=13,
-            leading=16,
-            spaceBefore=8,
-            spaceAfter=6,
-            textColor=colors.HexColor("#334155"),
+            fontSize=11,
+            leading=14,
+            spaceBefore=7,
+            spaceAfter=4,
+            textColor=SME_TEAL,
         )
     )
     styles.add(
         ParagraphStyle(
             name="EbookBody",
             fontName=FONT_NAME,
-            fontSize=10,
-            leading=14,
-            spaceAfter=4,
+            fontSize=9,
+            leading=13,
+            spaceAfter=3,
+            textColor=SME_DARK,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="EbookSmall",
+            fontName=FONT_NAME,
+            fontSize=8.2,
+            leading=11.5,
+            spaceAfter=2,
+            textColor=SME_SLATE,
         )
     )
     styles.add(
         ParagraphStyle(
             name="EbookPlaceholder",
             fontName=FONT_NAME,
-            fontSize=11,
-            leading=14,
+            fontSize=10,
+            leading=13,
             alignment=1,
             textColor=colors.HexColor("#94a3b8"),
         )
@@ -371,290 +298,86 @@ def _build_styles():
 
 
 # ------------------------------------------------------------------
-# Portada
+# Helpers de tablas y cuadros de recomendaciones
 # ------------------------------------------------------------------
-def _render_portada(project: Dict[str, Any], styles) -> List[Any]:
-    elements: List[Any] = []
 
-    # Logo placeholder (Decisión 14).
-    elements.append(Spacer(1, 1.2 * inch))
-    elements.append(
-        Paragraph(
-            "[ LOGO SOLUCIONES ]",
-            ParagraphStyle(
-                "LogoBox",
-                parent=styles["EbookTitle"],
-                fontSize=20,
-                textColor=colors.HexColor("#cbd5e1"),
-                alignment=1,
-                backColor=colors.HexColor("#f1f5f9"),
-                borderPadding=18,
-                borderColor=colors.HexColor("#cbd5e1"),
-                borderWidth=1,
-            ),
-        )
-    )
-    elements.append(
-        Paragraph(
-            "<i>placeholder hasta feedback Leticia</i>",
-            styles["EbookPlaceholder"],
-        )
-    )
-    elements.append(Spacer(1, 0.6 * inch))
-
-    # Título + subtítulo.
-    elements.append(
-        Paragraph("Diagn&oacute;stico Situacional", styles["EbookTitle"])
-    )
-    elements.append(
-        Paragraph(
-            project.get("empresa") or "Proyecto",
-            styles["EbookSubtitle"],
-        )
-    )
-
-    # Metadata.
-    elements.append(Spacer(1, 0.3 * inch))
-    metadata_lines = [
-        f"<b>Empresa:</b> {project.get('empresa', 'N/A')}",
-        f"<b>Raz&oacute;n social:</b> {project.get('empresaLegal', 'N/A')}",
-        f"<b>Fecha del estudio:</b> {project.get('fecha', 'N/A')}",
-        f"<b>Total trabajadores:</b> {len(project.get('trabajadores', []))}",
-        "",
-        "<i>Generado por AMI — Sistema de Administraci&oacute;n M&eacute;dica Industrial</i>",
-        "<i>M&oacute;dulo: Reportes Masivos por Proyecto (EBOOK)</i>",
-    ]
-    for line in metadata_lines:
-        elements.append(Paragraph(line, styles["EbookBody"]))
-
-    return elements
-
-
-# ------------------------------------------------------------------
-# TOC (placeholder, mejora en Fase 1 — hipervínculos vendrán con Platypus
-# en fases siguientes si se requiere)
-# ------------------------------------------------------------------
-def _render_toc(
-    project: Dict[str, Any],
-    styles,
-    bookmarks: Dict[str, str],
-) -> List[Any]:
-    bookmarks["toc"] = "toc"
-    elements: List[Any] = []
-    elements.append(Paragraph("&Iacute;ndice", styles["EbookH1"]))
-    elements.append(Spacer(1, 0.2 * inch))
-
-    total = len(project.get("trabajadores", []))
-    toc_lines = [
-        "I.   Resumen Ejecutivo",
-        "II.  Estad&iacute;sticas Agregadas",
-        "     II.1  Audiometr&iacute;a (%HBC)",
-        "     II.2  Trauma Ac&uacute;stico por &Aacute;rea",
-        "     II.3  Espirometr&iacute;a",
-        "     II.4  RX Columna",
-        "     II.5  RX T&oacute;rax",
-        "     II.6  ECG",
-        "     II.7  Campimetr&iacute;a",
-        "     II.8  Laboratorio",
-        f"III. Reportes Individuales ({total} trabajadores)",
-    ]
-    for line in toc_lines:
-        elements.append(Paragraph(line, styles["EbookBody"]))
-
-    elements.append(Spacer(1, 0.3 * inch))
-    elements.append(
-        Paragraph(
-            "<i>Los bookmarks est&aacute;n disponibles en el panel "
-            "del lector PDF (Chrome, Adobe, Foxit).</i>",
-            styles["EbookBody"],
-        )
-    )
-
-    return elements
-
-
-# ------------------------------------------------------------------
-# Resumen Ejecutivo
-# ------------------------------------------------------------------
-def _render_resumen_ejecutivo(
-    project: Dict[str, Any],
-    styles,
-    bookmarks: Dict[str, str],
-) -> List[Any]:
-    bookmarks["resumen"] = "resumen"
-    elements: List[Any] = []
-    elements.append(Paragraph("I. Resumen Ejecutivo", styles["EbookH1"]))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    trabajadores = project.get("trabajadores", []) or []
-    total = len(trabajadores)
-    sin_estudios = sum(1 for w in trabajadores if not _tiene_estudios(w))
-    con_estudios = total - sin_estudios
-
-    masculino = sum(
-        1
-        for w in trabajadores
-        if (w.get("sexo") or "").upper().startswith("M")
-    )
-    femenino = sum(
-        1
-        for w in trabajadores
-        if (w.get("sexo") or "").upper().startswith("F")
-    )
-
-    data = [
-        ["Métrica", "Valor"],
-        ["Total trabajadores", str(total)],
-        ["Con al menos 1 estudio", str(con_estudios)],
-        ["Sin estudios registrados", str(sin_estudios)],
-        ["Masculino", str(masculino)],
-        ["Femenino", str(femenino)],
-    ]
-    tabla = Table(data, colWidths=[3.5 * inch, 1.5 * inch])
+def _crear_tabla_conteos(data: List[List[str]], col_widths: Optional[List[float]] = None):
+    widths = col_widths or [4.2 * inch, 2.3 * inch]
+    tabla = Table(data, colWidths=widths)
     tabla.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+                ("BACKGROUND", (0, 0), (-1, 0), SME_TEAL),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
                 ("FONTNAME", (0, 0), (-1, 0), FONT_NAME_BOLD),
                 ("FONTNAME", (0, 1), (-1, -1), FONT_NAME),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.8),
+                ("ALIGN", (0, 0), (0, -1), "LEFT"),
+                ("ALIGN", (1, 0), (-1, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                (
-                    "ROWBACKGROUNDS",
-                    (0, 1),
-                    (-1, -1),
-                    [colors.white, colors.HexColor("#f8fafc")],
-                ),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("GRID", (0, 0), (-1, -1), 0.5, SME_BORDER),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, SME_BG_SOFT]),
             ]
         )
     )
-    elements.append(tabla)
-    elements.append(Spacer(1, 0.3 * inch))
-    elements.append(
-        Paragraph(
-            "Este Resumen Ejecutivo se ampliar&aacute; en fases siguientes "
-            "con pir&aacute;mide de edad y mini-gr&aacute;ficas adicionales.",
-            styles["EbookBody"],
+    return tabla
+
+
+def _cuadro_recomendaciones(titulo: str, items: List[str], styles) -> Table:
+    """Cuadro institucional SME de recomendaciones médico-laborales."""
+    bullets = "<br/>".join(f"• {_esc(item)}" for item in items)
+    content = [
+        [Paragraph(f"<b>{_esc(titulo)}</b>", styles["EbookH2"])],
+        [Paragraph(bullets, styles["EbookSmall"])],
+    ]
+    box = Table(content, colWidths=[6.9 * inch])
+    box.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SME_TEAL_LIGHT),
+                ("LINEBEFORE", (0, 0), (0, -1), 3, SME_TEAL),
+                ("BOX", (0, 0), (-1, -1), 0.5, SME_BORDER),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ]
         )
     )
-    return elements
+    return box
 
 
 # ------------------------------------------------------------------
-# II.1 Audiometría con mini-gráfica matplotlib
+# Helpers de gráficas matplotlib Agg
 # ------------------------------------------------------------------
-def _render_estadistica_audiometria(
-    project: Dict[str, Any],
-    styles,
-    bookmarks: Dict[str, str],
-    tempfiles: List[str],
-) -> List[Any]:
-    bookmarks["ii_audiometria"] = "ii_audiometria"
-    elements: List[Any] = []
-    elements.append(
-        Paragraph("II.1 Audiometr&iacute;a (%HBC)", styles["EbookH1"])
-    )
-    elements.append(Spacer(1, 0.15 * inch))
 
-    hbc = calcular_hbc_por_rango(project)
-    elements.append(
-        Paragraph(
-            f"<b>Normal (&lt;10%):</b> {hbc['normal']} &nbsp;|&nbsp; "
-            f"<b>Alto (10-19%):</b> {hbc['alto']} &nbsp;|&nbsp; "
-            f"<b>Muy Alto (&ge;20%):</b> {hbc['muyAlto']}",
-            styles["EbookBody"],
-        )
-    )
-    elements.append(Spacer(1, 0.2 * inch))
-
-    grafica_path = _generar_grafica_hbc(hbc)
-    if grafica_path:
-        elements.append(
-            RLImage(grafica_path, width=5 * inch, height=3 * inch)
-        )
-        elements.append(Spacer(1, 0.1 * inch))
-        elements.append(
-            Paragraph(
-                "<i>Figura II.1 — Distribuci&oacute;n de %HBC por rango "
-                "(renderizada con matplotlib Agg).</i>",
-                styles["EbookBody"],
-            )
-        )
-        # Diferir cleanup hasta post-build.
-        tempfiles.append(grafica_path)
-    else:
-        elements.append(
-            Paragraph(
-                "<i>No se pudo renderizar la gr&aacute;fica matplotlib. "
-                "Verificar instalaci&oacute;n del backend Agg.</i>",
-                styles["EbookBody"],
-            )
-        )
-
-    return elements
-
-
-def _generar_grafica_hbc(hbc: Dict[str, int]) -> Optional[str]:
-    """Renderiza mini-gráfica de barras %HBC con matplotlib Agg."""
-    try:
-        fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
-        categorias = ["Normal (<10%)", "Alto (10-19%)", "Muy Alto (\u226520%)"]
-        valores = [hbc["normal"], hbc["alto"], hbc["muyAlto"]]
-        colores = ["#10b981", "#f59e0b", "#ef4444"]
-        ax.bar(categorias, valores, color=colores)
-        ax.set_ylabel("Trabajadores")
-        ax.set_title("Distribución %HBC")
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        plt.tight_layout()
-
-        tmp = tempfile.NamedTemporaryFile(
-            suffix=".png", delete=False
-        )
-        tmp.close()
-        plt.savefig(
-            tmp.name, format="png", dpi=100, bbox_inches="tight"
-        )
-        plt.close(fig)
-        return tmp.name
-    except Exception as exc:
-        logger.error("Error generando gráfica HBC: %s", exc)
-        return None
-
-
-# ------------------------------------------------------------------
-# Helpers genéricos para mini-gráficas y tablas (Fase 3)
-# ------------------------------------------------------------------
 def _generar_grafica_barras(
     categorias: List[str],
     valores: List[int],
     titulo: str,
-    color: str = "#10b981",
+    color: str = "#0f766e",
     horizontal: bool = False,
 ) -> Optional[str]:
-    """Genera mini-gráfica de barras con matplotlib Agg. Retorna path del PNG."""
     try:
-        fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
+        fig, ax = plt.subplots(figsize=(5.2, 2.7), dpi=110)
         if horizontal:
             ax.barh(categorias, valores, color=color)
             ax.invert_yaxis()
         else:
             ax.bar(categorias, valores, color=color)
-        ax.set_title(titulo, fontsize=11)
+        ax.set_title(titulo, fontsize=10, fontweight="bold", color="#0f172a")
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.tick_params(labelsize=8)
         if not horizontal:
-            ax.set_ylabel("Trabajadores")
+            ax.set_ylabel("Trabajadores", fontsize=8)
         plt.tight_layout()
 
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
-        plt.savefig(tmp.name, format="png", dpi=100, bbox_inches="tight")
+        plt.savefig(tmp.name, format="png", dpi=110, bbox_inches="tight")
         plt.close(fig)
         return tmp.name
     except Exception as exc:
@@ -668,48 +391,51 @@ def _generar_grafica_barras_categorias(
     colores: List[str],
     titulo: str,
 ) -> Optional[str]:
-    """Genera mini-gráfica de barras con un color por categoría (severidad)."""
     try:
-        fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
-        ax.bar(categorias, valores, color=colores)
-        ax.set_title(titulo, fontsize=11)
-        ax.set_ylabel("Trabajadores")
+        fig, ax = plt.subplots(figsize=(5.2, 2.7), dpi=110)
+        ax.bar(categorias, valores, color=colores[: len(categorias)])
+        ax.set_title(titulo, fontsize=10, fontweight="bold", color="#0f172a")
+        ax.set_ylabel("Trabajadores", fontsize=8)
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
+        ax.tick_params(labelsize=8)
         plt.tight_layout()
 
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
-        plt.savefig(tmp.name, format="png", dpi=100, bbox_inches="tight")
+        plt.savefig(tmp.name, format="png", dpi=110, bbox_inches="tight")
         plt.close(fig)
         return tmp.name
     except Exception as exc:
-        logger.error(
-            "Error generando gráfica de barras categóricas: %s", exc
-        )
+        logger.error("Error generando gráfica de barras categóricas: %s", exc)
         return None
 
 
 def _generar_grafica_pastel(
     labels: List[str], valores: List[int], titulo: str
 ) -> Optional[str]:
-    """Genera mini-gráfica de pastel con matplotlib Agg."""
     try:
-        fig, ax = plt.subplots(figsize=(5, 3), dpi=100)
-        colores = ["#10b981", "#f59e0b", "#ef4444", "#3b82f6", "#8b5cf6"]
+        nonzero = [(lbl, val) for lbl, val in zip(labels, valores) if val > 0]
+        if not nonzero:
+            return None
+        f_labels = [p[0] for p in nonzero]
+        f_vals = [p[1] for p in nonzero]
+        fig, ax = plt.subplots(figsize=(5.2, 2.7), dpi=110)
+        colores = ["#0f766e", "#f59e0b", "#ef4444", "#592c82", "#3b82f6", "#64748b"]
         ax.pie(
-            valores,
-            labels=labels,
-            colors=colores[: len(labels)],
+            f_vals,
+            labels=f_labels,
+            colors=colores[: len(f_vals)],
             autopct="%1.0f%%",
             startangle=90,
+            textprops={"fontsize": 8},
         )
-        ax.set_title(titulo, fontsize=11)
+        ax.set_title(titulo, fontsize=10, fontweight="bold", color="#0f172a")
         plt.tight_layout()
 
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
-        plt.savefig(tmp.name, format="png", dpi=100, bbox_inches="tight")
+        plt.savefig(tmp.name, format="png", dpi=110, bbox_inches="tight")
         plt.close(fig)
         return tmp.name
     except Exception as exc:
@@ -717,423 +443,669 @@ def _generar_grafica_pastel(
         return None
 
 
-def _crear_tabla_conteos(data: List[List[str]]):
-    """Crea tabla estilizada (mismo look&feel que Resumen Ejecutivo)."""
-    tabla = Table(data, colWidths=[3 * inch, 1.5 * inch])
-    tabla.setStyle(
+def _generar_grafica_hbc(hbc: Dict[str, int]) -> Optional[str]:
+    return _generar_grafica_barras_categorias(
+        ["Normal (<10%)", "Alto (10-19%)", "Muy Alto (≥20%)"],
+        [hbc["normal"], hbc["alto"], hbc["muyAlto"]],
+        ["#10b981", "#f59e0b", "#ef4444"],
+        "Distribución %HBC (Hipoacusia Bilateral Combinada)",
+    )
+
+
+# ------------------------------------------------------------------
+# Portada y TOC
+# ------------------------------------------------------------------
+
+def _render_portada(project: Dict[str, Any], styles) -> List[Any]:
+    elements: List[Any] = []
+
+    logo_path = _resolve_sme_logo_path()
+    if logo_path:
+        elements.append(RLImage(logo_path, width=2.2 * inch, height=0.95 * inch, kind="proportional"))
+    else:
+        badge = Table(
+            [[Paragraph("<b>SOLUCIONES MÉDICO EMPRESARIALES (SME)</b>", ParagraphStyle("SmeHdr", parent=styles["EbookH2"], alignment=1, textColor=colors.white))]],
+            colWidths=[6.9 * inch],
+        )
+        badge.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), SME_TEAL), ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10)]))
+        elements.append(badge)
+
+    elements.append(Spacer(1, 0.35 * inch))
+    elements.append(Paragraph("Diagn&oacute;stico Situacional", styles["EbookTitle"]))
+    elements.append(
+        Paragraph(
+            _esc(project.get("empresa") or "Proyecto de Unidad Móvil"),
+            styles["EbookSubtitle"],
+        )
+    )
+    elements.append(
+        Paragraph(
+            "<i>Carpeta consolidada imprimible y navegable — Salud Ocupacional y Medicina del Trabajo</i>",
+            styles["EbookPlaceholder"],
+        )
+    )
+    elements.append(Spacer(1, 0.25 * inch))
+
+    trabajadores = project.get("trabajadores", []) or []
+    fecha_txt = _esc(project.get("fecha") or "N/A")
+    if project.get("fechaFin"):
+        fecha_txt = f"{fecha_txt} al {_esc(project.get('fechaFin'))}"
+
+    meta_rows = [
+        ["Empresa Cliente", _esc(project.get("empresa") or "N/A")],
+        ["Razón Social", _esc(project.get("empresaLegal") or project.get("empresa") or "N/A")],
+        ["Proyecto / Campaña", _esc(project.get("nombreProyecto") or "Campaña Médica UMM")],
+        ["Unidad Móvil Asignada", _esc(project.get("unidadMovil") or "Clínica / Unidad Móvil SME")],
+        ["Fecha de Atención", fecha_txt],
+        ["Total de Trabajadores", str(len(trabajadores))],
+    ]
+    meta_table = Table(meta_rows, colWidths=[2.3 * inch, 4.6 * inch])
+    meta_table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                ("FONTNAME", (0, 0), (-1, 0), FONT_NAME_BOLD),
-                ("FONTNAME", (0, 1), (-1, -1), FONT_NAME),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("ALIGN", (0, 0), (-1, 0), "LEFT"),
-                ("ALIGN", (1, 1), (1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("BACKGROUND", (0, 0), (0, -1), SME_BG_SOFT),
+                ("FONTNAME", (0, 0), (0, -1), FONT_NAME_BOLD),
+                ("FONTNAME", (1, 0), (1, -1), FONT_NAME),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("TEXTCOLOR", (0, 0), (0, -1), SME_SLATE),
+                ("TEXTCOLOR", (1, 0), (1, -1), SME_DARK),
+                ("GRID", (0, 0), (-1, -1), 0.5, SME_BORDER),
                 ("TOPPADDING", (0, 0), (-1, -1), 6),
-                (
-                    "GRID",
-                    (0, 0),
-                    (-1, -1),
-                    0.5,
-                    colors.HexColor("#cbd5e1"),
-                ),
-                (
-                    "ROWBACKGROUNDS",
-                    (0, 1),
-                    (-1, -1),
-                    [colors.white, colors.HexColor("#f8fafc")],
-                ),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
             ]
         )
     )
-    return tabla
+    elements.append(meta_table)
+    elements.append(Spacer(1, 0.25 * inch))
+
+    est_counts = calcular_conteo_estudios(project)
+    cov_rows = [
+        ["Estudio / Valoración Realizada", "Trabajadores Evaluados"],
+        ["Examen Médico Ocupacional", str(est_counts["examenMedico"])],
+        ["Audiometría", str(est_counts["audiometria"])],
+        ["Espirometría", str(est_counts["espirometria"])],
+        ["Electrocardiograma (ECG)", str(est_counts["ecg"])],
+        ["Radiografía de Columna", str(est_counts["rxColumna"])],
+        ["Radiografía de Tórax", str(est_counts["rxTorax"])],
+        ["Campimetría / Agudeza Visual", str(est_counts["campimetria"])],
+        ["Laboratorio Clínico", str(est_counts["laboratorio"])],
+    ]
+    elements.append(Paragraph("<b>Cobertura de Estudios de la Campaña</b>", styles["EbookH2"]))
+    elements.append(_crear_tabla_conteos(cov_rows, col_widths=[4.6 * inch, 2.3 * inch]))
+    elements.append(Spacer(1, 0.2 * inch))
+    elements.append(
+        Paragraph(
+            "<i>Generado por Sistema Médico Empresarial (SME) — Imprimible tamaño Carta y navegable mediante Índice o Marcadores PDF.</i>",
+            styles["EbookSmall"],
+        )
+    )
+    return elements
+
+
+def _render_toc(
+    toc_entries: List[Tuple[str, str, int, bool]],
+    final_page_map: Dict[str, int],
+    link_rects: List[Tuple[int, Tuple[float, float, float, float], str]],
+    styles,
+    usable_width: float,
+) -> List[Any]:
+    elements: List[Any] = []
+    elements.append(Paragraph("&Iacute;ndice General", styles["EbookH1"]))
+    elements.append(
+        Paragraph(
+            "<i>Haz clic en cualquier apartado o trabajador para saltar directamente a su página.</i>",
+            styles["EbookSmall"],
+        )
+    )
+    elements.append(Spacer(1, 0.12 * inch))
+
+    for key, label, indent, bold in toc_entries:
+        p_idx = final_page_map.get(key)
+        p_disp = str(p_idx + 1) if p_idx is not None else ""
+        elements.append(
+            _TocLinkRow(
+                label=label,
+                page_display=p_disp,
+                dest_key=key,
+                link_rects=link_rects,
+                width=usable_width,
+                indent=indent,
+                bold=bold,
+            )
+        )
+    return elements
 
 
 # ------------------------------------------------------------------
-# II.2 - II.8 Estadísticas con mini-gráficas (Fase 3)
+# Secciones I y II (Diagnóstico Situacional)
 # ------------------------------------------------------------------
+
+def _render_resumen_ejecutivo(
+    project: Dict[str, Any],
+    styles,
+    tempfiles: List[str],
+) -> List[Any]:
+    elements: List[Any] = []
+    elements.append(Paragraph("I. Resumen Ejecutivo y Demograf&iacute;a", styles["EbookH1"]))
+    elements.append(Spacer(1, 0.1 * inch))
+
+    trabajadores = project.get("trabajadores", []) or []
+    total = len(trabajadores)
+    sin_estudios = sum(1 for w in trabajadores if not _tiene_estudios(w))
+    con_estudios = total - sin_estudios
+    dist = calcular_distribuciones(project)
+    apt = calcular_aptitud_distribucion(project)
+
+    data = [
+        ["Indicador Poblacional", "Cantidad"],
+        ["Total trabajadores en proyecto", str(total)],
+        ["Con al menos 1 estudio clínico", str(con_estudios)],
+        ["Sin estudios registrados", str(sin_estudios)],
+        ["Sexo Masculino", str(dist["masculino"])],
+        ["Sexo Femenino", str(dist["femenino"])],
+        ["Edad 18 a 30 años", str(dist["edad18a30"])],
+        ["Edad 31 a 45 años", str(dist["edad31a45"])],
+        ["Edad 46 años o más", str(dist["edad46mas"])],
+        ["Dictamen Apto", str(apt["apto"])],
+        ["Apto con restricciones / observaciones", str(apt["conRestricciones"])],
+        ["No Apto / Pendiente", str(apt["noApto"] + apt["pendiente"])],
+    ]
+    elements.append(_crear_tabla_conteos(data, col_widths=[4.6 * inch, 2.3 * inch]))
+    elements.append(Spacer(1, 0.15 * inch))
+
+    # Gráfica combinada de Edad y Sexo
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(6.8, 2.5), dpi=110)
+        age_labels = ["18-30", "31-45", "≥46"]
+        age_vals = [dist["edad18a30"], dist["edad31a45"], dist["edad46mas"]]
+        ax1.bar(age_labels, age_vals, color=["#0f766e", "#592c82", "#0284c7"])
+        ax1.set_title("Pirámide de Edad", fontsize=9.5, fontweight="bold")
+        ax1.spines["top"].set_visible(False)
+        ax1.spines["right"].set_visible(False)
+        ax1.tick_params(labelsize=8)
+
+        sex_vals = [dist["masculino"], dist["femenino"]]
+        sex_lbls = ["Masculino", "Femenino"]
+        if sum(sex_vals) > 0:
+            nz = [(l, v, c) for l, v, c in zip(sex_lbls, sex_vals, ["#0f766e", "#592c82"]) if v > 0]
+            ax2.pie([x[1] for x in nz], labels=[x[0] for x in nz], colors=[x[2] for x in nz], autopct="%1.0f%%", startangle=90, textprops={"fontsize": 8})
+        else:
+            ax2.text(0.5, 0.5, "Sin dato", ha="center", va="center", fontsize=8)
+            ax2.axis("off")
+        ax2.set_title("Distribución por Sexo", fontsize=9.5, fontweight="bold")
+        plt.tight_layout()
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.close()
+        plt.savefig(tmp.name, format="png", dpi=110, bbox_inches="tight")
+        plt.close(fig)
+        elements.append(RLImage(tmp.name, width=6.6 * inch, height=2.4 * inch))
+        tempfiles.append(tmp.name)
+    except Exception as exc:
+        logger.warning("Error generando gráfica demográfica: %s", exc)
+
+    return elements
+
+
+def _render_estadistica_audiometria(
+    project: Dict[str, Any],
+    styles,
+    tempfiles: List[str],
+) -> List[Any]:
+    elements: List[Any] = []
+    elements.append(Paragraph("II.1 Audiometr&iacute;a (%HBC) y LFT", styles["EbookH1"]))
+    hbc = calcular_hbc_por_rango(project)
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Clasificación %HBC", "Trabajadores"],
+                ["Normal (<10%)", str(hbc["normal"])],
+                ["Riesgo Alto (10-19.9%)", str(hbc["alto"])],
+                ["Riesgo Muy Alto (≥20%)", str(hbc["muyAlto"])],
+            ]
+        )
+    )
+    elements.append(Spacer(1, 0.12 * inch))
+    grafica_path = _generar_grafica_hbc(hbc)
+    if grafica_path:
+        elements.append(RLImage(grafica_path, width=5.0 * inch, height=2.6 * inch))
+        tempfiles.append(grafica_path)
+
+    elements.append(Spacer(1, 0.12 * inch))
+    lft_data = [
+        ["% HBC (LFT Art. 514 Fracc. 351)", "% Incapacidad Permanente", "% HBC", "% Incapacidad"],
+        ["10%", "10%", "45%", "40%"],
+        ["20%", "17%", "55%", "50%"],
+        ["30%", "25%", "65%", "60%"],
+        ["35%", "30%", "75 a 100%", "70%"],
+    ]
+    lft_tbl = Table(lft_data, colWidths=[2.3 * inch, 1.5 * inch, 1.5 * inch, 1.6 * inch])
+    lft_tbl.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), SME_BG_SOFT),
+                ("FONTNAME", (0, 0), (-1, 0), FONT_NAME_BOLD),
+                ("FONTNAME", (0, 1), (-1, -1), FONT_NAME),
+                ("FONTSIZE", (0, 0), (-1, -1), 7.8),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("GRID", (0, 0), (-1, -1), 0.4, SME_BORDER),
+            ]
+        )
+    )
+    elements.append(Paragraph("<b>Tabla de referencia Ley Federal del Trabajo (Sorderas e Hipoacusias)</b>", styles["EbookSmall"]))
+    elements.append(lft_tbl)
+    elements.append(Spacer(1, 0.1 * inch))
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Conservación Auditiva",
+            [
+                "Riesgo Alto o Muy Alto: Ingresar al Programa de Conservación Auditiva, audiometría de control en 6 meses y reubicación si exposición > 85 dB.",
+                "Casos de seguimiento / normalidad: Uso obligatorio y verificado de EPP auditivo, audiometría anual y capacitación en cuidado auditivo.",
+            ],
+            styles,
+        )
+    )
+    return elements
+
+
 def _render_estadistica_trauma_acustico(
     project: Dict[str, Any],
     styles,
-    bookmarks: Dict[str, str],
     tempfiles: List[str],
 ) -> List[Any]:
-    """II.2 Trauma acústico por área — barras horizontales."""
-    bookmarks["ii_trauma_acustico"] = "ii_trauma_acustico"
     elements: List[Any] = []
-    elements.append(
-        Paragraph("II.2 Trauma Ac&uacute;stico por &Aacute;rea", styles["EbookH1"])
-    )
-    elements.append(Spacer(1, 0.1 * inch))
-
+    elements.append(Paragraph("II.2 Trauma Ac&uacute;stico por &Aacute;rea", styles["EbookH1"]))
     trauma = calcular_trauma_acustico_por_area(project)
     if not trauma:
-        elements.append(
-            Paragraph(
-                "<i>Sin casos de trauma ac&uacute;stico detectados.</i>",
-                styles["EbookBody"],
-            )
-        )
+        elements.append(Paragraph("<i>Sin casos de trauma ac&uacute;stico detectados en esta campaña.</i>", styles["EbookBody"]))
         return elements
 
-    # Tabla resumen.
-    data = [["Área", "Casos"]]
-    for t in trauma:
-        data.append([t["area"], str(t["conteo"])])
+    data = [["Área / Puesto", "Casos"]] + [[t["area"], str(t["conteo"])] for t in trauma]
     elements.append(_crear_tabla_conteos(data))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    # Gráfica de barras horizontales.
-    categorias = [t["area"] for t in trauma]
-    valores = [t["conteo"] for t in trauma]
+    elements.append(Spacer(1, 0.12 * inch))
     grafica_path = _generar_grafica_barras(
-        categorias,
-        valores,
+        [t["area"] for t in trauma],
+        [t["conteo"] for t in trauma],
         "Trauma Acústico por Área",
         color="#ef4444",
         horizontal=True,
     )
     if grafica_path:
-        elements.append(
-            RLImage(grafica_path, width=5 * inch, height=3 * inch)
-        )
-        elements.append(Spacer(1, 0.1 * inch))
-        elements.append(
-            Paragraph(
-                "<i>Figura II.2 &mdash; Casos de trauma ac&uacute;stico "
-                "agrupados por &aacute;rea de trabajo.</i>",
-                styles["EbookBody"],
-            )
-        )
+        elements.append(RLImage(grafica_path, width=5.0 * inch, height=2.6 * inch))
         tempfiles.append(grafica_path)
-
     return elements
 
 
 def _render_estadistica_espirometria(
     project: Dict[str, Any],
     styles,
-    bookmarks: Dict[str, str],
     tempfiles: List[str],
 ) -> List[Any]:
-    """II.3 Distribución de patrón espirométrico — pastel."""
-    bookmarks["ii_espirometria"] = "ii_espirometria"
     elements: List[Any] = []
-    elements.append(
-        Paragraph("II.3 Espirometr&iacute;a (Patr&oacute;n)", styles["EbookH1"])
-    )
-    elements.append(Spacer(1, 0.1 * inch))
-
+    elements.append(Paragraph("II.3 Espirometr&iacute;a (Patr&oacute;n) y Tabaquismo", styles["EbookH1"]))
     espiro = calcular_espirometria_distribucion(project)
-    data = [["Patrón", "Casos"]]
-    for e in espiro:
-        data.append([e["patron"], str(e["conteo"])])
+    data = [["Patrón Espirométrico", "Casos"]] + [[e["patron"], str(e["conteo"])] for e in espiro]
     elements.append(_crear_tabla_conteos(data))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    # Gráfica pastel. Truncar labels para que no se salga de la figura.
-    labels = [e["patron"][:30] for e in espiro]
-    valores = [e["conteo"] for e in espiro]
+    elements.append(Spacer(1, 0.12 * inch))
     grafica_path = _generar_grafica_pastel(
-        labels, valores, "Distribución Patrón Espirométrico"
+        [e["patron"][:32] for e in espiro],
+        [e["conteo"] for e in espiro],
+        "Distribución Patrón Espirométrico",
     )
     if grafica_path:
-        elements.append(
-            RLImage(grafica_path, width=5 * inch, height=3 * inch)
-        )
-        elements.append(Spacer(1, 0.1 * inch))
-        elements.append(
-            Paragraph(
-                "<i>Figura II.3 &mdash; Distribuci&oacute;n porcentual "
-                "del patr&oacute;n espirom&eacute;trico.</i>",
-                styles["EbookBody"],
-            )
-        )
+        elements.append(RLImage(grafica_path, width=5.0 * inch, height=2.6 * inch))
         tempfiles.append(grafica_path)
-
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Salud Respiratoria",
+            [
+                "Casos alterados (restrictivo / obstructivo): Valoración por Neumología / Medicina Interna y espirometría con broncodilatador en 6 meses.",
+                "Evitar exposición sin protección a polvos, humos o agentes sensibilizantes; reforzar uso adecuado de EPP respiratorio.",
+            ],
+            styles,
+        )
+    )
     return elements
 
 
 def _render_estadistica_rx_columna(
     project: Dict[str, Any],
     styles,
-    bookmarks: Dict[str, str],
     tempfiles: List[str],
 ) -> List[Any]:
-    """II.4 Escoliosis por grado Cobb — barras por severidad."""
-    bookmarks["ii_rx_columna"] = "ii_rx_columna"
     elements: List[Any] = []
-    elements.append(
-        Paragraph("II.4 RX Columna (Escoliosis)", styles["EbookH1"])
-    )
-    elements.append(Spacer(1, 0.1 * inch))
-
+    elements.append(Paragraph("II.4 RX Columna (Escoliosis) — NOM-036", styles["EbookH1"]))
     esc = calcular_escoliosis_distribucion(project)
-    data = [
-        ["Grado Cobb", "Casos"],
-        ["Normal (<5°)", str(esc["normal"])],
-        ["Leve (5-9°)", str(esc["leve"])],
-        ["Moderada (10-19°)", str(esc["moderada"])],
-        ["Grave (≥20°)", str(esc["grave"])],
-    ]
-    elements.append(_crear_tabla_conteos(data))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    # Gráfica con colores por severidad (verde→rojo oscuro).
-    categorias = ["Normal", "Leve", "Moderada", "Grave"]
-    valores = [esc["normal"], esc["leve"], esc["moderada"], esc["grave"]]
-    colores = ["#10b981", "#f59e0b", "#ef4444", "#7f1d1d"]
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Grado Cobb", "Casos"],
+                ["Normal (<5°)", str(esc["normal"])],
+                ["Leve (5-9°)", str(esc["leve"])],
+                ["Moderada (10-19°)", str(esc["moderada"])],
+                ["Grave (≥20°)", str(esc["grave"])],
+            ]
+        )
+    )
+    elements.append(Spacer(1, 0.12 * inch))
     grafica_path = _generar_grafica_barras_categorias(
-        categorias, valores, colores, "Distribución Escoliosis (Cobb)"
+        ["Normal", "Leve", "Moderada", "Grave"],
+        [esc["normal"], esc["leve"], esc["moderada"], esc["grave"]],
+        ["#10b981", "#f59e0b", "#ef4444", "#7f1d1d"],
+        "Distribución Escoliosis (Cobb)",
     )
     if grafica_path:
-        elements.append(
-            RLImage(grafica_path, width=5 * inch, height=3 * inch)
-        )
-        elements.append(Spacer(1, 0.1 * inch))
-        elements.append(
-            Paragraph(
-                "<i>Figura II.4 &mdash; Escoliosis clasificada por grado "
-                "Cobb (colores por severidad).</i>",
-                styles["EbookBody"],
-            )
-        )
+        elements.append(RLImage(grafica_path, width=5.0 * inch, height=2.6 * inch))
         tempfiles.append(grafica_path)
-
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Higiene de Columna (NOM-036-1-STPS-2018)",
+            [
+                "Riesgo Alto / Muy Alto: Ingresar al programa de Cuidado de Espalda y evaluar restricción de manejo manual de cargas > 5 kg.",
+                "Corroborar cada caso con clínica y antecedentes; capacitación anual en técnica segura de levantamiento y ergonomía.",
+            ],
+            styles,
+        )
+    )
     return elements
 
 
-def _render_estadistica_rx_torax(
-    project: Dict[str, Any],
-    styles,
-    bookmarks: Dict[str, str],
-    tempfiles: List[str],  # noqa: ARG001 (consistente con II.5–II.8)
-) -> List[Any]:
-    """II.5 RX Tórax — solo conteos (sin gráfica)."""
-    bookmarks["ii_rx_torax"] = "ii_rx_torax"
+def _render_estadistica_rx_torax(project: Dict[str, Any], styles) -> List[Any]:
     elements: List[Any] = []
     elements.append(Paragraph("II.5 RX T&oacute;rax", styles["EbookH1"]))
-    elements.append(Spacer(1, 0.1 * inch))
-
     trabajadores = project.get("trabajadores", [])
-    total = len(trabajadores)
-    normales = 0
-    alterados = 0
-    na = 0
+    normales = alterados = na = 0
     for w in trabajadores:
-        impresion = (w.get("rxTorax") or {}).get("impresion", "") or ""
-        impresion_up = impresion.upper().strip()
-        if not impresion_up or impresion_up in ("N/A", "NA"):
+        imp = ((w.get("rxTorax") or {}).get("impresion") or "").upper().strip()
+        if not imp or imp in ("N/A", "NA"):
             na += 1
-        elif "NORMAL" in impresion_up:
+        elif "NORMAL" in imp or "SIN EVIDENCIA" in imp:
             normales += 1
         else:
             alterados += 1
-
-    data = [
-        ["Resultado", "Casos"],
-        ["Normales", str(normales)],
-        ["Alterados", str(alterados)],
-        ["N/A o sin estudio", str(na)],
-        ["Total", str(total)],
-    ]
-    elements.append(_crear_tabla_conteos(data))
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Resultado Radiografía de Tórax", "Casos"],
+                ["Normales", str(normales)],
+                ["Con hallazgos / seguimiento", str(alterados)],
+                ["N/A o sin estudio", str(na)],
+                ["Total", str(len(trabajadores))],
+            ]
+        )
+    )
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Radiografía de Tórax",
+            [
+                "Casos con hallazgos: Canalizar a valoración médica específica para descartar patología pleuropulmonar o cardiomegalia.",
+                "Seguimiento anual con RX de tórax para personal expuesto a polvos o humos metálicos.",
+            ],
+            styles,
+        )
+    )
     return elements
 
 
-def _render_estadistica_ecg(
-    project: Dict[str, Any],
-    styles,
-    bookmarks: Dict[str, str],
-    tempfiles: List[str],  # noqa: ARG001
-) -> List[Any]:
-    """II.6 ECG — solo conteos."""
-    bookmarks["ii_ecg"] = "ii_ecg"
+def _render_estadistica_ecg(project: Dict[str, Any], styles) -> List[Any]:
     elements: List[Any] = []
-    elements.append(Paragraph("II.6 ECG", styles["EbookH1"]))
-    elements.append(Spacer(1, 0.1 * inch))
-
+    elements.append(Paragraph("II.6 ECG (Electrocardiograma)", styles["EbookH1"]))
     trabajadores = project.get("trabajadores", [])
-    total = len(trabajadores)
-    normales = 0
-    alterados = 0
-    na = 0
+    normales = alterados = na = 0
     for w in trabajadores:
-        impresion = (w.get("ecg") or {}).get("impresion", "") or ""
-        impresion_up = impresion.upper().strip()
-        if not impresion_up or impresion_up in ("N/A", "NA"):
+        imp = ((w.get("ecg") or {}).get("impresion") or "").upper().strip()
+        if not imp or imp in ("N/A", "NA"):
             na += 1
-        elif "NORMAL" in impresion_up or "SIN ANORMALIDAD" in impresion_up:
+        elif "NORMAL" in imp or "SIN ANORMAL" in imp or "SIN DATOS DE ANORMAL" in imp:
             normales += 1
         else:
             alterados += 1
-
-    data = [
-        ["Resultado", "Casos"],
-        ["Normales", str(normales)],
-        ["Alterados", str(alterados)],
-        ["N/A o sin estudio", str(na)],
-        ["Total", str(total)],
-    ]
-    elements.append(_crear_tabla_conteos(data))
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Resultado Electrocardiograma", "Casos"],
+                ["Sin alteraciones aparentes", str(normales)],
+                ["Con hallazgos / seguimiento", str(alterados)],
+                ["N/A o sin estudio", str(na)],
+                ["Total", str(len(trabajadores))],
+            ]
+        )
+    )
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Salud Cardiovascular",
+            [
+                "Casos con alteraciones del ritmo o conducción: Referir a Cardiología previo a actividades en alturas o espacios confinados.",
+            ],
+            styles,
+        )
+    )
     return elements
 
 
 def _render_estadistica_campimetria(
     project: Dict[str, Any],
     styles,
-    bookmarks: Dict[str, str],
     tempfiles: List[str],
 ) -> List[Any]:
-    """II.7 Agudeza visual — pastel."""
-    bookmarks["ii_campimetria"] = "ii_campimetria"
     elements: List[Any] = []
-    elements.append(
-        Paragraph("II.7 Campimetr&iacute;a (Agudeza Visual)", styles["EbookH1"])
-    )
-    elements.append(Spacer(1, 0.1 * inch))
-
-    # Calcular inline: NORMAL, DISMINUIDA, N/A.
+    elements.append(Paragraph("II.7 Campimetr&iacute;a (Agudeza Visual)", styles["EbookH1"]))
     mapa: Dict[str, int] = {}
     for w in project.get("trabajadores", []):
         av = (w.get("campimetria") or {}).get("agudezaVisual") or "N/A"
-        av = av.strip() if isinstance(av, str) else "N/A"
-        if not av:
-            av = "N/A"
+        av = av.strip() if isinstance(av, str) and av.strip() else "N/A"
         mapa[av] = mapa.get(av, 0) + 1
-
-    data = [["Agudeza Visual", "Casos"]]
-    for av, conteo in sorted(mapa.items()):
-        data.append([av, str(conteo)])
-    elements.append(_crear_tabla_conteos(data))
-    elements.append(Spacer(1, 0.15 * inch))
-
-    labels = list(mapa.keys())
-    valores = list(mapa.values())
-    grafica_path = _generar_grafica_pastel(
-        labels, valores, "Distribución Agudeza Visual"
-    )
+    elements.append(_crear_tabla_conteos([["Agudeza Visual", "Casos"]] + [[k, str(v)] for k, v in sorted(mapa.items())]))
+    elements.append(Spacer(1, 0.12 * inch))
+    grafica_path = _generar_grafica_pastel(list(mapa.keys()), list(mapa.values()), "Distribución Agudeza Visual")
     if grafica_path:
-        elements.append(
-            RLImage(grafica_path, width=5 * inch, height=3 * inch)
-        )
-        elements.append(Spacer(1, 0.1 * inch))
-        elements.append(
-            Paragraph(
-                "<i>Figura II.7 &mdash; Distribuci&oacute;n porcentual "
-                "de agudeza visual.</i>",
-                styles["EbookBody"],
-            )
-        )
+        elements.append(RLImage(grafica_path, width=5.0 * inch, height=2.6 * inch))
         tempfiles.append(grafica_path)
-
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Salud Visual",
+            [
+                "Disminución de agudeza visual NO corregida: Gestionar adaptación óptica y verificar uso permanente de lentes en el puesto de trabajo.",
+                "Revaloración optométrica en 6 meses (casos no corregidos) o anual (casos corregidos y normales).",
+            ],
+            styles,
+        )
+    )
     return elements
 
 
 def _render_estadistica_laboratorio(
     project: Dict[str, Any],
     styles,
-    bookmarks: Dict[str, str],
     tempfiles: List[str],
 ) -> List[Any]:
-    """II.8 Laboratorio — 3 mini-gráficas (glucosa, colesterol, triglicéridos)."""
-    bookmarks["ii_laboratorio"] = "ii_laboratorio"
     elements: List[Any] = []
     elements.append(Paragraph("II.8 Laboratorio", styles["EbookH1"]))
-    elements.append(Spacer(1, 0.1 * inch))
-
     qs6 = calcular_qs6_niveles(project)
 
-    # Glucosa.
-    elements.append(Paragraph("<b>Glucosa</b>", styles["EbookH2"]))
-    g_path = _generar_grafica_barras(
-        ["Normal (<100)", "Alta (≥100)"],
-        [qs6["glucosa"]["normal"], qs6["glucosa"]["alta"]],
-        "Glucosa (mg/dL)",
-        color="#3b82f6",
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Parámetro Química Sanguínea", "Normal", "Límite / Alto"],
+                ["Glucosa (<100 mg/dL normal)", str(qs6["glucosa"]["normal"]), str(qs6["glucosa"]["alta"])],
+                ["Colesterol (<200 mg/dL normal)", str(qs6["colesterol"]["normal"]), str(qs6["colesterol"]["limite"] + qs6["colesterol"]["alto"])],
+                ["Triglicéridos (<150 mg/dL normal)", str(qs6["trigliceridos"]["normal"]), str(qs6["trigliceridos"]["limite"] + qs6["trigliceridos"]["alto"])],
+            ],
+            col_widths=[3.7 * inch, 1.6 * inch, 1.6 * inch],
+        )
     )
-    if g_path:
-        elements.append(RLImage(g_path, width=4.5 * inch, height=2 * inch))
-        tempfiles.append(g_path)
+    elements.append(Spacer(1, 0.12 * inch))
+
+    for title, cats, vals, col in [
+        ("Glucosa (mg/dL)", ["Normal (<100)", "Alta (≥100)"], [qs6["glucosa"]["normal"], qs6["glucosa"]["alta"]], "#0f766e"),
+        ("Colesterol (mg/dL)", ["Normal (<200)", "Límite (200-239)", "Alto (≥240)"], [qs6["colesterol"]["normal"], qs6["colesterol"]["limite"], qs6["colesterol"]["alto"]], "#592c82"),
+        ("Triglicéridos (mg/dL)", ["Normal (<150)", "Límite (150-199)", "Alto (≥200)"], [qs6["trigliceridos"]["normal"], qs6["trigliceridos"]["limite"], qs6["trigliceridos"]["alto"]], "#0284c7"),
+    ]:
+        g_path = _generar_grafica_barras(cats, vals, title, color=col)
+        if g_path:
+            elements.append(RLImage(g_path, width=4.6 * inch, height=2.1 * inch))
+            tempfiles.append(g_path)
+            elements.append(Spacer(1, 0.06 * inch))
+
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Perfil Metabólico y Laboratorio",
+            [
+                "Glucosa o lípidos elevados: Canalizar a Medicina Familiar y Nutrición; monitoreo de glucosa capilar y perfil lipídico a los 3-6 meses.",
+                "Fomentar campañas de alimentación saludable e hidratación en planta.",
+            ],
+            styles,
+        )
+    )
+    return elements
+
+
+def _render_estadistica_clinica_general(
+    project: Dict[str, Any],
+    styles,
+    tempfiles: List[str],
+) -> List[Any]:
+    elements: List[Any] = []
+    elements.append(Paragraph("II.9 Estado Nutricional, Presi&oacute;n Arterial y Salud Bucal", styles["EbookH1"]))
+
+    imc = calcular_imc_distribucion(project)
+    pa = calcular_presion_arterial_distribucion(project)
+    bucal = calcular_salud_bucal_distribucion(project)
+
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Índice de Masa Corporal (OMS)", "Trabajadores"],
+                ["Bajo peso (<18.5)", str(imc["bajoPeso"])],
+                ["Peso Normal (18.5-24.9)", str(imc["normal"])],
+                ["Sobrepeso (25.0-29.9)", str(imc["sobrepeso"])],
+                ["Obesidad Grado I (30-34.9)", str(imc["obesidadI"])],
+                ["Obesidad Grado II (35-39.9)", str(imc["obesidadII"])],
+                ["Obesidad Grado III (≥40)", str(imc["obesidadIII"])],
+            ]
+        )
+    )
     elements.append(Spacer(1, 0.1 * inch))
 
-    # Colesterol.
-    elements.append(Paragraph("<b>Colesterol</b>", styles["EbookH2"]))
-    c_path = _generar_grafica_barras(
-        ["Normal (<200)", "Límite (200-239)", "Alto (≥240)"],
-        [
-            qs6["colesterol"]["normal"],
-            qs6["colesterol"]["limite"],
-            qs6["colesterol"]["alto"],
-        ],
-        "Colesterol (mg/dL)",
-        color="#8b5cf6",
+    imc_path = _generar_grafica_barras_categorias(
+        ["Bajo", "Normal", "Sobrepeso", "Ob. I", "Ob. II", "Ob. III"],
+        [imc["bajoPeso"], imc["normal"], imc["sobrepeso"], imc["obesidadI"], imc["obesidadII"], imc["obesidadIII"]],
+        ["#38bdf8", "#10b981", "#f59e0b", "#f97316", "#ef4444", "#7f1d1d"],
+        "Distribución Estado Nutricional (IMC)",
     )
-    if c_path:
-        elements.append(RLImage(c_path, width=4.5 * inch, height=2 * inch))
-        tempfiles.append(c_path)
+    if imc_path:
+        elements.append(RLImage(imc_path, width=5.0 * inch, height=2.5 * inch))
+        tempfiles.append(imc_path)
+
+    elements.append(Spacer(1, 0.12 * inch))
+    elements.append(
+        _crear_tabla_conteos(
+            [
+                ["Presión Arterial y Salud Bucal", "Casos"],
+                ["Presión Arterial Normal (<120/80)", str(pa["normal"])],
+                ["Presión Normal Alta (120-129/<80)", str(pa["normalAlta"])],
+                ["Presión Elevada / Hipertensión (≥130 o ≥80)", str(pa["elevada"])],
+                ["Salud Bucal sin alteraciones", str(bucal["normal"])],
+                ["Caries / Sarro dental detectado", str(bucal["cariesSarro"])],
+            ]
+        )
+    )
     elements.append(Spacer(1, 0.1 * inch))
-
-    # Triglicéridos.
-    elements.append(Paragraph("<b>Triglic&eacute;ridos</b>", styles["EbookH2"]))
-    t_path = _generar_grafica_barras(
-        ["Normal (<150)", "Límite (150-199)", "Alto (≥200)"],
-        [
-            qs6["trigliceridos"]["normal"],
-            qs6["trigliceridos"]["limite"],
-            qs6["trigliceridos"]["alto"],
-        ],
-        "Triglicéridos (mg/dL)",
-        color="#ec4899",
+    elements.append(
+        _cuadro_recomendaciones(
+            "Recomendaciones Médicas — Crónico-Degenerativas y Salud Bucal",
+            [
+                "Sobrepeso / Obesidad: Programa nutricional individualizado, retos de actividad física y adecuación de menús en comedor.",
+                "Presión Arterial elevada: Toma seriada durante 3 días consecutivos a la misma hora y valoración médica de confirmación.",
+                "Caries / Sarro: Referir a unidad odontológica para limpieza y tratamiento preventivo.",
+            ],
+            styles,
+        )
     )
-    if t_path:
-        elements.append(RLImage(t_path, width=4.5 * inch, height=2 * inch))
-        tempfiles.append(t_path)
+    return elements
 
+
+def _render_cierre_situacional(styles) -> List[Any]:
+    elements: List[Any] = []
+    elements.append(Paragraph("II.10 Conclusiones y Cierre M&eacute;dico Ocupacional", styles["EbookH1"]))
+    elements.append(Spacer(1, 0.15 * inch))
+    elements.append(
+        Paragraph(
+            "Agradecemos la confianza depositada en <b>Soluciones Médico Empresariales (SME)</b> para el "
+            "cuidado integral de la salud ocupacional de sus colaboradores. En las páginas subsecuentes "
+            "se integran los expedientes médicos individuales (dictámenes de aptitud y estudios de soporte) "
+            "listos para impresión continua o consulta directa desde el índice.",
+            styles["EbookBody"],
+        )
+    )
+    elements.append(Spacer(1, 0.4 * inch))
+    sig_tbl = Table(
+        [
+            [Paragraph("________________________________________", styles["EbookBody"])],
+            [Paragraph("<b>Coordinación de Medicina Ocupacional</b>", styles["EbookBody"])],
+            [Paragraph("Soluciones Médico Empresariales · Salud Responsable", styles["EbookSmall"])],
+        ],
+        colWidths=[4.2 * inch],
+    )
+    sig_tbl.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+    elements.append(sig_tbl)
     return elements
 
 
 # ------------------------------------------------------------------
-# III.X Sección por trabajador (Fase 2: las 8 secciones + TODOS)
+# III. Sección por trabajador + recolección de PDFs nativos para intercalar
 # ------------------------------------------------------------------
+
 def _render_seccion_trabajador(
     trabajador: Dict[str, Any],
     styles,
-    bookmarks: Dict[str, str],
     tempfiles: List[str],
     image_fetcher_instance: Optional[Any] = None,
+    fetched_cache: Optional[Dict[str, Optional[bytes]]] = None,
     indice: int = 1,
 ) -> List[Any]:
-    """
-    Renderiza las 8 secciones clínicas de un trabajador.
-    Solo renderiza secciones con datos válidos.
-    Soporta imagen opcional por sección si `image_fetcher_instance` está
-    presente y el dict del estudio expone `fileUrl` (o `fileUrlAP` /
-    `fileUrlLateral` para RX Columna).
-    """
-    folio = trabajador.get("folio", "unknown")
-    bookmark_key = f"trabajador_{folio}"
-    bookmarks[bookmark_key] = bookmark_key
-
     elements: List[Any] = []
+    folio = trabajador.get("folio", "N/A")
     nombre = trabajador.get("nombre", "Sin nombre")
+    edad = trabajador.get("edad")
+    edad_txt = f"{edad} años" if edad else ((trabajador.get("laboratorio") or {}).get("edad") or "N/A")
+    ex_med = trabajador.get("examenMedico") or {}
 
-    elements.append(
-        Paragraph(f"III.{indice} &nbsp; {nombre}", styles["EbookH1"])
+    # Banner encabezado del expediente del trabajador
+    hdr_tbl = Table(
+        [
+            [Paragraph(f"<b>III.{indice} &nbsp; {_esc(nombre)}</b>", ParagraphStyle("WT", parent=styles["EbookH1"], textColor=colors.white, spaceAfter=2, spaceBefore=0))],
+            [
+                Paragraph(
+                    f"<b>Folio:</b> {_esc(folio)} &nbsp;|&nbsp; "
+                    f"<b>Sexo:</b> {_esc(trabajador.get('sexo') or 'N/A')} &nbsp;|&nbsp; "
+                    f"<b>Edad:</b> {_esc(edad_txt)} &nbsp;|&nbsp; "
+                    f"<b>Área/Puesto:</b> {_esc(trabajador.get('area') or 'N/A')} &nbsp;|&nbsp; "
+                    f"<b>Aptitud:</b> {_esc(ex_med.get('aptitud') or 'Pendiente')}",
+                    ParagraphStyle("WM", parent=styles["EbookSmall"], textColor=colors.HexColor("#e2e8f0")),
+                )
+            ],
+        ],
+        colWidths=[6.9 * inch],
     )
-    elements.append(
-        Paragraph(
-            f"<b>Folio:</b> {folio} &nbsp;|&nbsp; "
-            f"<b>Sexo:</b> {trabajador.get('sexo', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>&Aacute;rea:</b> {trabajador.get('area', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>Antig&uuml;edad:</b> {trabajador.get('antiguedad', 'N/A')}",
-            styles["EbookBody"],
+    hdr_tbl.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SME_DARK),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+            ]
         )
     )
-    elements.append(Spacer(1, 0.2 * inch))
+    elements.append(hdr_tbl)
+    elements.append(Spacer(1, 0.14 * inch))
 
     tiene_algun_estudio = False
 
@@ -1145,13 +1117,7 @@ def _render_seccion_trabajador(
         img_url = audio.get("fileUrl")
         if img_url and image_fetcher_instance is not None:
             elements.extend(
-                _render_imagen_estudio(
-                    img_url,
-                    "Audiograma original",
-                    image_fetcher_instance,
-                    tempfiles,
-                    styles,
-                )
+                _render_imagen_estudio(img_url, "Audiograma original", image_fetcher_instance, tempfiles, styles, fetched_cache)
             )
 
     # 2. ESPIROMETRÍA
@@ -1162,16 +1128,10 @@ def _render_seccion_trabajador(
         img_url = espiro.get("fileUrl")
         if img_url and image_fetcher_instance is not None:
             elements.extend(
-                _render_imagen_estudio(
-                    img_url,
-                    "Curva flujo-volumen",
-                    image_fetcher_instance,
-                    tempfiles,
-                    styles,
-                )
+                _render_imagen_estudio(img_url, "Curva flujo-volumen", image_fetcher_instance, tempfiles, styles, fetched_cache)
             )
 
-    # 3. RX COLUMNA (puede tener 2 imágenes: AP + lateral)
+    # 3. RX COLUMNA
     rx_col = trabajador.get("rxColumna") or {}
     if rx_col and _dict_has_value(rx_col):
         tiene_algun_estudio = True
@@ -1181,13 +1141,7 @@ def _render_seccion_trabajador(
             if img_url and image_fetcher_instance is not None:
                 label = "RX Columna AP" if sub_idx == 1 else "RX Columna Lateral"
                 elements.extend(
-                    _render_imagen_estudio(
-                        img_url,
-                        label,
-                        image_fetcher_instance,
-                        tempfiles,
-                        styles,
-                    )
+                    _render_imagen_estudio(img_url, label, image_fetcher_instance, tempfiles, styles, fetched_cache)
                 )
 
     # 4. RX TÓRAX
@@ -1198,13 +1152,7 @@ def _render_seccion_trabajador(
         img_url = rx_torax.get("fileUrl")
         if img_url and image_fetcher_instance is not None:
             elements.extend(
-                _render_imagen_estudio(
-                    img_url,
-                    "RX Tórax PA",
-                    image_fetcher_instance,
-                    tempfiles,
-                    styles,
-                )
+                _render_imagen_estudio(img_url, "RX Tórax PA", image_fetcher_instance, tempfiles, styles, fetched_cache)
             )
 
     # 5. ECG
@@ -1215,13 +1163,7 @@ def _render_seccion_trabajador(
         img_url = ecg.get("fileUrl")
         if img_url and image_fetcher_instance is not None:
             elements.extend(
-                _render_imagen_estudio(
-                    img_url,
-                    "Trazo ECG",
-                    image_fetcher_instance,
-                    tempfiles,
-                    styles,
-                )
+                _render_imagen_estudio(img_url, "Trazo ECG", image_fetcher_instance, tempfiles, styles, fetched_cache)
             )
 
     # 6. LABORATORIO
@@ -1232,125 +1174,90 @@ def _render_seccion_trabajador(
         img_url = lab.get("fileUrl")
         if img_url and image_fetcher_instance is not None:
             elements.extend(
-                _render_imagen_estudio(
-                    img_url,
-                    "Resultados de laboratorio",
-                    image_fetcher_instance,
-                    tempfiles,
-                    styles,
-                )
+                _render_imagen_estudio(img_url, "Resultados de laboratorio", image_fetcher_instance, tempfiles, styles, fetched_cache)
             )
 
-    # 7. CAMPIMETRÍA (sin imagen estandarizada)
+    # 7. CAMPIMETRÍA
     campi = trabajador.get("campimetria") or {}
     if campi and _dict_has_value(campi):
         tiene_algun_estudio = True
         elements.extend(_render_campimetria(campi, styles))
 
-    # 8. EXAMEN MÉDICO (sin imagen, solo datos estructurados)
-    examen = trabajador.get("examenMedico") or {}
-    if examen and _dict_has_value(examen):
+    # 8. EXAMEN MÉDICO
+    if ex_med and _dict_has_value(ex_med):
         tiene_algun_estudio = True
-        elements.extend(_render_examen_medico(examen, styles))
+        elements.extend(_render_examen_medico(ex_med, styles))
 
     if not tiene_algun_estudio:
         elements.append(
-            Paragraph(
-                "<i>Sin estudios realizados para este trabajador.</i>",
-                styles["EbookPlaceholder"],
-            )
+            Paragraph("<i>Sin estudios realizados para este trabajador.</i>", styles["EbookPlaceholder"])
         )
 
     return elements
 
 
-# ------------------------------------------------------------------
-# Las 8 funciones de render por sección clínica (Fase 2)
-# ------------------------------------------------------------------
 def _render_audiometria(audio: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de audiometría."""
-    elements: List[Any] = []
-    elements.append(Paragraph("Audiometría", styles["EbookH2"]))
     hbc_val = audio.get("hbc", "N/A")
     if hbc_val is not None and hbc_val != "N/A":
         try:
-            hbc_val = f"{float(hbc_val):.2f}"
+            hbc_val = f"{float(hbc_val):.2f}%"
         except (TypeError, ValueError):
             pass
-    elements.append(
+    return [
+        Paragraph("Audiometría", styles["EbookH2"]),
         Paragraph(
-            f"<b>DX:</b> {audio.get('dx', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>OD:</b> {audio.get('oidoDerecho', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>OI:</b> {audio.get('oidoIzquierdo', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>%HBC:</b> {hbc_val}",
+            f"<b>DX:</b> {_esc(audio.get('dx', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>OD:</b> {_esc(audio.get('oidoDerecho', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>OI:</b> {_esc(audio.get('oidoIzquierdo', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>%HBC:</b> {_esc(hbc_val)}",
             styles["EbookBody"],
-        )
-    )
-    return elements
+        ),
+    ]
 
 
 def _render_espirometria(espiro: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de espirometría."""
-    elements: List[Any] = []
-    elements.append(Paragraph("Espirometría", styles["EbookH2"]))
-    elements.append(
+    return [
+        Paragraph("Espirometría", styles["EbookH2"]),
         Paragraph(
-            f"<b>Patrón:</b> {espiro.get('patron', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>FVC:</b> {espiro.get('fvc', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>Tabaquismo:</b> {espiro.get('tabaquismo', 'N/A')}",
+            f"<b>Patrón:</b> {_esc(espiro.get('patron', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>FVC:</b> {_esc(espiro.get('fvc', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>Tabaquismo:</b> {_esc(espiro.get('tabaquismo', 'N/A'))}",
             styles["EbookBody"],
-        )
-    )
-    return elements
+        ),
+    ]
 
 
 def _render_rx_columna(rx_col: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de RX columna."""
-    elements: List[Any] = []
-    elements.append(Paragraph("RX Columna", styles["EbookH2"]))
-    elements.append(
+    elements: List[Any] = [
+        Paragraph("RX Columna", styles["EbookH2"]),
         Paragraph(
-            f"<b>Escoliosis:</b> {rx_col.get('escoliosis', 'N/A')}° &nbsp;|&nbsp; "
-            f"<b>Lordosis:</b> {rx_col.get('lordosis', 'N/A')}° &nbsp;|&nbsp; "
-            f"<b>Báscula:</b> {rx_col.get('basculacion', 'N/A')} cm",
+            f"<b>Escoliosis:</b> {_esc(rx_col.get('escoliosis', 'N/A'))}° &nbsp;|&nbsp; "
+            f"<b>Lordosis:</b> {_esc(rx_col.get('lordosis', 'N/A'))}° &nbsp;|&nbsp; "
+            f"<b>Báscula:</b> {_esc(rx_col.get('basculacion', 'N/A'))} cm",
             styles["EbookBody"],
-        )
-    )
-    impresion = rx_col.get("impresion", "")
-    if impresion:
-        elements.append(
-            Paragraph(f"<b>Impresión:</b> {impresion}", styles["EbookBody"])
-        )
+        ),
+    ]
+    if rx_col.get("impresion"):
+        elements.append(Paragraph(f"<b>Impresión:</b> {_esc(rx_col.get('impresion'))}", styles["EbookBody"]))
     return elements
 
 
 def _render_rx_torax(rx_torax: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de RX tórax."""
-    elements: List[Any] = []
-    elements.append(Paragraph("RX Tórax", styles["EbookH2"]))
-    impresion = rx_torax.get("impresion", "N/A")
-    elements.append(
-        Paragraph(f"<b>Impresión:</b> {impresion}", styles["EbookBody"])
-    )
-    return elements
+    return [
+        Paragraph("RX Tórax", styles["EbookH2"]),
+        Paragraph(f"<b>Impresión:</b> {_esc(rx_torax.get('impresion', 'N/A'))}", styles["EbookBody"]),
+    ]
 
 
 def _render_ecg(ecg: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de ECG."""
-    elements: List[Any] = []
-    elements.append(Paragraph("ECG", styles["EbookH2"]))
-    impresion = ecg.get("impresion", "N/A")
-    elements.append(
-        Paragraph(f"<b>Impresión:</b> {impresion}", styles["EbookBody"])
-    )
-    return elements
+    return [
+        Paragraph("ECG", styles["EbookH2"]),
+        Paragraph(f"<b>Impresión:</b> {_esc(ecg.get('impresion', 'N/A'))}", styles["EbookBody"]),
+    ]
 
 
 def _render_laboratorio(lab: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de laboratorio (BH, QS6, Tóxico)."""
-    elements: List[Any] = []
-    elements.append(Paragraph("Laboratorio", styles["EbookH2"]))
-
+    elements: List[Any] = [Paragraph("Laboratorio", styles["EbookH2"])]
     bh = lab.get("bh") or {}
     qs6 = lab.get("qs6") or {}
     ego = lab.get("ego") or {}
@@ -1359,331 +1266,164 @@ def _render_laboratorio(lab: Dict[str, Any], styles) -> List[Any]:
     if bh and _dict_has_value(bh):
         elements.append(
             Paragraph(
-                f"<b>BH:</b> Hb={bh.get('hb', 'N/A')}, "
-                f"LEU={bh.get('leu', 'N/A')}, "
-                f"PLA={bh.get('pla', 'N/A')}, "
-                f"CHb={bh.get('chgm', bh.get('mchb', 'N/A'))}",
+                f"<b>BH:</b> Hb={_esc(bh.get('hb', 'N/A'))}, LEU={_esc(bh.get('leu', 'N/A'))}, "
+                f"PLA={_esc(bh.get('pla', 'N/A'))}, CHb={_esc(bh.get('chgm', bh.get('mchb', 'N/A')))}",
                 styles["EbookBody"],
             )
         )
-
     if qs6 and _dict_has_value(qs6):
         elements.append(
             Paragraph(
-                f"<b>QS6:</b> GLUC={qs6.get('gluc', 'N/A')}, "
-                f"BUN={qs6.get('bun', 'N/A')}, "
-                f"COL={qs6.get('col', 'N/A')}, "
-                f"TRIG={qs6.get('trig', 'N/A')}",
+                f"<b>QS6:</b> GLUC={_esc(qs6.get('gluc', 'N/A'))}, BUN={_esc(qs6.get('bun', 'N/A'))}, "
+                f"COL={_esc(qs6.get('col', 'N/A'))}, TRIG={_esc(qs6.get('trig', 'N/A'))}",
                 styles["EbookBody"],
             )
         )
-
     if toxico and _dict_has_value(toxico):
         elements.append(
             Paragraph(
-                f"<b>Tóxico:</b> ANFETA={toxico.get('anfeta', 'N/A')}, "
-                f"COCA={toxico.get('coca', 'N/A')}, "
-                f"MARIHUA={toxico.get('marihua', 'N/A')}",
+                f"<b>Tóxico:</b> ANFETA={_esc(toxico.get('anfeta', 'N/A'))}, "
+                f"COCA={_esc(toxico.get('coca', 'N/A'))}, MARIHUA={_esc(toxico.get('marihua', 'N/A'))}",
                 styles["EbookBody"],
             )
         )
-
     if ego and _dict_has_value(ego):
         elements.append(
             Paragraph(
-                f"<b>EGO:</b> {ego.get('descripcion', ego.get('resultado', 'N/A'))}",
+                f"<b>EGO:</b> {_esc(ego.get('descripcion', ego.get('resultado', 'N/A')))}",
                 styles["EbookBody"],
             )
         )
-
     return elements
 
 
 def _render_campimetria(campi: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de campimetría."""
-    elements: List[Any] = []
-    elements.append(Paragraph("Campimetría", styles["EbookH2"]))
-    elements.append(
+    return [
+        Paragraph("Campimetría", styles["EbookH2"]),
         Paragraph(
-            f"<b>Agudeza Visual:</b> {campi.get('agudezaVisual', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>Campos:</b> {campi.get('camposVisuales', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>Color:</b> {campi.get('discriminacionColor', 'N/A')}",
+            f"<b>Agudeza Visual:</b> {_esc(campi.get('agudezaVisual', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>Campos:</b> {_esc(campi.get('camposVisuales', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>Color:</b> {_esc(campi.get('discriminacionColor', 'N/A'))}",
             styles["EbookBody"],
-        )
-    )
-    return elements
+        ),
+    ]
 
 
 def _render_examen_medico(examen: Dict[str, Any], styles) -> List[Any]:
-    """Renderiza sección de examen médico."""
-    elements: List[Any] = []
-    elements.append(Paragraph("Examen Médico", styles["EbookH2"]))
-    elements.append(
+    elements: List[Any] = [
+        Paragraph("Examen Médico", styles["EbookH2"]),
         Paragraph(
-            f"<b>Peso:</b> {examen.get('peso', 'N/A')} kg &nbsp;|&nbsp; "
-            f"<b>Talla:</b> {examen.get('talla', 'N/A')} cm &nbsp;|&nbsp; "
-            f"<b>IMC:</b> {examen.get('imc', 'N/A')} &nbsp;|&nbsp; "
-            f"<b>TA:</b> {examen.get('presionArterial', 'N/A')}",
+            f"<b>Peso:</b> {_esc(examen.get('peso', 'N/A'))} kg &nbsp;|&nbsp; "
+            f"<b>Talla:</b> {_esc(examen.get('talla', 'N/A'))} m &nbsp;|&nbsp; "
+            f"<b>IMC:</b> {_esc(examen.get('imc', 'N/A'))} &nbsp;|&nbsp; "
+            f"<b>TA:</b> {_esc(examen.get('presionArterial', 'N/A'))}",
             styles["EbookBody"],
-        )
-    )
-    dx = examen.get("diagnostico", "")
-    if dx:
-        elements.append(
-            Paragraph(f"<b>Diagnóstico:</b> {dx}", styles["EbookBody"])
-        )
+        ),
+    ]
+    if examen.get("diagnostico"):
+        elements.append(Paragraph(f"<b>Diagnóstico:</b> {_esc(examen.get('diagnostico'))}", styles["EbookBody"]))
+    if examen.get("recomendaciones"):
+        elements.append(Paragraph(f"<b>Recomendaciones:</b> {_esc(examen.get('recomendaciones'))}", styles["EbookSmall"]))
     return elements
 
 
-# ------------------------------------------------------------------
-# Helper: descarga + compresión + embed de imagen de estudio (Fase 2)
-# ------------------------------------------------------------------
+def _fetch_cached(
+    file_url: str,
+    image_fetcher_instance: Any,
+    cache: Optional[Dict[str, Optional[bytes]]] = None,
+) -> Optional[bytes]:
+    if not file_url or image_fetcher_instance is None:
+        return None
+    if cache is not None and file_url in cache:
+        return cache[file_url]
+    fetch_fn = getattr(image_fetcher_instance, "fetch", None) or getattr(
+        image_fetcher_instance, "fetch_image", None
+    )
+    if not fetch_fn:
+        return None
+    try:
+        raw = fetch_fn(file_url)
+    except Exception as exc:
+        logger.warning("Error descargando %s: %s", file_url, exc)
+        raw = None
+    if cache is not None:
+        cache[file_url] = raw
+    return raw
+
+
 def _render_imagen_estudio(
     file_url: str,
     caption: str,
     image_fetcher_instance: Any,
     tempfiles: List[str],
     styles,
+    fetched_cache: Optional[Dict[str, Optional[bytes]]] = None,
 ) -> List[Any]:
-    """
-    Descarga, comprime y embebe una imagen de estudio en el PDF.
-
-    - Si `image_fetcher_instance` es None: retorna [] (skip silencioso).
-    - Si la descarga falla: retorna Paragraph de aviso (no rompe el PDF).
-    - Si es PDF: lo registra para merge posterior con pypdf y muestra caption.
-    - Si es JPG/PNG: lo embebe con RLImage escalada al ancho de página.
-    """
     elements: List[Any] = []
-
-    if image_fetcher_instance is None:
+    if image_fetcher_instance is None or not file_url:
         return elements
 
-    # Detectar interfaz: módulo image_fetcher (fetch_image/compress_image/is_pdf)
-    # o adaptador (fetch/compress/is_pdf).
-    fetch_fn = getattr(image_fetcher_instance, "fetch", None) or getattr(
-        image_fetcher_instance, "fetch_image", None
-    )
     compress_fn = getattr(image_fetcher_instance, "compress", None) or getattr(
         image_fetcher_instance, "compress_image", None
     )
     is_pdf_fn = getattr(image_fetcher_instance, "is_pdf", None)
-
-    if not (fetch_fn and compress_fn and is_pdf_fn):
-        logger.warning(
-            "_render_imagen_estudio: image_fetcher_instance no expone la "
-            "interfaz esperada (fetch/compress/is_pdf)"
-        )
+    if not (compress_fn and is_pdf_fn):
         return elements
 
     try:
-        raw = fetch_fn(file_url)
+        raw = _fetch_cached(file_url, image_fetcher_instance, fetched_cache)
         if not raw:
+            return elements
+
+        # Los PDFs nativos se intercalan en el capítulo de este trabajador con pypdf;
+        # aquí solo confirmamos que están anexos en este capítulo.
+        if is_pdf_fn(raw):
             elements.append(
                 Paragraph(
-                    f"<i>{caption}: imagen no disponible</i>",
-                    styles["EbookBody"],
+                    f"<i>{_esc(caption)}: Documento PDF oficial anexo a continuación en este expediente.</i>",
+                    styles["EbookSmall"],
                 )
             )
             return elements
 
         compressed = compress_fn(raw)
-
-        if is_pdf_fn(compressed):
-            # PDFs nativos: se mergean al final del ebook con pypdf.
-            elements.append(
-                Paragraph(
-                    f"<i>{caption}: PDF detectado (se mergea al final del "
-                    f"ebook como página adicional).</i>",
-                    styles["EbookBody"],
-                )
-            )
-            _pending_pdfs_list().append((file_url, caption))
-        else:
-            # JPG/PNG: embeber inline escalada.
-            tmp = tempfile.NamedTemporaryFile(
-                suffix=".png", delete=False
-            )
-            tmp.write(compressed)
-            tmp.close()
-            elements.append(Spacer(1, 0.1 * inch))
-            elements.append(
-                Paragraph(
-                    f"<i>{caption}:</i>",
-                    styles["EbookBody"],
-                )
-            )
-            elements.append(
-                RLImage(tmp.name, width=5.5 * inch, height=3.5 * inch)
-            )
-            elements.append(Spacer(1, 0.1 * inch))
-            # Diferir cleanup hasta post-build.
-            tempfiles.append(tmp.name)
-
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.write(compressed)
+        tmp.close()
+        elements.append(Spacer(1, 0.08 * inch))
+        elements.append(Paragraph(f"<i>{_esc(caption)}:</i>", styles["EbookSmall"]))
+        elements.append(RLImage(tmp.name, width=5.6 * inch, height=3.3 * inch, kind="proportional"))
+        elements.append(Spacer(1, 0.08 * inch))
+        tempfiles.append(tmp.name)
     except Exception as exc:
-        logger.warning(
-            "_render_imagen_estudio: error procesando %s: %s",
-            file_url,
-            exc,
-        )
-        elements.append(
-            Paragraph(
-                f"<i>{caption}: error al cargar ({(str(exc) or '')[:50]})</i>",
-                styles["EbookBody"],
-            )
-        )
-
+        logger.warning("_render_imagen_estudio error %s: %s", file_url, exc)
     return elements
 
 
 # ------------------------------------------------------------------
-# Cola de PDFs pendientes de merge al final del ebook (Fase 2)
+# Footer / Encabezado por página
 # ------------------------------------------------------------------
-_PENDING_PDFS: List[Any] = []  # [(file_url, caption), ...]
 
-
-def _pending_pdfs_list() -> List[Any]:
-    """Retorna la lista global de PDFs pendientes de merge al final."""
-    return _PENDING_PDFS
-
-
-def _merge_pending_pdfs(
-    output_path: str,
-    image_fetcher_instance: Any,
-) -> None:
-    """
-    Después de doc.build(), mergea los PDFs nativos pendientes (audiometría,
-    laboratorio, etc.) al final del ebook con pypdf.
-    Si no hay pendientes o falla el merge, no rompe la generación.
-    """
-    if not _PENDING_PDFS or image_fetcher_instance is None:
-        return
-
-    fetch_fn = getattr(image_fetcher_instance, "fetch", None) or getattr(
-        image_fetcher_instance, "fetch_image", None
-    )
-    if not fetch_fn:
-        return
-
-    try:
-        from pypdf import PdfReader, PdfWriter
-
-        writer = PdfWriter()
-        for page in PdfReader(output_path).pages:
-            writer.add_page(page)
-
-        for file_url, _caption in _PENDING_PDFS:
-            try:
-                pdf_bytes = fetch_fn(file_url)
-                if not pdf_bytes:
-                    continue
-                tmp_pdf = tempfile.NamedTemporaryFile(
-                    suffix=".pdf", delete=False
-                )
-                tmp_pdf.write(pdf_bytes)
-                tmp_pdf.close()
-                for page in PdfReader(tmp_pdf.name).pages:
-                    writer.add_page(page)
-                try:
-                    os.unlink(tmp_pdf.name)
-                except OSError:
-                    pass
-            except Exception as exc:
-                logger.warning(
-                    "_merge_pending_pdfs: error mergeando %s: %s",
-                    file_url,
-                    exc,
-                )
-
-        with open(output_path, "wb") as fh:
-            writer.write(fh)
-    except Exception as exc:
-        logger.warning(
-            "_merge_pending_pdfs: error general mergeando PDFs: %s", exc
-        )
-    finally:
-        _PENDING_PDFS.clear()
-
-
-# ------------------------------------------------------------------
-# Footer / encabezados
-# ------------------------------------------------------------------
 def _footer_portada(canvas, doc):
-    # La portada no lleva footer ni header (limpio).
     canvas.saveState()
     canvas.restoreState()
 
 
 def _footer_normal(canvas, doc):
     canvas.saveState()
-    canvas.setFont(FONT_NAME, 8)
-    canvas.setFillColor(colors.HexColor("#64748b"))
-    canvas.drawCentredString(
-        letter[0] / 2,
-        0.5 * inch,
-        f"AMI — EBOOK — Página {doc.page}",
-    )
+    canvas.setStrokeColor(SME_BORDER)
+    canvas.setLineWidth(0.5)
+    canvas.line(0.7 * inch, 0.6 * inch, letter[0] - 0.7 * inch, 0.6 * inch)
+    canvas.setFont(FONT_NAME, 7.8)
+    canvas.setFillColor(SME_SLATE)
+    canvas.drawString(0.7 * inch, 0.43 * inch, "Soluciones Médico Empresariales — Diagnóstico Situacional y Expedientes UMM")
+    canvas.drawRightString(letter[0] - 0.7 * inch, 0.43 * inch, f"Página {doc.page}")
     canvas.restoreState()
 
 
 # ------------------------------------------------------------------
-# Bookmarks nativos PDF (registrados post-build)
+# Utilidades de presencia de estudios
 # ------------------------------------------------------------------
-def _register_bookmarks(
-    pdf_path: str, bookmarks: Dict[str, str]
-) -> None:
-    """
-    Re-abre el PDF generado y registra bookmarks/outline entries.
-    El bookmark apunta al inicio de la página 1 (Fase 1: simplificado,
-    Fase 2 puede usar posiciones precisas por sección).
-    """
-    if not bookmarks:
-        return
-    try:
-        from pypdf import PdfReader, PdfWriter
-
-        reader = PdfReader(pdf_path)
-        writer = PdfWriter()
-        for page in reader.pages:
-            writer.add_page(page)
-
-        for name in bookmarks.values():
-            try:
-                writer.add_outline_item(name, 0)  # apunta a página 1
-            except Exception as exc:
-                logger.debug(
-                    "Bookmark '%s' no se pudo registrar: %s", name, exc
-                )
-
-        with open(pdf_path, "wb") as fh:
-            writer.write(fh)
-    except Exception as exc:
-        logger.warning(
-            "No se pudieron registrar bookmarks en %s: %s", pdf_path, exc
-        )
-
-
-# ------------------------------------------------------------------
-# Util: ¿tiene estudios el trabajador?
-# ------------------------------------------------------------------
-def _tiene_estudios(trabajador: Dict[str, Any]) -> bool:
-    for key in [
-        "audiometria",
-        "espirometria",
-        "rxColumna",
-        "rxTorax",
-        "ecg",
-        "laboratorio",
-        "campimetria",
-    ]:
-        estudio = trabajador.get(key) or {}
-        for v in estudio.values():
-            if isinstance(v, dict):
-                if any(_v_has_value(x) for x in v.values()):
-                    return True
-            elif _v_has_value(v):
-                return True
-    return False
-
 
 def _v_has_value(v: Any) -> bool:
     if v is None:
@@ -1694,16 +1434,422 @@ def _v_has_value(v: Any) -> bool:
 
 
 def _dict_has_value(d: Optional[Dict[str, Any]]) -> bool:
-    """
-    True si el dict tiene al menos un valor no vacío (recursivo para sub-dicts).
-    Usado para decidir si renderizar una sección clínica.
-    """
     if not d or not isinstance(d, dict):
         return False
-    for v in d.values():
+    for k, v in d.items():
+        if k in ("fileUrl", "fileUrlAP", "fileUrlLateral", "validatedPdfUrl", "dictamenPdfUrl"):
+            continue
         if isinstance(v, dict):
             if _dict_has_value(v):
                 return True
         elif _v_has_value(v):
             return True
     return False
+
+
+def _tiene_estudios(trabajador: Dict[str, Any]) -> bool:
+    for key in (
+        "audiometria",
+        "espirometria",
+        "rxColumna",
+        "rxTorax",
+        "ecg",
+        "laboratorio",
+        "campimetria",
+        "examenMedico",
+    ):
+        if _dict_has_value(trabajador.get(key) or {}):
+            return True
+    return False
+
+
+# ------------------------------------------------------------------
+# Construcción Two-Pass + Intercalado de PDFs por Trabajador
+# ------------------------------------------------------------------
+
+def _collect_worker_native_pdfs(
+    trabajador: Dict[str, Any],
+    image_fetcher_instance: Any,
+    fetched_cache: Dict[str, Optional[bytes]],
+) -> List[Tuple[str, bytes]]:
+    """
+    Devuelve la lista ordenada de [(titulo_doc, pdf_bytes)] que pertenecen
+    exclusivamente a este trabajador (Dictamen primero, luego reportes de estudios).
+    """
+    if image_fetcher_instance is None:
+        return []
+
+    is_pdf_fn = getattr(image_fetcher_instance, "is_pdf", None) or (
+        lambda data: isinstance(data, (bytes, bytearray)) and bytes(data).lstrip()[:5].startswith(b"%PDF")
+    )
+
+    docs: List[Tuple[str, str]] = []
+    seen_urls: set[str] = set()
+
+    def _push(title: str, url: Optional[str]) -> None:
+        if not url or not isinstance(url, str):
+            return
+        clean = url.strip()
+        if not clean or clean in seen_urls:
+            return
+        seen_urls.add(clean)
+        docs.append((title, clean))
+
+    for d in trabajador.get("documentosPdf") or []:
+        if isinstance(d, dict):
+            _push(str(d.get("titulo") or "Documento"), d.get("url"))
+
+    # También revisar URLs directas en estudios por si el caller armó snapshot manual.
+    ex = trabajador.get("examenMedico") or {}
+    _push("Dictamen Médico de Aptitud", ex.get("dictamenPdfUrl"))
+    _push("Examen Médico Validado", ex.get("validatedPdfUrl") or ex.get("fileUrl"))
+    for key, label in (
+        ("audiometria", "Audiometría"),
+        ("espirometria", "Espirometría"),
+        ("rxColumna", "Radiografía de Columna"),
+        ("rxTorax", "Radiografía de Tórax"),
+        ("ecg", "Electrocardiograma"),
+        ("campimetria", "Campimetría"),
+        ("laboratorio", "Laboratorio Clínico"),
+    ):
+        st = trabajador.get(key) or {}
+        _push(f"{label} (Validado)", st.get("validatedPdfUrl"))
+        _push(f"{label} (Reporte)", st.get("fileUrl"))
+
+    out: List[Tuple[str, bytes]] = []
+    for title, url in docs:
+        raw = _fetch_cached(url, image_fetcher_instance, fetched_cache)
+        if not raw or not is_pdf_fn(raw):
+            continue
+        try:
+            reader = PdfReader(BytesIO(raw))
+            if len(reader.pages) > 0:
+                out.append((title, raw))
+        except Exception as exc:
+            logger.warning("PDF nativo inválido (%s): %s", title, exc)
+    return out
+
+
+def _build_reportlab_story(
+    project: Dict[str, Any],
+    trabajadores_ordenados: List[Dict[str, Any]],
+    toc_entries: List[Tuple[str, str, int, bool]],
+    final_page_map: Dict[str, int],
+    marker_pages: Dict[str, int],
+    link_rects: List[Tuple[int, Tuple[float, float, float, float], str]],
+    styles,
+    tempfiles: List[str],
+    image_fetcher_instance: Any,
+    fetched_cache: Dict[str, Optional[bytes]],
+    usable_width: float,
+) -> List[Any]:
+    story: List[Any] = []
+
+    story.append(_MarkerFlowable("portada", marker_pages))
+    story.extend(_render_portada(project, styles))
+    story.append(PageBreak())
+
+    story.append(_MarkerFlowable("toc", marker_pages))
+    story.extend(_render_toc(toc_entries, final_page_map, link_rects, styles, usable_width))
+    story.append(PageBreak())
+
+    story.append(_MarkerFlowable("resumen", marker_pages))
+    story.extend(_render_resumen_ejecutivo(project, styles, tempfiles))
+    story.append(PageBreak())
+
+    sections = [
+        ("ii_audiometria", lambda: _render_estadistica_audiometria(project, styles, tempfiles)),
+        ("ii_trauma_acustico", lambda: _render_estadistica_trauma_acustico(project, styles, tempfiles)),
+        ("ii_espirometria", lambda: _render_estadistica_espirometria(project, styles, tempfiles)),
+        ("ii_rx_columna", lambda: _render_estadistica_rx_columna(project, styles, tempfiles)),
+        ("ii_rx_torax", lambda: _render_estadistica_rx_torax(project, styles)),
+        ("ii_ecg", lambda: _render_estadistica_ecg(project, styles)),
+        ("ii_campimetria", lambda: _render_estadistica_campimetria(project, styles, tempfiles)),
+        ("ii_laboratorio", lambda: _render_estadistica_laboratorio(project, styles, tempfiles)),
+        ("ii_clinica_general", lambda: _render_estadistica_clinica_general(project, styles, tempfiles)),
+        ("ii_cierre", lambda: _render_cierre_situacional(styles)),
+    ]
+
+    for key, builder in sections:
+        story.append(_MarkerFlowable(key, marker_pages))
+        story.extend(builder())
+        story.append(PageBreak())
+
+    story.append(_MarkerFlowable("iii_expedientes", marker_pages))
+    story.append(Paragraph("III. Reportes Individuales", styles["EbookH1"]))
+
+    for idx, trabajador in enumerate(trabajadores_ordenados, 1):
+        if idx > 1:
+            story.append(PageBreak())
+        w_key = f"trabajador_{idx}"
+        story.append(_MarkerFlowable(w_key, marker_pages))
+        story.extend(
+            _render_seccion_trabajador(
+                trabajador,
+                styles,
+                tempfiles,
+                image_fetcher_instance=image_fetcher_instance,
+                fetched_cache=fetched_cache,
+                indice=idx,
+            )
+        )
+        story.append(_MarkerFlowable(f"trabajador_end_{idx}", marker_pages))
+
+    return story
+
+
+def _build_pdf_bytes(
+    story: List[Any],
+    empresa: str,
+) -> bytes:
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        topMargin=0.75 * inch,
+        bottomMargin=0.8 * inch,
+        leftMargin=0.7 * inch,
+        rightMargin=0.7 * inch,
+        title=f"Diagnóstico Situacional y Ebook — {empresa}",
+        author="Soluciones Medico Empresariales",
+    )
+    doc.build(story, onFirstPage=_footer_portada, onLaterPages=_footer_normal)
+    return buf.getvalue()
+
+
+def _compute_final_page_mapping(
+    num_rl_pages: int,
+    trabajadores_ordenados: List[Dict[str, Any]],
+    marker_pages: Dict[str, int],
+    worker_native_pdfs: Dict[int, List[Tuple[str, bytes]]],
+) -> Tuple[Dict[int, int], Dict[int, List[Tuple[str, int]]]]:
+    """
+    Calcula en qué página 0-based FINAL cae cada página ReportLab al intercalar
+    los PDFs nativos de cada trabajador inmediatamente después de su última
+    página ReportLab (`trabajador_end_{idx}`).
+    """
+    insert_after_page: Dict[int, List[Tuple[int, str, bytes]]] = {}
+    for idx in range(1, len(trabajadores_ordenados) + 1):
+        pdfs = worker_native_pdfs.get(idx) or []
+        if not pdfs:
+            continue
+        end_pg = marker_pages.get(f"trabajador_end_{idx}")
+        if end_pg is None:
+            continue
+        bucket = insert_after_page.setdefault(end_pg, [])
+        for title, pbytes in pdfs:
+            bucket.append((idx, title, pbytes))
+
+    rl_to_final: Dict[int, int] = {}
+    worker_doc_final_pages: Dict[int, List[Tuple[str, int]]] = {}
+    cursor = 0
+    for rl_idx in range(num_rl_pages):
+        rl_to_final[rl_idx] = cursor
+        cursor += 1
+        for idx, title, pbytes in insert_after_page.get(rl_idx, []):
+            try:
+                cnt = len(PdfReader(BytesIO(pbytes)).pages)
+            except Exception:
+                cnt = 0
+            if cnt > 0:
+                worker_doc_final_pages.setdefault(idx, []).append((title, cursor))
+                cursor += cnt
+
+    return rl_to_final, worker_doc_final_pages
+
+
+def generar_ebook(
+    project: Dict[str, Any],
+    output_path: str,
+    image_fetcher_instance: Optional[Any] = None,
+) -> str:
+    """
+    Genera el PDF Ebook completo (Diagnóstico Situacional + Expedientes
+    intercalados + Índice clicable + Bookmarks jerárquicos exactos).
+    """
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+
+    trabajadores = project.get("trabajadores", []) or []
+    if len(trabajadores) > MAX_TRABAJADORES:
+        logger.warning(
+            "generar_ebook: %d trabajadores excede el máximo de %d",
+            len(trabajadores),
+            MAX_TRABAJADORES,
+        )
+
+    trabajadores_ordenados = sorted(
+        trabajadores,
+        key=lambda w: (_apellido_de(w), w.get("folio", "")),
+    )
+
+    fetched_cache: Dict[str, Optional[bytes]] = {}
+    worker_native_pdfs: Dict[int, List[Tuple[str, bytes]]] = {}
+    for idx, t in enumerate(trabajadores_ordenados, 1):
+        worker_native_pdfs[idx] = _collect_worker_native_pdfs(
+            t, image_fetcher_instance, fetched_cache
+        )
+
+    toc_entries: List[Tuple[str, str, int, bool]] = [
+        ("resumen", "I. Resumen Ejecutivo y Demografía", 0, True),
+        ("ii_audiometria", "II.1 Audiometría (%HBC) y LFT Art. 514", 1, False),
+        ("ii_trauma_acustico", "II.2 Trauma Acústico por Área", 1, False),
+        ("ii_espirometria", "II.3 Espirometría y Tabaquismo", 1, False),
+        ("ii_rx_columna", "II.4 RX Columna (Escoliosis) — NOM-036", 1, False),
+        ("ii_rx_torax", "II.5 RX Tórax", 1, False),
+        ("ii_ecg", "II.6 Electrocardiograma (ECG)", 1, False),
+        ("ii_campimetria", "II.7 Campimetría y Agudeza Visual", 1, False),
+        ("ii_laboratorio", "II.8 Laboratorio Clínico", 1, False),
+        ("ii_clinica_general", "II.9 Estado Nutricional, Presión Arterial y Salud Bucal", 1, False),
+        ("ii_cierre", "II.10 Conclusiones y Cierre Médico", 1, False),
+        ("iii_expedientes", f"III. Expedientes Individuales ({len(trabajadores_ordenados)} trabajadores)", 0, True),
+    ]
+    for idx, t in enumerate(trabajadores_ordenados, 1):
+        folio = t.get("folio") or ""
+        lbl = f"III.{idx} {t.get('nombre', 'Sin nombre')}" + (f" ({folio})" if folio else "")
+        toc_entries.append((f"trabajador_{idx}", lbl, 1, False))
+
+    styles = _build_styles()
+    usable_width = letter[0] - 1.4 * inch
+    tempfiles_p1: List[str] = []
+    marker_pages_p1: Dict[str, int] = {}
+    link_rects_p1: List[Tuple[int, Tuple[float, float, float, float], str]] = []
+
+    empresa = str(project.get("empresa") or "Proyecto")
+
+    # ── Pass 1: medir páginas ReportLab sin números finales aún ─────────────
+    story_p1 = _build_reportlab_story(
+        project=project,
+        trabajadores_ordenados=trabajadores_ordenados,
+        toc_entries=toc_entries,
+        final_page_map={},
+        marker_pages=marker_pages_p1,
+        link_rects=link_rects_p1,
+        styles=styles,
+        tempfiles=tempfiles_p1,
+        image_fetcher_instance=image_fetcher_instance,
+        fetched_cache=fetched_cache,
+        usable_width=usable_width,
+    )
+    pdf_p1 = _build_pdf_bytes(story_p1, empresa)
+    for tmp in tempfiles_p1:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+    num_rl_p1 = len(PdfReader(BytesIO(pdf_p1)).pages)
+    rl_to_final_p1, _ = _compute_final_page_mapping(
+        num_rl_p1, trabajadores_ordenados, marker_pages_p1, worker_native_pdfs
+    )
+    final_page_map = {
+        k: rl_to_final_p1.get(rl_pg, rl_pg)
+        for k, rl_pg in marker_pages_p1.items()
+    }
+
+    # ── Pass 2: render final con números de página reales y rects clicables ─
+    tempfiles_p2: List[str] = []
+    marker_pages_p2: Dict[str, int] = {}
+    link_rects_p2: List[Tuple[int, Tuple[float, float, float, float], str]] = []
+
+    story_p2 = _build_reportlab_story(
+        project=project,
+        trabajadores_ordenados=trabajadores_ordenados,
+        toc_entries=toc_entries,
+        final_page_map=final_page_map,
+        marker_pages=marker_pages_p2,
+        link_rects=link_rects_p2,
+        styles=styles,
+        tempfiles=tempfiles_p2,
+        image_fetcher_instance=image_fetcher_instance,
+        fetched_cache=fetched_cache,
+        usable_width=usable_width,
+    )
+    pdf_p2 = _build_pdf_bytes(story_p2, empresa)
+    for tmp in tempfiles_p2:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+    # ── Pass 3: ensamblado pypdf intercalando PDFs por trabajador + bookmarks ─
+    base_reader = PdfReader(BytesIO(pdf_p2))
+    num_rl_p2 = len(base_reader.pages)
+    rl_to_final, worker_doc_final_pages = _compute_final_page_mapping(
+        num_rl_p2, trabajadores_ordenados, marker_pages_p2, worker_native_pdfs
+    )
+    exact_final_map = {
+        k: rl_to_final.get(rl_pg, rl_pg)
+        for k, rl_pg in marker_pages_p2.items()
+    }
+
+    insert_after_page: Dict[int, List[bytes]] = {}
+    for idx in range(1, len(trabajadores_ordenados) + 1):
+        pdfs = worker_native_pdfs.get(idx) or []
+        if not pdfs:
+            continue
+        end_pg = marker_pages_p2.get(f"trabajador_end_{idx}")
+        if end_pg is None:
+            continue
+        bucket = insert_after_page.setdefault(end_pg, [])
+        for _title, pbytes in pdfs:
+            bucket.append(pbytes)
+
+    writer = PdfWriter()
+    for rl_idx, page in enumerate(base_reader.pages):
+        writer.add_page(page)
+        for pbytes in insert_after_page.get(rl_idx, []):
+            try:
+                sub_reader = PdfReader(BytesIO(pbytes))
+                for sub_pg in sub_reader.pages:
+                    writer.add_page(sub_pg)
+            except Exception as exc:
+                logger.warning("Error intercalando página PDF nativa: %s", exc)
+
+    # Registrar hipervínculos internos en cada entrada del Índice
+    for toc_rl_pg, rect, dest_key in link_rects_p2:
+        src_final = rl_to_final.get(toc_rl_pg)
+        dst_final = exact_final_map.get(dest_key)
+        if src_final is not None and dst_final is not None:
+            try:
+                writer.add_annotation(
+                    page_number=src_final,
+                    annotation=Link(rect=rect, border=[0, 0, 0], target_page_index=dst_final),
+                )
+            except Exception as exc:
+                logger.debug("No se pudo agregar Link TOC %s: %s", dest_key, exc)
+
+    # Registrar Bookmarks / Outlines jerárquicos con página final exacta
+    try:
+        writer.add_outline_item("Portada", exact_final_map.get("portada", 0))
+        writer.add_outline_item("Índice General", exact_final_map.get("toc", 1))
+        writer.add_outline_item(
+            "I. Resumen Ejecutivo y Demografía", exact_final_map.get("resumen", 0)
+        )
+        diag_parent = writer.add_outline_item(
+            "II. Diagnóstico Situacional",
+            exact_final_map.get("ii_audiometria", 0),
+        )
+        for key, label, _ind, _b in toc_entries:
+            if key.startswith("ii_"):
+                writer.add_outline_item(
+                    label, exact_final_map.get(key, 0), parent=diag_parent
+                )
+
+        exp_parent = writer.add_outline_item(
+            f"III. Expedientes Individuales ({len(trabajadores_ordenados)})",
+            exact_final_map.get("iii_expedientes", 0),
+        )
+        for idx, t in enumerate(trabajadores_ordenados, 1):
+            w_pg = exact_final_map.get(f"trabajador_{idx}", 0)
+            w_title = f"III.{idx} {t.get('nombre', 'Sin nombre')}"
+            w_node = writer.add_outline_item(w_title, w_pg, parent=exp_parent)
+            for doc_title, doc_pg in worker_doc_final_pages.get(idx, []):
+                writer.add_outline_item(doc_title, doc_pg, parent=w_node)
+    except Exception as exc:
+        logger.warning("No se pudieron registrar outlines jerárquicos: %s", exc)
+
+    with open(output_path, "wb") as fh:
+        writer.write(fh)
+
+    logger.info("EBOOK generado: %s (%d páginas)", output_path, len(writer.pages))
+    return output_path
