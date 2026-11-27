@@ -22,16 +22,24 @@ import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 const CreateProjectSchema = z
   .object({
     name: zFreeTextMax(200, 1),
-    companyId: z.string().uuid(),
+    companyId: z.string().trim().min(1, 'Selecciona una empresa'),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
-    branchId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
+    // Acepta tanto UUIDs como IDs históricos del seed (p. ej. "branch-matriz").
+    branchId: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .or(z.literal('').transform(() => undefined))
+      .or(z.null().transform(() => undefined)),
     unitRef: z.string().max(100).optional(),
     // IMPL-20260711-01: Unidad móvil asignada (opcional). Validada por
     // validateUnitAvailability() antes de crear/actualizar.
     mobileUnitId: z
       .string()
-      .uuid()
+      .trim()
+      .min(1)
       .optional()
       .or(z.literal('').transform(() => undefined))
       .or(z.null().transform(() => undefined)),
@@ -47,12 +55,20 @@ const UpdateProjectSchema = z
     name: zFreeTextMax(200, 1).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
-    branchId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
+    // Acepta tanto UUIDs como IDs históricos del seed (p. ej. "branch-matriz").
+    branchId: z
+      .string()
+      .trim()
+      .min(1)
+      .nullable()
+      .optional()
+      .or(z.literal('').transform(() => null)),
     unitRef: z.string().max(100).optional(),
     // IMPL-20260711-01: permite actualizar o desasignar explícitamente la unidad móvil.
     mobileUnitId: z
       .string()
-      .uuid()
+      .trim()
+      .min(1)
       .nullable()
       .optional()
       .or(z.literal('').transform(() => null)),
@@ -307,7 +323,7 @@ export async function createProject(data: {
   companyId: string
   startDate: string
   endDate: string
-  branchId?: string
+  branchId?: string | null
   unitRef?: string
   mobileUnitId?: string | null
   notes?: string
@@ -395,7 +411,7 @@ export async function updateProject(
     name?: string
     startDate?: string
     endDate?: string
-    branchId?: string
+    branchId?: string | null
     unitRef?: string
     mobileUnitId?: string | null
     notes?: string

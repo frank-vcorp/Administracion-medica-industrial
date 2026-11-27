@@ -271,6 +271,31 @@ describe('project.actions createProject — clasificación de conflictos (ARCH-2
     expect(res.project?.id).toBe('new-proj')
     expect(mockProjectsCreate).toHaveBeenCalledTimes(1)
   })
+
+  it('24. createProject acepta IDs no-UUID tipo slug del seed como branchId="branch-matriz"', async () => {
+    mockProjectsFindMany.mockResolvedValue([])
+    mockMaintenanceFindMany.mockResolvedValue([])
+    mockProjectsCreate.mockResolvedValue({ id: 'proj-matriz', name: 'Proyecto de Prueba' })
+    const res = await createProject({
+      name: 'Proyecto de Prueba',
+      companyId: 'f72a79c1-3179-468a-a741-3be0b00fa944',
+      startDate: '2026-12-01T15:48:00.000Z',
+      endDate: '2026-12-06T15:48:00.000Z',
+      branchId: 'branch-matriz',
+      mobileUnitId: '581e788a-047d-4f0a-8ec7-c891377a3c84',
+      unitRef: 'Unidad Móvil 1',
+    })
+    expect(res.success).toBe(true)
+    expect(res.project?.id).toBe('proj-matriz')
+    expect(mockProjectsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          branchId: 'branch-matriz',
+          mobileUnitId: '581e788a-047d-4f0a-8ec7-c891377a3c84',
+        }),
+      })
+    )
+  })
 })
 
 describe('project.actions updateProject — clasificación con excludeProjectId (ARCH-20260804-04)', () => {
