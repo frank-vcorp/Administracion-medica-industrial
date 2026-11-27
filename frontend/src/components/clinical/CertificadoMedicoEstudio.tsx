@@ -371,7 +371,7 @@ Tandem: ${tandemVal}`
         setExploracion(res.texto)
         setIaFeedback(
           res.source === 'minimax'
-            ? '✨ Redactado con MiniMax IA'
+            ? '✨ Redactado con IA'
             : '📋 Generado con plantilla clínica',
         )
         setTimeout(() => setIaFeedback(null), 5000)
@@ -891,30 +891,6 @@ Tandem: ${tandemVal}`
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={handleGenerateIA}
-                disabled={formReadonly || isGeneratingIA}
-                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                title="MiniMax analiza los órganos y redacta un párrafo clínico formal con tus hallazgos"
-              >
-                {isGeneratingIA ? (
-                  <>
-                    <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
-                    <span>Redactando con IA...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>✨</span>
-                    <span>Redactar con IA (MiniMax)</span>
-                  </>
-                )}
-              </button>
-              {iaFeedback && (
-                <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md animate-pulse">
-                  {iaFeedback}
-                </span>
-              )}
-              <button
-                type="button"
                 onClick={() => {
                   const s = buildExploracionPorSistemas(antecedentes)
                   setExploracion(s)
@@ -1032,22 +1008,27 @@ Tandem: ${tandemVal}`
                 Texto de Exploración física (se imprimirá en el PDF):
               </label>
               <div className="flex items-center gap-2">
+                {iaFeedback && (
+                  <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md animate-pulse">
+                    {iaFeedback}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={handleGenerateIA}
                   disabled={formReadonly || isGeneratingIA}
                   className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-                  title="Sintetiza tus hallazgos usando MiniMax"
+                  title="Sintetiza la exploración física usando IA"
                 >
                   {isGeneratingIA ? (
                     <>
                       <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
-                      <span>Redactando...</span>
+                      <span>Sintetizando...</span>
                     </>
                   ) : (
                     <>
                       <span>✨</span>
-                      <span>Sintetizar con MiniMax IA</span>
+                      <span>Sintetizar con IA</span>
                     </>
                   )}
                 </button>
