@@ -529,12 +529,6 @@ export default function CertificadoMedicoEstudio({
             </button>
           ))}
         </div>
-        <CertificadoPdfLink
-          href={pdfHref}
-          isDraft={isDraft}
-          prominent
-          onBeforeOpen={handleDraftPreviewClick}
-        />
       </div>
 
       {activeTab === 'antecedentes' && (
@@ -1029,19 +1023,6 @@ export default function CertificadoMedicoEstudio({
               </div>
             )}
           </div>
-          {!isDraft && (
-            <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
-              <CertificadoPdfLink
-                href={pdfHref}
-                isDraft={isDraft}
-                prominent
-                onBeforeOpen={handleDraftPreviewClick}
-              />
-              <p className="text-[10px] text-slate-500">
-                El certificado está cerrado. Lugar, hora, datos del paciente y del médico se tomaron del expediente y del evento al guardar.
-              </p>
-            </div>
-          )}
         </section>
       )}
 
@@ -1053,7 +1034,9 @@ export default function CertificadoMedicoEstudio({
               : 'bg-teal-50 border-teal-200 text-teal-800'
           }`}
         >
-          {readonlyBanner}
+          {formReadonly
+            ? readonlyBanner
+            : 'Puedes corregir cualquier campo; los cambios se guardan automáticamente.'}
         </div>
       )}
       {(Boolean(cerradaAt) || !formReadonly) && (
