@@ -244,7 +244,7 @@ export default function CertificadoMedicoEstudio({
   const [exploracion, setExploracion] = useState(
     parsed?.exploracion_fisica && parsed.exploracion_fisica.trim() !== ''
       ? parsed.exploracion_fisica
-      : buildDefaultExploracionCertificado(longitudinalData),
+      : '',
   )
   const [integracion, setIntegracion] = useState(parsed?.integracion_diagnostica ?? '')
   const integracionManualRef = useRef(false)
@@ -270,83 +270,10 @@ export default function CertificadoMedicoEstudio({
   const [iaFeedback, setIaFeedback] = useState<string | null>(null)
 
   const handleOrganoChange = (id: string, estado: 'NORMAL' | 'ANORMAL', detalle: string) => {
-    const nextOrganos = { ...organosState, [id]: { estado, detalle } }
-    setOrganosState(nextOrganos)
-
-    const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
-    const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
-    const espTattoos = typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
-
-    const getF = (itemId: string, normalText: string) => {
-      const o = nextOrganos[itemId]
-      if (o?.estado === 'ANORMAL' && o.detalle?.trim()) return o.detalle.trim()
-      return normalText
-    }
-
-    const neurolText = [
-      getF('neurologico', 'Consciente, orientado en sus cuatro esferas.'),
-      getF('fuerza', 'Fuerza 5/5 (Daniels), sensibilidad y reflejos osteotendinosos conservados.'),
-      getF('romberg_tandem', 'Coordinación, Romberg y marcha en tándem normales.'),
-    ].join(' ')
-
-    const bocaText = getF(
-      'boca',
-      'Mucosa oral hidratada, dentadura completa sin caries ni sarro, faringe normal.',
-    )
-    const ojosText = getF(
-      'ojos',
-      'Pupilas isocóricas normorreflécticas, globos oculares sin alteraciones.',
-    )
-    const oidosText = getF('oidos', 'Conductos auditivos permeables.')
-    const craneoText =
-      nextOrganos.craneo?.estado === 'ANORMAL' && nextOrganos.craneo.detalle?.trim()
-        ? `Cráneo: ${nextOrganos.craneo.detalle.trim()}.`
-        : ''
-    const narizText =
-      nextOrganos.nariz?.estado === 'ANORMAL' && nextOrganos.nariz.detalle?.trim()
-        ? `Fosas nasales: ${nextOrganos.nariz.detalle.trim()}.`
-        : ''
-    const cuelloText =
-      nextOrganos.cuello?.estado === 'ANORMAL' && nextOrganos.cuello.detalle?.trim()
-        ? `Cuello: ${nextOrganos.cuello.detalle.trim()}.`
-        : ''
-    const cabCuelloText = [bocaText, ojosText, oidosText, craneoText, narizText, cuelloText]
-      .filter(Boolean)
-      .join(' ')
-
-    const toraxBase = getF('torax', 'Mesomórfico, amplexión y amplexación normales')
-    const cardioBase = getF('cardiopulmonar', 'auscultación cardiopulmonar sin alteraciones')
-    const toraxText = `${toraxBase}, ${cardioBase}.`
-
-    const abdomenText = getF('abdomen', 'Globoso, depresible, no doloroso.')
-
-    const extBase = getF(
-      'extremidades',
-      'Íntegras, eutróficas, llenado capilar inmediato, sin edema.',
-    )
-
-    let pielText = ''
-    if (nextOrganos.piel?.estado === 'ANORMAL' && nextOrganos.piel.detalle?.trim()) {
-      pielText = nextOrganos.piel.detalle.trim()
-    } else if (hasTattoos) {
-      pielText = espTattoos ? `Tatuajes en ${espTattoos}.` : 'Presencia de múltiples tatuajes.'
-    } else {
-      pielText = 'Sin lesiones ni alteraciones aparentes.'
-    }
-
-    const rombergVal = nextOrganos.romberg_tandem?.estado === 'ANORMAL' ? 'Alterado' : 'Negativo'
-    const tandemVal = nextOrganos.romberg_tandem?.estado === 'ANORMAL' ? 'Alterado' : 'negativo'
-
-    const fullText = `Neurológico: ${neurolText}
-Cabeza y cuello: ${cabCuelloText}
-Tórax: ${toraxText}
-Abdomen: ${abdomenText}
-Extremidades: ${extBase}
-Piel: ${pielText}
-Romberg: ${rombergVal}
-Tandem: ${tandemVal}`
-
-    setExploracion(fullText)
+    setOrganosState((prev) => ({
+      ...prev,
+      [id]: { estado, detalle },
+    }))
   }
 
   const handleGenerateIA = async () => {
@@ -1042,6 +969,7 @@ Tandem: ${tandemVal}`
                 setMissingFieldsBanner('')
                 setExploracion(v)
               }}
+              placeholder="Completa el checklist y presiona '✨ Sintetizar con IA' para generar la exploración automáticamente, o usa una plantilla arriba."
               disabled={formReadonly}
             />
           </div>

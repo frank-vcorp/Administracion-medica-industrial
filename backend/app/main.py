@@ -2100,7 +2100,10 @@ async def v2_clinical_generate_exploracion_fisica(body: GenerateExploracionFisic
         if isinstance(v, dict):
             est = v.get("estado", "NORMAL")
             det = (v.get("detalle") or "").strip()
-            organos_info.append(f"- {k}: {est}" + (f" (Hallazgo: {det})" if det else ""))
+            if det:
+                organos_info.append(f"- {k} ({est}): Anotación o hallazgo escrito por la doctora: \"{det}\"")
+            else:
+                organos_info.append(f"- {k} ({est}): sin alteraciones")
         elif isinstance(v, str):
             organos_info.append(f"- {k}: {v}")
 
@@ -2144,28 +2147,28 @@ async def v2_clinical_generate_exploracion_fisica(body: GenerateExploracionFisic
 
     system_prompt = (
         "Eres un médico especialista en medicina del trabajo y salud ocupacional de Soluciones Médico Empresariales (SME) en México. "
-        "Tu función es redactar la sección de 'Exploración física' de un Certificado Médico laboral oficial en México. "
-        "Recibes la revisión por órganos y sistemas (estado Normal/Anormal con hallazgos anotados por el médico) y posibles antecedentes de tatuajes.\n\n"
-        "REGLAS ESTRICTAS:\n"
-        "1. Redacta en español médico formal, pulcro y conciso.\n"
-        "2. Si formato es 'sistemas' (o no se especifica), debes utilizar exactamente esta estructura de 8 apartados:\n"
+        "Tu función es redactar la sección de 'Exploración física' de un Certificado Médico laboral oficial en México con base en la revisión por órganos que capturó la doctora examinadora.\n\n"
+        "REGLAS OBLIGATORIAS:\n"
+        "1. Redacta el párrafo completo en español médico formal, coherente y fluido.\n"
+        "2. Toma en cuenta TODO lo que la doctora llenó en cada apartado (tanto lo normal como lo anormal, integrando cualquier anotación que haya escrito para que no tenga que redactarlo dos veces).\n"
+        "3. Traduce anotaciones breves a redacción médica formal (ejemplo: 'caries molares' -> 'presencia de caries en piezas dentales molares').\n"
+        "4. Estructura el resultado en los 8 apartados estándar oficiales:\n"
         "Neurológico: ...\n"
         "Cabeza y cuello: ...\n"
         "Tórax: ...\n"
         "Abdomen: ...\n"
         "Extremidades: ...\n"
         "Piel: ...\n"
-        "Romberg: Negativo. (o el hallazgo reportado)\n"
-        "Tándem: Negativo. (o el hallazgo reportado)\n"
-        "3. Incorpora fluidamente cualquier nota o hallazgo anormal, traduciendo notas breves a redacción médica formal.\n"
-        "4. Para órganos normales, conserva descripciones estándar.\n"
-        "5. En 'Piel', si se reportan tatuajes, descríbelos; si no, indica 'Sin lesiones ni alteraciones aparentes.'\n"
-        "6. Devuelve ÚNICAMENTE un JSON válido con la forma: {\"texto\": \"<texto de la exploracion fisica>\"} sin markdown ni explicaciones."
+        "Romberg: Negativo. (o la alteración indicada)\n"
+        "Tándem: Negativo. (o la alteración indicada)\n"
+        "5. En 'Piel', integra los tatuajes especificados si existen; si no, 'Sin lesiones ni alteraciones aparentes.'\n"
+        "6. Para órganos normales sin notas, incluye la fórmula habitual ocupacional (normocéfalo, pupilas isocóricas, amplexión y amplexación normales, abdomen depresible no doloroso, extremidades íntegras y eutróficas, etc.).\n"
+        "7. Devuelve ÚNICAMENTE un JSON válido con la forma: {\"texto\": \"<párrafo completo de la exploración física>\"} sin markdown ni explicaciones."
     )
     user_prompt = (
         f"Formato requerido: {body.formato or 'sistemas'}\n"
         f"Antecedente de tatuajes: {tatuajes_str or 'Ninguno reportado'}\n"
-        f"Revisión por órganos:\n{organos_str}"
+        f"Revisión por órganos capturada por la doctora:\n{organos_str}"
     )
 
     payload = {
