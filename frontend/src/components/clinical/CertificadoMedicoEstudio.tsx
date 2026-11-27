@@ -348,6 +348,39 @@ Tandem: ${tandemVal}`
 
     setExploracion(fullText)
   }
+
+  const handleGenerateIA = async () => {
+    setIsGeneratingIA(true)
+    setIaFeedback(null)
+    try {
+      const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
+      const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
+      const espTattoos =
+        typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
+          ? np.tatuajes_especifique.trim()
+          : hasTattoos
+            ? 'presencia de tatuajes'
+            : undefined
+
+      const res = await generateExploracionFisicaIA({
+        organos: organosState,
+        tatuajes: espTattoos,
+        formato: 'sistemas',
+      })
+      if (res.ok && res.texto) {
+        setExploracion(res.texto)
+        setIaFeedback(
+          res.source === 'minimax'
+            ? '✨ Redactado con MiniMax IA'
+            : '📋 Generado con plantilla clínica',
+        )
+        setTimeout(() => setIaFeedback(null), 5000)
+      }
+    } finally {
+      setIsGeneratingIA(false)
+    }
+  }
+
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
   const editorRole = session?.user?.role
   const formReadonly = useMemo(
@@ -858,44 +891,14 @@ Tandem: ${tandemVal}`
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
-                onClick={async () => {
-                  setIsGeneratingIA(true)
-                  setIaFeedback(null)
-                  try {
-                    const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
-                    const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
-                    const espTattoos =
-                      typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
-                        ? np.tatuajes_especifique.trim()
-                        : hasTattoos
-                          ? 'presencia de tatuajes'
-                          : undefined
-
-                    const res = await generateExploracionFisicaIA({
-                      organos: organosState,
-                      tatuajes: espTattoos,
-                      formato: 'sistemas',
-                    })
-                    if (res.ok && res.texto) {
-                      setExploracion(res.texto)
-                      setIaFeedback(
-                        res.source === 'minimax'
-                          ? '✨ Redactado con MiniMax IA'
-                          : '📋 Generado con plantilla clínica',
-                      )
-                      setTimeout(() => setIaFeedback(null), 4000)
-                    }
-                  } finally {
-                    setIsGeneratingIA(false)
-                  }
-                }}
+                onClick={handleGenerateIA}
                 disabled={formReadonly || isGeneratingIA}
-                className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                className="px-3 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 title="MiniMax analiza los órganos y redacta un párrafo clínico formal con tus hallazgos"
               >
                 {isGeneratingIA ? (
                   <>
-                    <span className="animate-spin inline-block w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                    <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
                     <span>Redactando con IA...</span>
                   </>
                 ) : (
@@ -906,7 +909,7 @@ Tandem: ${tandemVal}`
                 )}
               </button>
               {iaFeedback && (
-                <span className="text-[11px] text-indigo-600 font-semibold animate-pulse">
+                <span className="text-xs text-indigo-700 font-semibold bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md animate-pulse">
                   {iaFeedback}
                 </span>
               )}
@@ -1024,11 +1027,32 @@ Tandem: ${tandemVal}`
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-slate-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 Texto de Exploración física (se imprimirá en el PDF):
               </label>
-              <span className="text-[10px] text-slate-400">Puedes editar cualquier frase libremente</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGenerateIA}
+                  disabled={formReadonly || isGeneratingIA}
+                  className="px-2.5 py-1 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  title="Sintetiza tus hallazgos usando MiniMax"
+                >
+                  {isGeneratingIA ? (
+                    <>
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                      <span>Redactando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>✨</span>
+                      <span>Sintetizar con MiniMax IA</span>
+                    </>
+                  )}
+                </button>
+                <span className="text-[10px] text-slate-400 hidden sm:inline">Puedes editar libremente</span>
+              </div>
             </div>
             <ClinicalTextarea
               className={`${inputClass} min-h-[180px] font-sans`}
