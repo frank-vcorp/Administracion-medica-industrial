@@ -4,6 +4,7 @@ import {
   getInterpretationDetail,
   getOperationalDetail,
   isStudyInterpreted,
+  studyRequiresInterpretation,
   toBusinessStudyStatus,
 } from '../study-status-display'
 
@@ -52,5 +53,15 @@ describe('study-status-display (DEC-20260907-01)', () => {
     expect(isStudyInterpreted(interpreted)).toBe(true)
     expect(getOperationalDetail('COMPLETED', interpreted)).toBe('Prueba interpretada')
     expect(formatStudyStatusLine('COMPLETED', interpreted)).toBe('Prueba interpretada')
+  })
+
+  it('omite "Pendiente de interpretación" para Certificado Médico y Consulta Médica', () => {
+    expect(studyRequiresInterpretation('CERTIFICADO MEDICO')).toBe(false)
+    expect(studyRequiresInterpretation('Consulta Médica')).toBe(false)
+    expect(studyRequiresInterpretation('AUDIOMETRIA')).toBe(true)
+    expect(getInterpretationDetail('RESULT_REGISTERED', null, { testName: 'CERTIFICADO MEDICO' })).toBeNull()
+    expect(formatStudyStatusLine('RESULT_REGISTERED', null, { testName: 'CERTIFICADO MEDICO' })).toBe('Realizado')
+    expect(formatStudyStatusLine('COMPLETED', null, { testName: 'Certificado médico' })).toBe('Realizado')
+    expect(formatStudyStatusLine('PENDING', null, { testName: 'CERTIFICADO MEDICO' })).toBe('Pendiente de captura')
   })
 })

@@ -12,6 +12,7 @@ import {
 
 type StudyStatusBadgeProps = {
   status: EventTestPipelineStatus
+  testName?: string | null
   interpretation?: StudyInterpretationInput | null
   aiSnapshot?: Parameters<typeof buildStudyInterpretationFromSnapshot>[0]
   /** 'inline' | 'sidebar' = badge + detalle; 'compact' = solo badge (evitar en listas laterales) */
@@ -22,6 +23,7 @@ type StudyStatusBadgeProps = {
 /** Badge de estatus de negocio con detalle operativo opcional. */
 export function StudyStatusBadge({
   status,
+  testName,
   interpretation,
   aiSnapshot,
   variant = 'inline',
@@ -30,7 +32,7 @@ export function StudyStatusBadge({
   const resolvedInterpretation =
     interpretation ?? buildStudyInterpretationFromSnapshot(aiSnapshot)
   const business = toBusinessStudyStatus(status)
-  const detail = getOperationalDetail(status, resolvedInterpretation)
+  const detail = getOperationalDetail(status, resolvedInterpretation, { testName })
 
   const showDetail = (variant === 'inline' || variant === 'sidebar') && detail
   const alignEnd = variant === 'inline'

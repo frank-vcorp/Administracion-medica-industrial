@@ -59,11 +59,12 @@ function EventView({ data }: EventViewProps) {
     canRegisterPayments,
     examSummary,
     hasMedicalVerdict,
+    isStandaloneCertificadoEvent,
     initialEventTestId,
   } = data
 
   const papeletaReadonly = computePapeletaReadonly({
-    currentStep,
+    currentStep: isStandaloneCertificadoEvent ? 2 : currentStep,
     activeView,
     userRole,
   })
@@ -182,7 +183,9 @@ function EventView({ data }: EventViewProps) {
               (group.primary === 'VALIDATING' &&
                 (event.status === 'CHECKED_IN' || event.status === 'IN_PROGRESS'))
             const isSelectedView = vStep === activeViewVisualStep
-            const isCompleted = vStep < currentVisualStep
+            const isCompleted =
+              vStep < currentVisualStep ||
+              (isStandaloneCertificadoEvent && event.status === 'COMPLETED')
 
             const stepClasses = isSelectedView
               ? 'bg-teal-500 text-white border-teal-500 shadow-sm shadow-teal-100'
@@ -269,7 +272,8 @@ function EventView({ data }: EventViewProps) {
           Tras firmar, si la URL sigue en VALIDATING y el estatus ya es
           COMPLETED, muestra la descarga. La regla vive en
           `_lib/event-flow-visibility.ts`. */}
-      {shouldRenderEventFlowController(activeView, event.status) && (
+      {!isStandaloneCertificadoEvent &&
+        shouldRenderEventFlowController(activeView, event.status) && (
         <EventFlowController
           eventId={serializedEventId}
           currentStatus={serializedStatus}

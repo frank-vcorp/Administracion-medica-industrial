@@ -23,6 +23,8 @@ import {
 } from '@/lib/clinical/validation-stage'
 import { formatVisitDuration } from '@/lib/clinical/visit-duration'
 import { evaluatePartialSendEligibility } from '@/lib/clinical/partial-result-send'
+import { isCertificadoMedicoTestName } from '@/lib/clinical/certificado-medico'
+import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
 
 async function getValidationQueue() {
   return prisma.medicalEvent.findMany({
@@ -101,6 +103,18 @@ function toValidationRows(
   incidencesByEvent: Map<string, Set<string>>,
 ): ValidationQueueRow[] {
   return events
+    .filter((event) => {
+      const activeTests = event.eventTests.filter(
+        (t) => t.status !== 'CANCELLED' && t.status !== 'SKIPPED',
+      )
+      if (activeTests.length === 0) return true
+      const isOnlyCertOrConsulta = activeTests.every(
+        (t) =>
+          isCertificadoMedicoTestName(t.testNameSnapshot) ||
+          isConsultaMedicaTestName(t.testNameSnapshot),
+      )
+      return !isOnlyCertOrConsulta
+    })
     .map((event) => {
       const notPerformedIds = incidencesByEvent.get(event.id) ?? new Set<string>()
       const eventTests = event.eventTests.map((test) => ({

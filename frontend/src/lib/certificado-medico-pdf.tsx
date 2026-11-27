@@ -1,5 +1,9 @@
 import { Document, Page, Text, View, StyleSheet, Image, pdf } from '@react-pdf/renderer'
-import type { CertificadoMedicoPayload } from '@/schemas/clinical/certificado-medico.schema'
+import {
+  DEFAULT_DICTAMEN_LABORAL_TEXTO,
+  DICTAMEN_LABORAL_LABELS,
+  type CertificadoMedicoPayload,
+} from '@/schemas/clinical/certificado-medico.schema'
 import { buildAntecedentesNarratives } from '@/lib/clinical/certificado-medico-narrative'
 import { SME_LEGAL_NAME, SME_PDF_FOOTER } from '@/lib/brand-constants'
 
@@ -261,6 +265,16 @@ function v(s: string | null | undefined, fallback = '—'): string {
   return s?.trim() ? s.trim() : fallback
 }
 
+function normalizeDictamenComparison(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[.,;:]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput }) {
   const { patient: p, certificado: c, lugarFecha, logoUrl, folio } = data
   const narr = buildAntecedentesNarratives(c.antecedentes)
@@ -297,13 +311,42 @@ export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput
           : { borderColor: '#0f766e', backgroundColor: '#f0fdfa', color: '#0f766e' },
   ]
 
+  const rawDictamenTexto = c.dictamen_laboral_texto?.trim() || ''
+
   const dictamenTitulo = isApto
     ? 'DICTAMEN: APTO PARA ACTIVIDADES LABORALES'
     : isConObs
       ? 'DICTAMEN: APTO CON OBSERVACIONES'
       : isNoApto
         ? 'DICTAMEN: NO APTO PARA ACTIVIDADES LABORALES'
-        : `DICTAMEN: ${dictamen}`
+        : rawDictamenTexto
+          ? `DICTAMEN: ${rawDictamenTexto.toUpperCase()}`
+          : 'DICTAMEN MÉDICO LABORAL'
+
+  const redundantDictamenTexts = new Set([
+    ...(isApto || isConObs || isNoApto
+      ? [
+          normalizeDictamenComparison(DEFAULT_DICTAMEN_LABORAL_TEXTO[dictamen] || ''),
+          normalizeDictamenComparison(DICTAMEN_LABORAL_LABELS[dictamen] || ''),
+        ]
+      : []),
+    'apto para realizar actividades laborales',
+    'apto para actividades laborales',
+    'no apto para realizar actividades laborales',
+    'no apto para actividades laborales',
+    'apto con observaciones',
+    'apto para realizar actividades laborales en las condiciones evaluadas',
+    'apto para realizar actividades laborales con las observaciones descritas en la integracion diagnostica',
+    'apto',
+  ])
+
+  const detalleDictamenExtra =
+    dictamen === 'OTRO'
+      ? null
+      : rawDictamenTexto &&
+          !redundantDictamenTexts.has(normalizeDictamenComparison(rawDictamenTexto))
+        ? rawDictamenTexto
+        : null
 
   return (
     <Document>
@@ -474,10 +517,18 @@ export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput
         {/* VII. DICTAMEN DE APTITUD LABORAL Y FIRMA (NO DIVISIBLE) */}
         <View wrap={false}>
           <View style={verdictCardStyle}>
-            <Text style={styles.verdictHeader}>{dictamenTitulo}</Text>
-            <Text style={styles.verdictText}>
-              {v(c.dictamen_laboral_texto, 'Apto para realizar actividades laborales.')}
+            <Text
+              style={
+                detalleDictamenExtra
+                  ? styles.verdictHeader
+                  : [styles.verdictHeader, { marginBottom: 0 }]
+              }
+            >
+              {dictamenTitulo}
             </Text>
+            {detalleDictamenExtra ? (
+              <Text style={styles.verdictText}>{detalleDictamenExtra}</Text>
+            ) : null}
           </View>
 
           <Text style={styles.legalDisclaimer}>

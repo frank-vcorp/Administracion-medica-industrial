@@ -7,6 +7,9 @@
  * @see context/acuerdos/DEC-20260907-01-estatus-pruebas-dos-capas.md
  */
 
+import { isCertificadoMedicoTestName } from '@/lib/clinical/certificado-medico'
+import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
+
 export type EventTestPipelineStatus =
   | 'PENDING'
   | 'IN_PROGRESS'
@@ -67,12 +70,20 @@ export function isStudyInterpreted(
   return false
 }
 
+/** Indica si el estudio pasa por el flujo de interpretación IA / validador. */
+export function studyRequiresInterpretation(testName?: string | null): boolean {
+  if (!testName) return true
+  return !isCertificadoMedicoTestName(testName) && !isConsultaMedicaTestName(testName)
+}
+
 /** Estatus de interpretación clínica (Word R-18) para pruebas con resultado. */
 export function getInterpretationDetail(
   status: EventTestPipelineStatus,
   interpretation?: StudyInterpretationInput | null,
+  options?: { testName?: string | null },
 ): string | null {
   if (status !== 'COMPLETED' && status !== 'RESULT_REGISTERED') return null
+  if (!studyRequiresInterpretation(options?.testName)) return null
   return isStudyInterpreted(interpretation)
     ? 'Prueba interpretada'
     : 'Pendiente de interpretación'
@@ -91,14 +102,17 @@ export function toBusinessStudyStatus(
 export function getOperationalDetail(
   status: EventTestPipelineStatus,
   interpretation?: StudyInterpretationInput | null,
+  options?: { testName?: string | null },
 ): string | null {
-  const interpretationDetail = getInterpretationDetail(status, interpretation)
+  const interpretationDetail = getInterpretationDetail(status, interpretation, options)
   if (interpretationDetail) return interpretationDetail
 
   switch (status) {
     case 'PENDING':
     case 'IN_PROGRESS':
-      return 'Falta subir el resultado'
+      return studyRequiresInterpretation(options?.testName)
+        ? 'Falta subir el resultado'
+        : 'Pendiente de captura'
     case 'SAMPLE_TAKEN':
       return 'Muestra tomada · esperando laboratorio'
     case 'SKIPPED':
@@ -117,8 +131,9 @@ export function getOperationalDetail(
 export function formatStudyStatusLine(
   status: EventTestPipelineStatus,
   interpretation?: StudyInterpretationInput | null,
+  options?: { testName?: string | null },
 ): string {
-  const detail = getOperationalDetail(status, interpretation)
+  const detail = getOperationalDetail(status, interpretation, options)
   if (detail) return detail
   return BUSINESS_STATUS_LABELS[toBusinessStudyStatus(status)]
 }

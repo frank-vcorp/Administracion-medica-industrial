@@ -1090,33 +1090,10 @@ export default function PapeletaWorkspace({
             />
           )}
 
-          {completedCount === localTests.length && localTests.length > 0 && !hasMedicalVerdict && (
-            isOnlyCertificadoOrConsulta ? (
-              <div className="bg-teal-50 border border-teal-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 my-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-800">
-                    <FileCheck className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <h4 className="font-bold text-teal-900 text-xs sm:text-sm">
-                      Certificado médico completado ({completedCount}/{localTests.length})
-                    </h4>
-                    <p className="text-[11px] sm:text-xs text-teal-700">
-                      El certificado se descarga y envía por correo o WhatsApp directamente desde su estudio.
-                    </p>
-                  </div>
-                </div>
-                {visibleTests.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => navigateToStudy(visibleTests[0].id)}
-                    className="inline-flex items-center justify-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-lg shadow-sm transition-all shrink-0"
-                  >
-                    <span>Abrir certificado →</span>
-                  </button>
-                )}
-              </div>
-            ) : (
+          {completedCount === localTests.length &&
+            localTests.length > 0 &&
+            !hasMedicalVerdict &&
+            !isOnlyCertificadoOrConsulta && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 my-3">
                 <div className="flex items-center gap-2.5">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
@@ -1140,8 +1117,7 @@ export default function PapeletaWorkspace({
                   <span>Firmar y dictaminar →</span>
                 </button>
               </div>
-            )
-          )}
+            )}
 
           {localTests.length === 0 && (
             <p className="text-center text-slate-400 text-sm py-10">
@@ -1171,8 +1147,18 @@ export default function PapeletaWorkspace({
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <StudyStepChips status={test.status} aiSnapshot={test.aiSnapshot} compact />
-                    <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} variant="inline" />
+                    <StudyStepChips
+                      status={test.status}
+                      testName={test.testNameSnapshot}
+                      aiSnapshot={test.aiSnapshot}
+                      compact
+                    />
+                    <StudyStatusBadge
+                      status={test.status}
+                      testName={test.testNameSnapshot}
+                      aiSnapshot={test.aiSnapshot}
+                      variant="inline"
+                    />
                     <span className="text-slate-400 group-hover:text-teal-600 text-sm">→</span>
                   </div>
                 </div>
@@ -1221,6 +1207,7 @@ export default function PapeletaWorkspace({
               {formatPapeletaStudyTitle(t.testNameSnapshot)} — {formatStudyStatusLine(
                 t.status,
                 buildStudyInterpretationFromSnapshot(t.aiSnapshot),
+                { testName: t.testNameSnapshot },
               )}
             </option>
           ))}
@@ -1256,9 +1243,15 @@ export default function PapeletaWorkspace({
                 {uploadingTestId === t.id && (
                   <p className="text-[10px] font-semibold text-teal-700">Procesando archivo…</p>
                 )}
-                <StudyStepChips status={t.status} aiSnapshot={t.aiSnapshot} compact />
+                <StudyStepChips
+                  status={t.status}
+                  testName={t.testNameSnapshot}
+                  aiSnapshot={t.aiSnapshot}
+                  compact
+                />
                 <StudyStatusBadge
                   status={t.status}
+                  testName={t.testNameSnapshot}
                   aiSnapshot={t.aiSnapshot}
                   variant="sidebar"
                   className="items-start"
@@ -1997,8 +1990,16 @@ function StudyPanel({
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <StudyStepChips status={test.status} aiSnapshot={test.aiSnapshot} />
-          <StudyStatusBadge status={test.status} aiSnapshot={test.aiSnapshot} />
+          <StudyStepChips
+            status={test.status}
+            testName={test.testNameSnapshot}
+            aiSnapshot={test.aiSnapshot}
+          />
+          <StudyStatusBadge
+            status={test.status}
+            testName={test.testNameSnapshot}
+            aiSnapshot={test.aiSnapshot}
+          />
         </div>
       </div>
 

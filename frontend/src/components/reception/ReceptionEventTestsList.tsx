@@ -114,7 +114,7 @@ export default function ReceptionEventTestsList({
                 key={test.id}
                 href={papeletaHref}
                 prefetch
-                title={`${test.testNameSnapshot} — ${formatStudyStatusLine(pipeline)}`}
+                title={`${test.testNameSnapshot} — ${formatStudyStatusLine(pipeline, undefined, { testName: test.testNameSnapshot })}`}
                 className={`max-w-[8.5rem] truncate rounded-md border px-1.5 py-0.5 text-[9px] font-bold tracking-tight ${chipTone}`}
               >
                 {shortStudyLabel(test.testNameSnapshot)}
@@ -135,7 +135,9 @@ export default function ReceptionEventTestsList({
             {visibleTests.map(test => {
               const pipeline = test.status as EventTestPipelineStatus
               const business = BUSINESS_STATUS_LABELS[toBusinessStudyStatus(pipeline)]
-              const line = formatStudyStatusLine(pipeline)
+              const line = formatStudyStatusLine(pipeline, undefined, {
+                testName: test.testNameSnapshot,
+              })
               return (
                 <li key={test.id} className="flex items-start justify-between gap-2 px-1 py-0.5">
                   <span className="min-w-0 text-[10px] font-semibold text-slate-800">
@@ -170,7 +172,9 @@ export default function ReceptionEventTestsList({
         {visibleTests.map(test => {
           const pipeline = test.status as EventTestPipelineStatus
           const business = BUSINESS_STATUS_LABELS[toBusinessStudyStatus(pipeline)]
-          const line = formatStudyStatusLine(pipeline)
+          const line = formatStudyStatusLine(pipeline, undefined, {
+            testName: test.testNameSnapshot,
+          })
           const badgeTone =
             business === 'Realizado'
               ? 'bg-emerald-50 text-emerald-800 border-emerald-100'

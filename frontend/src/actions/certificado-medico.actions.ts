@@ -12,6 +12,7 @@ import {
   isCertificadoMedicoTestName,
   parseCertificadoMedicoDraftContext,
 } from '@/lib/clinical/certificado-medico'
+import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
 import { denyIfClosedCaptureUnauthorized } from '@/lib/clinical/papeleta-readonly'
 import { resolveCertificadoMedicoMetadata } from '@/lib/clinical/certificado-medico-metadata'
 import { renderCertificadoMedicoToMemory } from '@/lib/certificado-medico-pdf'
@@ -173,10 +174,42 @@ export async function saveCertificadoMedico(
       where: { id: eventTestId },
       data: {
         clinicalContext: toStore as unknown as Prisma.InputJsonValue,
-        status: options.finalize ? 'RESULT_REGISTERED' : 'IN_PROGRESS',
+        status: options.finalize ? 'COMPLETED' : 'IN_PROGRESS',
       },
       select: { updatedAt: true },
     })
+
+    // Los eventos exclusivos de Certificado Médico / Consulta Médica terminan
+    // en el Paso 2 sin requerir firma final (VALIDATING / dictamen general).
+    if (options.finalize) {
+      const siblingTests = await prisma.eventTest.findMany({
+        where: { eventId },
+        select: { testNameSnapshot: true, status: true },
+      })
+      const activeTests = siblingTests.filter(
+        (t) => t.status !== 'CANCELLED' && t.status !== 'SKIPPED',
+      )
+      const isStandaloneCertificadoEvent =
+        activeTests.length > 0 &&
+        activeTests.every(
+          (t) =>
+            isCertificadoMedicoTestName(t.testNameSnapshot) ||
+            isConsultaMedicaTestName(t.testNameSnapshot),
+        )
+      const allDone = activeTests.every(
+        (t) => t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED',
+      )
+      if (isStandaloneCertificadoEvent && allDone) {
+        await prisma.medicalEvent.update({
+          where: { id: eventId },
+          data: { status: 'COMPLETED' },
+        })
+        revalidatePath('/appointments')
+        revalidatePath('/reception')
+        revalidatePath('/validation')
+      }
+    }
+
     if (!options.autosave) {
       revalidatePath(`/events/${eventId}`)
     }

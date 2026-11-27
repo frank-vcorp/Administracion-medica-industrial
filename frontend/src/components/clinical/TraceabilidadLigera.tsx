@@ -10,6 +10,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { CheckCircle2, MapPin } from "lucide-react"
 import {
   BUSINESS_STATUS_LABELS,
   buildStudyInterpretationFromSnapshot,
@@ -211,16 +212,23 @@ export default function TraceabilidadLigera({
       {/* ── Cabecera siempre visible ──────────────────────────────────────── */}
       <div className="px-4 py-2.5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-sm leading-none shrink-0">📍</span>
+          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#592c82]/12 text-[#592c82]">
+            <MapPin className="h-3.5 w-3.5" strokeWidth={2.25} />
+          </span>
           <div className="min-w-0">
             <p className="text-[10px] font-semibold text-slate-500 tracking-wider leading-tight">
               Estado del evento
             </p>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <span className="text-xs font-semibold text-slate-700">
-                {allDone
-                  ? '✅ Todos completados'
-                  : `${completedTests.length}/${totalActive} completados`}
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700">
+                {allDone ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.25} />
+                    Todos completados
+                  </>
+                ) : (
+                  `${completedTests.length}/${totalActive} completados`
+                )}
               </span>
               {!allDone && (
                 <div className="h-1.5 w-16 bg-slate-200 rounded-full overflow-hidden">
@@ -263,6 +271,7 @@ export default function TraceabilidadLigera({
                 {formatStudyStatusLine(
                   ultimoMovimiento.status,
                   buildStudyInterpretationFromSnapshot(ultimoMovimiento.aiSnapshot),
+                  { testName: ultimoMovimiento.testNameSnapshot },
                 )}
               </p>
             </>
@@ -284,6 +293,7 @@ export default function TraceabilidadLigera({
                 {formatStudyStatusLine(
                   siguientePaso.status,
                   buildStudyInterpretationFromSnapshot(siguientePaso.aiSnapshot),
+                  { testName: siguientePaso.testNameSnapshot },
                 )}
               </p>
             </>

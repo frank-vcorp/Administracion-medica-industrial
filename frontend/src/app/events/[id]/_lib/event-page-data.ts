@@ -24,6 +24,8 @@ import {
   buildWorkerLongitudinalAntecedentesPrefill,
   findLatestWorkerAntecedentesCaptured,
 } from '@/lib/clinical/worker-antecedentes-prefill'
+import { isCertificadoMedicoTestName } from '@/lib/clinical/certificado-medico'
+import { isConsultaMedicaTestName } from '@/lib/clinical/consulta-medica'
 import { shouldPromoteEventToValidating } from './event-flow-visibility'
 
 const STATUS_NAMES: Record<string, string> = {
@@ -39,6 +41,15 @@ const VISUAL_STEP_GROUPS = [
   { primary: 'CHECKED_IN', ids: ['CHECKED_IN', 'IN_PROGRESS'] as string[], label: 'Estudios' },
   { primary: 'VALIDATING', ids: ['VALIDATING'] as string[], label: 'Firma' },
   { primary: 'COMPLETED', ids: ['COMPLETED'] as string[], label: 'Fin' },
+]
+
+const STANDALONE_VISUAL_STEP_GROUPS = [
+  { primary: 'SCHEDULED', ids: ['SCHEDULED'] as string[], label: 'Ingreso' },
+  {
+    primary: 'CHECKED_IN',
+    ids: ['CHECKED_IN', 'IN_PROGRESS', 'VALIDATING', 'COMPLETED'] as string[],
+    label: 'Estudios',
+  },
 ]
 
 const STEPS = ['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS', 'VALIDATING', 'COMPLETED']
@@ -103,6 +114,7 @@ export type EventPageData = {
   initialTimeline: unknown[]
   receivedBy: string
   canRegisterPayments: boolean
+  isStandaloneCertificadoEvent: boolean
   /** Deep link `?eventTest=` — id de EventTest a abrir en la papeleta. */
   initialEventTestId: string | null
 }
@@ -116,7 +128,35 @@ export async function fetchEventPageData(input: {
   let event = await getEventById(input.id)
   if (!event) return null
 
-  if (shouldPromoteEventToValidating(input.view, event.status)) {
+  const activeEventTests = event.eventTests.filter(
+    (et) => et.status !== 'CANCELLED' && et.status !== 'SKIPPED',
+  )
+  const isStandaloneCertificadoEvent =
+    activeEventTests.length > 0 &&
+    activeEventTests.every(
+      (et) =>
+        isCertificadoMedicoTestName(et.testNameSnapshot) ||
+        isConsultaMedicaTestName(et.testNameSnapshot),
+    )
+
+  if (isStandaloneCertificadoEvent) {
+    const allDone = activeEventTests.every(
+      (et) => et.status === 'COMPLETED' || et.status === 'RESULT_REGISTERED',
+    )
+    if (allDone && event.status !== 'COMPLETED' && event.status !== 'CANCELED') {
+      await prisma.medicalEvent.update({
+        where: { id: input.id },
+        data: { status: 'COMPLETED' },
+      })
+      event = { ...event, status: 'COMPLETED' }
+    } else if (!allDone && event.status === 'VALIDATING') {
+      await prisma.medicalEvent.update({
+        where: { id: input.id },
+        data: { status: 'IN_PROGRESS' },
+      })
+      event = { ...event, status: 'IN_PROGRESS' }
+    }
+  } else if (shouldPromoteEventToValidating(input.view, event.status)) {
     await prisma.medicalEvent.update({
       where: { id: input.id },
       data: { status: 'VALIDATING' },
@@ -468,18 +508,28 @@ export async function fetchEventPageData(input: {
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+  const activeStepGroups = isStandaloneCertificadoEvent
+    ? STANDALONE_VISUAL_STEP_GROUPS
+    : VISUAL_STEP_GROUPS
+
   const currentStep = STEPS.indexOf(event.status) + 1
   const requestedView = input.view || event.status
   const requestedStepIndex = STEPS.indexOf(requestedView)
-  const activeView = requestedStepIndex < currentStep ? requestedView : event.status
+  const activeView = isStandaloneCertificadoEvent
+    ? input.view === 'SCHEDULED'
+      ? 'SCHEDULED'
+      : 'IN_PROGRESS'
+    : requestedStepIndex < currentStep
+      ? requestedView
+      : event.status
 
   const currentVisualStep = Math.max(
     1,
-    VISUAL_STEP_GROUPS.findIndex((g) => g.ids.includes(event.status)) + 1,
+    activeStepGroups.findIndex((g) => g.ids.includes(event.status)) + 1,
   )
   const activeViewVisualStep = Math.max(
     1,
-    VISUAL_STEP_GROUPS.findIndex((g) => g.ids.includes(activeView)) + 1,
+    activeStepGroups.findIndex((g) => g.ids.includes(activeView)) + 1,
   )
 
   const testIds = new Set(
@@ -508,7 +558,7 @@ export async function fetchEventPageData(input: {
     activeView,
     steps: STEPS,
     currentStep,
-    visualStepGroups: VISUAL_STEP_GROUPS,
+    visualStepGroups: activeStepGroups,
     currentVisualStep,
     activeViewVisualStep,
     statusNames: STATUS_NAMES,
@@ -517,6 +567,7 @@ export async function fetchEventPageData(input: {
     initialTimeline,
     receivedBy,
     canRegisterPayments,
+    isStandaloneCertificadoEvent,
     initialEventTestId,
   }
 }

@@ -4,17 +4,26 @@ import {
   getStudyVisibleStep,
   type StudyStepInput,
 } from '@/lib/clinical/study-step'
-import type { EventTestPipelineStatus } from '@/lib/clinical/study-status-display'
-import { buildStudyInterpretationFromSnapshot } from '@/lib/clinical/study-status-display'
+import {
+  buildStudyInterpretationFromSnapshot,
+  studyRequiresInterpretation,
+  type EventTestPipelineStatus,
+} from '@/lib/clinical/study-status-display'
 
-const STEPS = [
+const THREE_STEPS = [
   { key: '1' as const, label: '1', title: 'Realización' },
   { key: '2' as const, label: '2', title: 'Resultado' },
   { key: '3' as const, label: '3', title: 'Interpretación' },
 ]
 
+const TWO_STEPS = [
+  { key: '1' as const, label: '1', title: 'Captura' },
+  { key: '2' as const, label: '2', title: 'Certificado listo' },
+]
+
 type Props = {
   status: EventTestPipelineStatus
+  testName?: string | null
   hasNotPerformedIncidence?: boolean
   aiSnapshot?: Parameters<typeof buildStudyInterpretationFromSnapshot>[0]
   compact?: boolean
@@ -22,6 +31,7 @@ type Props = {
 
 export function StudyStepChips({
   status,
+  testName,
   hasNotPerformedIncidence,
   aiSnapshot,
   compact = false,
@@ -33,6 +43,7 @@ export function StudyStepChips({
     interpretation,
   }
   const visible = getStudyVisibleStep(input)
+  const requiresInterpretation = studyRequiresInterpretation(testName)
 
   if (visible === 'E') {
     return (
@@ -50,13 +61,21 @@ export function StudyStepChips({
     )
   }
 
+  const steps = requiresInterpretation ? THREE_STEPS : TWO_STEPS
+
   return (
     <div className={`flex items-center gap-1 ${compact ? '' : 'gap-1.5'}`}>
-      {STEPS.map((step) => {
-        const active = visible === step.key
-        const done =
-          (step.key === '1' && (visible === '2' || visible === '3')) ||
-          (step.key === '2' && visible === '3')
+      {steps.map((step) => {
+        const isTwoStepCompleted = !requiresInterpretation && (visible === '2' || visible === '3')
+        const active = requiresInterpretation
+          ? visible === step.key
+          : isTwoStepCompleted
+            ? step.key === '2'
+            : visible === step.key
+        const done = requiresInterpretation
+          ? (step.key === '1' && (visible === '2' || visible === '3')) ||
+            (step.key === '2' && visible === '3')
+          : isTwoStepCompleted && step.key === '1'
 
         return (
           <span
