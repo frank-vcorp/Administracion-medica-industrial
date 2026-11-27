@@ -14,14 +14,17 @@ import { useRouter } from 'next/navigation'
 import {
   ArrowRight,
   CheckCircle2,
+  ClipboardCheck,
   ExternalLink,
   FileSpreadsheet,
   Pencil,
+  Send,
   Trash2,
   UserCheck,
   UserPlus,
 } from 'lucide-react'
 import { ProjectStatus } from '@prisma/client'
+import { dischargePatientFromReception } from '@/actions/event.actions'
 import {
   checkInProjectWorkerToClinical,
   deleteProject,
@@ -303,16 +306,10 @@ interface ProjectWorkerRowActionsProps {
   receptionStatus: 'PENDING' | 'ARRIVED' | 'CHECKED_IN'
   eventId: string | null
   eventStatus: string | null
+  dischargedAt: string | null
+  checkoutReady: boolean
+  hasVerdict: boolean
   canManage: boolean
-}
-
-const EVENT_STATUS_LABEL: Record<string, string> = {
-  SCHEDULED: 'Programado',
-  CHECKED_IN: 'Ingresado',
-  IN_PROGRESS: 'En atención',
-  VALIDATING: 'En validación',
-  COMPLETED: 'Atendido',
-  CANCELED: 'Cancelado',
 }
 
 export function ProjectWorkerRowActions({
@@ -321,28 +318,14 @@ export function ProjectWorkerRowActions({
   receptionStatus,
   eventId,
   eventStatus,
+  dischargedAt,
+  checkoutReady,
+  hasVerdict,
   canManage,
 }: ProjectWorkerRowActionsProps) {
   const router = useRouter()
-  const [busyAction, setBusyAction] = useState<'ARRIVED' | 'CHECK_IN' | null>(null)
+  const [busyAction, setBusyAction] = useState<'ARRIVED' | 'CHECK_IN' | 'DISCHARGE' | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  if (eventId) {
-    return (
-      <Link
-        href={`/events/${eventId}`}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
-      >
-        <CheckCircle2 className="h-3.5 w-3.5" />
-        <span>{eventStatus ? EVENT_STATUS_LABEL[eventStatus] ?? eventStatus : 'Expediente'} · Abrir</span>
-        <ExternalLink className="h-3 w-3" />
-      </Link>
-    )
-  }
-
-  if (!canManage) {
-    return <span className="text-xs text-slate-400">Sin evento aún</span>
-  }
 
   async function handleMarkArrival() {
     setError(null)
@@ -362,7 +345,7 @@ export function ProjectWorkerRowActions({
     const res = await checkInProjectWorkerToClinical(projectId, workerId)
     setBusyAction(null)
     if (!res.success) {
-      setError(res.error ?? 'No se pudo ingresar a clínica.')
+      setError(res.error ?? 'No se pudo ingresar a UMM.')
       return
     }
     if (res.eventId) {
@@ -370,6 +353,87 @@ export function ProjectWorkerRowActions({
       return
     }
     router.refresh()
+  }
+
+  async function handleSendToValidation() {
+    if (!eventId) return
+    setError(null)
+    setBusyAction('DISCHARGE')
+    const res = await dischargePatientFromReception(eventId)
+    setBusyAction(null)
+    if (!res.success) {
+      setError(res.error ?? 'No se pudo enviar a validación.')
+      return
+    }
+    router.refresh()
+  }
+
+  if (eventId && (dischargedAt || hasVerdict || eventStatus === 'COMPLETED')) {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {hasVerdict ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Dictaminado
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+            <ClipboardCheck className="h-3.5 w-3.5" />
+            En validación
+          </span>
+        )}
+        <Link
+          href={`/events/${eventId}`}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-[#592c82]/30 hover:text-[#592c82]"
+        >
+          <span>Abrir expediente</span>
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+    )
+  }
+
+  if (eventId) {
+    return (
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Link
+            href={`/events/${eventId}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition-colors hover:border-[#592c82]/30 hover:text-[#592c82]"
+          >
+            <span>Abrir papeleta</span>
+            <ExternalLink className="h-3 w-3" />
+          </Link>
+
+          {canManage && (
+            <button
+              type="button"
+              disabled={!checkoutReady || busyAction !== null}
+              onClick={handleSendToValidation}
+              title={
+                !checkoutReady
+                  ? 'Completa primero la captura de estudios en la papeleta'
+                  : 'Registrar salida UMM y enviar a validación médica'
+              }
+              className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span>{busyAction === 'DISCHARGE' ? 'Enviando…' : 'Enviar a validación'}</span>
+            </button>
+          )}
+        </div>
+
+        {error && (
+          <p className="text-[11px] font-medium text-red-600" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  if (!canManage) {
+    return <span className="text-xs text-slate-400">Sin evento aún</span>
   }
 
   return (
@@ -393,7 +457,7 @@ export function ProjectWorkerRowActions({
           onClick={handleCheckIn}
           className="inline-flex items-center gap-1 rounded-lg border border-[#592c82]/25 bg-[#592c82]/10 px-2.5 py-1.5 text-xs font-semibold text-[#592c82] transition-colors hover:bg-[#592c82]/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <span>{busyAction === 'CHECK_IN' ? 'Ingresando…' : 'Ingresar a clínica'}</span>
+          <span>{busyAction === 'CHECK_IN' ? 'Ingresando…' : 'Ingresar a UMM'}</span>
           <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </div>

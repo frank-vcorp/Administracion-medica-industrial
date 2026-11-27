@@ -8,13 +8,31 @@
  */
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { Building2, Calendar, FolderKanban, Truck, Users } from 'lucide-react'
+import {
+  Building2,
+  Calendar,
+  ClipboardCheck,
+  Clock,
+  FileCheck2,
+  FolderKanban,
+  Stethoscope,
+  Truck,
+  Users,
+} from 'lucide-react'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
 import { isAdminLike } from '@/lib/auth/roles'
 import { getCompanies, getBranches } from '@/actions/admin.actions'
 import { getMobileUnits } from '@/actions/mobile-unit.actions'
+import {
+  buildNotPerformedTestIdSet,
+  isCheckoutEnabled,
+  type ReceptionCheckoutTest,
+} from '@/lib/clinical/reception-checkout'
+import { isExamenMedicoCaptureClosed } from '@/lib/clinical/examen-medico-capture'
+import { isExamenMedicoTestName } from '@/lib/clinical/examen-medico-variant'
+import type { EventTestPipelineStatus } from '@/lib/clinical/study-status-display'
 import { ProjectMassiveReportButton } from '@/components/projects/ProjectMassiveReportButton'
 import {
   ProjectHeaderControls,
@@ -78,6 +96,12 @@ export default async function ProjectDetailPage({ params }: PageProps) {
               select: {
                 id: true,
                 status: true,
+                dischargedAt: true,
+                exam: {
+                  select: {
+                    physicalExamData: true,
+                  },
+                },
                 verdict: {
                   select: {
                     id: true,
@@ -89,8 +113,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                   select: {
                     id: true,
                     status: true,
+                    testNameSnapshot: true,
                     resultNotes: true,
                   },
+                  orderBy: { createdAt: 'asc' },
                 },
               },
             },
@@ -112,6 +138,106 @@ export default async function ProjectDetailPage({ params }: PageProps) {
   if (!project) {
     notFound()
   }
+
+  const eventIds = project.workers
+    .map((pw) => pw.event?.id)
+    .filter((eventId): eventId is string => Boolean(eventId))
+
+  const timelineEntries =
+    eventIds.length === 0
+      ? []
+      : await prisma.papeletaTimelineEntry.findMany({
+          where: {
+            eventId: { in: eventIds },
+            eventTestId: { not: null },
+            entryType: { in: ['ADMIN_INCIDENCE', 'STUDY_NOT_PERFORMED'] },
+          },
+          select: { eventId: true, eventTestId: true, entryType: true },
+        })
+
+  const incidencesByEvent = new Map<string, Set<string>>()
+  for (const entry of timelineEntries) {
+    if (!entry.eventTestId) continue
+    const set = incidencesByEvent.get(entry.eventId) ?? new Set<string>()
+    for (const testId of buildNotPerformedTestIdSet([entry])) {
+      set.add(testId)
+    }
+    incidencesByEvent.set(entry.eventId, set)
+  }
+
+  const checkoutReadyByEventId = new Map<string, boolean>()
+  let pendingEntryCount = 0
+  let inAttentionCount = 0
+  let inValidationCount = 0
+  let dictaminatedCount = 0
+
+  for (const pw of project.workers) {
+    if (!pw.event) {
+      pendingEntryCount += 1
+      continue
+    }
+
+    const hasVerdict = Boolean(pw.event.verdict?.pdfUrl)
+    if (hasVerdict) {
+      dictaminatedCount += 1
+    } else if (pw.event.status !== 'CANCELED') {
+      if (pw.event.dischargedAt === null) {
+        inAttentionCount += 1
+      } else {
+        inValidationCount += 1
+      }
+    }
+
+    const notPerformedIds = incidencesByEvent.get(pw.event.id) ?? new Set<string>()
+    const physicalExamData =
+      (pw.event.exam?.physicalExamData as Record<string, unknown> | null | undefined) ?? null
+    const captureClosed = isExamenMedicoCaptureClosed(physicalExamData)
+    const checkoutTests: ReceptionCheckoutTest[] = pw.event.eventTests.map((t) => ({
+      id: t.id,
+      status: t.status as EventTestPipelineStatus,
+      testNameSnapshot: t.testNameSnapshot,
+      examenCaptureClosed: isExamenMedicoTestName(t.testNameSnapshot)
+        ? captureClosed || t.status === 'RESULT_REGISTERED' || t.status === 'COMPLETED'
+        : undefined,
+    }))
+    checkoutReadyByEventId.set(
+      pw.event.id,
+      isCheckoutEnabled(
+        {
+          dischargedAt: pw.event.dischargedAt,
+          eventTests: checkoutTests,
+        },
+        notPerformedIds,
+      ),
+    )
+  }
+
+  const operationalKpis = [
+    {
+      label: 'Por ingresar',
+      value: pendingEntryCount,
+      icon: Clock,
+      iconClass: 'bg-slate-100 text-slate-600',
+    },
+    {
+      label: 'En atención UMM',
+      value: inAttentionCount,
+      icon: Stethoscope,
+      iconClass: 'bg-amber-50 text-amber-600',
+    },
+    {
+      label: 'En validación médica',
+      value: inValidationCount,
+      icon: ClipboardCheck,
+      iconClass: 'bg-violet-50 text-violet-700',
+    },
+    {
+      label: 'Dictaminados',
+      value: dictaminatedCount,
+      icon: FileCheck2,
+      iconClass: 'bg-emerald-50 text-emerald-600',
+    },
+  ]
 
   const companyOptions = companiesRaw.map((c: { id: string; name: string }) => ({
     id: c.id,
@@ -249,6 +375,31 @@ export default async function ProjectDetailPage({ params }: PageProps) {
         </div>
       </header>
 
+      {/* KPIs operativos del proyecto */}
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {operationalKpis.map((kpi) => {
+          const Icon = kpi.icon
+          return (
+            <div
+              key={kpi.label}
+              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {kpi.label}
+                </span>
+                <span
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${kpi.iconClass}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-slate-900">{kpi.value}</p>
+            </div>
+          )
+        })}
+      </section>
+
       {/* Lista de trabajadores */}
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -364,6 +515,17 @@ export default async function ProjectDetailPage({ params }: PageProps) {
                           receptionStatus={pw.receptionStatus}
                           eventId={pw.event?.id ?? null}
                           eventStatus={(pw.event?.status as string | undefined) ?? null}
+                          dischargedAt={
+                            pw.event?.dischargedAt
+                              ? pw.event.dischargedAt.toISOString()
+                              : null
+                          }
+                          checkoutReady={
+                            pw.event
+                              ? (checkoutReadyByEventId.get(pw.event.id) ?? false)
+                              : false
+                          }
+                          hasVerdict={hasVerdict}
                           canManage={canManage}
                         />
                       </td>

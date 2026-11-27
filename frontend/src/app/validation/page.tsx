@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic'
 
+import Link from 'next/link'
+import { Ambulance, Building2 } from 'lucide-react'
 import prisma from '@/lib/prisma'
 import ValidationQueueTable, {
   type ValidationQueueRow,
@@ -36,6 +38,8 @@ async function getValidationQueue() {
       verdict: { select: { id: true } },
       exam: { select: { physicalExamData: true } },
       labOrders: { select: { id: true }, take: 1 },
+      project: { select: { id: true, name: true } },
+      mobileUnit: { select: { id: true, name: true } },
       worker: {
         include: { company: true },
       },
@@ -165,6 +169,10 @@ function toValidationRows(
         universalId: event.worker.universalId,
         companyId: event.worker.companyId,
         companyName: event.worker.company?.name ?? '—',
+        isUmm: Boolean(event.projectId || event.mobileUnitId),
+        projectId: event.project?.id ?? event.projectId ?? null,
+        projectName: event.project?.name ?? null,
+        mobileUnitName: event.mobileUnit?.name ?? null,
         studies:
           event.eventTests.length > 0
             ? event.eventTests.map((test) => test.testNameSnapshot)
@@ -194,6 +202,18 @@ function extractCompanies(rows: ValidationQueueRow[]) {
     .sort((a, b) => a.name.localeCompare(b.name, 'es'))
 }
 
+function extractProjects(rows: ValidationQueueRow[]) {
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    if (row.projectId && row.projectName) {
+      map.set(row.projectId, row.projectName)
+    }
+  }
+  return [...map.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+}
+
 function countByStage(rows: ValidationQueueRow[]): Record<ValidationStage, number> {
   return rows.reduce(
     (acc, row) => {
@@ -204,7 +224,12 @@ function countByStage(rows: ValidationQueueRow[]): Record<ValidationStage, numbe
   )
 }
 
-export default async function ValidationPage() {
+export default async function ValidationPage(props: {
+  searchParams: Promise<{ scope?: string; project?: string }>
+}) {
+  const params = await props.searchParams
+  const activeScope: 'clinic' | 'umm' = params.scope === 'umm' ? 'umm' : 'clinic'
+
   const events = await getValidationQueue()
   const eventIds = events.map((e) => e.id)
 
@@ -231,8 +256,13 @@ export default async function ValidationPage() {
   }
 
   const rows = toValidationRows(events, incidencesByEvent)
-  const companies = extractCompanies(rows)
-  const stageCounts = countByStage(rows)
+  const clinicRows = rows.filter((r) => !r.isUmm)
+  const ummRows = rows.filter((r) => r.isUmm)
+  const visibleRows = activeScope === 'umm' ? ummRows : clinicRows
+
+  const companies = extractCompanies(visibleRows)
+  const projects = extractProjects(visibleRows)
+  const stageCounts = countByStage(visibleRows)
 
   return (
     <div className="space-y-8 pb-12">
@@ -248,10 +278,40 @@ export default async function ValidationPage() {
         <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-2">
           <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
           <span className="text-xs font-bold text-slate-600">
-            En cola: <strong className="text-slate-900">{rows.length}</strong>
+            En cola: <strong className="text-slate-900">{visibleRows.length}</strong>
           </span>
         </div>
       </div>
+
+      <nav
+        className="inline-flex rounded-xl border border-slate-200 bg-white p-1 shadow-sm"
+        aria-label="Ámbito de validación"
+      >
+        <Link
+          href="/validation?scope=clinic"
+          aria-current={activeScope === 'clinic' ? 'page' : undefined}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+            activeScope === 'clinic'
+              ? 'bg-[#592c82] text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
+        >
+          <Building2 className="h-4 w-4" />
+          <span>Clínicas Fijas ({clinicRows.length})</span>
+        </Link>
+        <Link
+          href="/validation?scope=umm"
+          aria-current={activeScope === 'umm' ? 'page' : undefined}
+          className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all ${
+            activeScope === 'umm'
+              ? 'bg-[#592c82] text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+          }`}
+        >
+          <Ambulance className="h-4 w-4" />
+          <span>Campañas / UMM ({ummRows.length})</span>
+        </Link>
+      </nav>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {(['V1', 'V2', 'V3'] as ValidationStage[]).map((stage) => (
@@ -268,7 +328,14 @@ export default async function ValidationPage() {
         ))}
       </div>
 
-      <ValidationQueueTable rows={rows} companies={companies} />
+      <ValidationQueueTable
+        key={activeScope}
+        rows={visibleRows}
+        companies={companies}
+        projects={projects}
+        isUmmScope={activeScope === 'umm'}
+        initialProjectId={params.project ?? ''}
+      />
     </div>
   )
 }

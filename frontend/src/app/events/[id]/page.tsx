@@ -150,8 +150,11 @@ function EventView({ data }: EventViewProps) {
             <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors ${event.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
               {statusNames[event.status] || event.status}
             </div>
-            <Link href="/reception" className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors flex items-center">
-              ← Volver
+            <Link
+              href={projectRef?.id ? `/projects/${projectRef.id}` : '/reception'}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors flex items-center"
+            >
+              {projectRef?.id ? '← Volver al proyecto' : '← Volver'}
             </Link>
           </div>
         </div>
@@ -163,7 +166,19 @@ function EventView({ data }: EventViewProps) {
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <p className="text-[10px] font-black tracking-[0.18em] text-slate-400">Proyecto</p>
-            <p className="mt-1 text-sm font-semibold text-slate-700">{projectRef ? `${projectRef.name} · ${projectRef.id.slice(0, 8)}` : 'Sin proyecto'}</p>
+            {projectRef ? (
+              <p className="mt-1 text-sm font-semibold text-slate-700">
+                <Link
+                  href={`/projects/${projectRef.id}`}
+                  className="hover:text-[#592c82] hover:underline transition-colors"
+                >
+                  {projectRef.name}
+                </Link>{' '}
+                <span className="font-mono text-xs text-slate-500">· {projectRef.id.slice(0, 8)}</span>
+              </p>
+            ) : (
+              <p className="mt-1 text-sm font-semibold text-slate-700">Sin proyecto</p>
+            )}
           </div>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <p className="text-[10px] font-black tracking-[0.18em] text-slate-400">Cita asociada</p>

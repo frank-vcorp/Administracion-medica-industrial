@@ -18,6 +18,10 @@ export type ValidationQueueRow = {
   universalId: string
   companyId: string | null
   companyName: string
+  isUmm: boolean
+  projectId: string | null
+  projectName: string | null
+  mobileUnitName: string | null
   studies: string[]
   stage: ValidationStage
   stageLabel: string
@@ -30,6 +34,7 @@ export type ValidationQueueRow = {
 }
 
 type CompanyOption = { id: string; name: string }
+type ProjectOption = { id: string; name: string }
 type CompletenessFilter = 'ALL' | 'complete' | 'incomplete'
 type StageFilter = 'ALL' | ValidationStage
 
@@ -46,15 +51,25 @@ function formatListDate(iso: string): string {
 interface Props {
   rows: ValidationQueueRow[]
   companies: CompanyOption[]
+  projects?: ProjectOption[]
+  isUmmScope?: boolean
+  initialProjectId?: string
 }
 
-export default function ValidationQueueTable({ rows, companies }: Props) {
+export default function ValidationQueueTable({
+  rows,
+  companies,
+  projects,
+  isUmmScope = false,
+  initialProjectId = '',
+}: Props) {
   const [partialModal, setPartialModal] = useState<{
     eventId: string
     patientName: string
   } | null>(null)
   const [search, setSearch] = useState('')
   const [companyId, setCompanyId] = useState('')
+  const [projectId, setProjectId] = useState(initialProjectId)
   const [completenessFilter, setCompletenessFilter] = useState<CompletenessFilter>('ALL')
   const [stageFilter, setStageFilter] = useState<StageFilter>('ALL')
 
@@ -64,6 +79,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
     return rows
       .filter((row) => {
         if (companyId && row.companyId !== companyId) return false
+        if (isUmmScope && projectId && row.projectId !== projectId) return false
         if (stageFilter !== 'ALL' && row.stage !== stageFilter) return false
         if (completenessFilter !== 'ALL' && row.completeness !== completenessFilter) {
           return false
@@ -75,6 +91,8 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
           row.patientName.toLowerCase().includes(q) ||
           row.universalId.toLowerCase().includes(q) ||
           row.companyName.toLowerCase().includes(q) ||
+          (row.projectName ?? '').toLowerCase().includes(q) ||
+          (row.mobileUnitName ?? '').toLowerCase().includes(q) ||
           row.eventId.toLowerCase().includes(q) ||
           studiesText.includes(q)
         )
@@ -82,7 +100,7 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
       .sort(
         (a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
       )
-  }, [rows, search, companyId, completenessFilter, stageFilter])
+  }, [rows, search, companyId, isUmmScope, projectId, completenessFilter, stageFilter])
 
   return (
     <>
@@ -123,6 +141,25 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
             ))}
           </select>
         </div>
+        {isUmmScope && (
+          <div className="space-y-1 min-w-[200px]">
+            <label className="text-[10px] font-bold text-slate-400 ml-1">
+              Proyecto / Campaña
+            </label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Todos</option>
+              {(projects ?? []).map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="space-y-1 min-w-[200px]">
           <label className="text-[10px] font-bold text-slate-400 ml-1">
             Etapa
@@ -196,9 +233,24 @@ export default function ValidationQueueTable({ rows, companies }: Props) {
                   {row.universalId}
                 </td>
                 <td className="px-6 py-4">
-                  <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100">
-                    {row.companyName}
-                  </span>
+                  <div className="flex flex-col items-start gap-1">
+                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100">
+                      {row.companyName}
+                    </span>
+                    {isUmmScope && row.projectId && row.projectName && (
+                      <Link
+                        href={`/projects/${row.projectId}`}
+                        className="inline-flex items-center rounded border border-[#592c82]/20 bg-[#592c82]/10 px-2 py-0.5 text-[11px] font-semibold text-[#592c82] transition-colors hover:bg-[#592c82]/20"
+                      >
+                        {row.projectName}
+                      </Link>
+                    )}
+                    {isUmmScope && row.mobileUnitName && (
+                      <span className="text-[10px] font-medium text-slate-500">
+                        UMM: {row.mobileUnitName}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-wrap gap-1 max-w-xs">

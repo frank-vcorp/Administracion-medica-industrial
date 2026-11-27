@@ -106,6 +106,8 @@ export async function getEventsKanban(date?: string) {
             where: {
                 dischargedAt: null,
                 status: { notIn: ['CANCELED'] },
+                projectId: null,
+                mobileUnitId: null,
                 ...dayFilter,
             },
             select: kanbanCheckoutSelect,
@@ -192,6 +194,7 @@ export async function dischargePatientFromReception(eventId: string) {
                 id: true,
                 dischargedAt: true,
                 workerId: true,
+                projectId: true,
                 exam: { select: { physicalExamData: true } },
                 eventTests: { select: { id: true, status: true, testNameSnapshot: true } },
             },
@@ -257,6 +260,11 @@ export async function dischargePatientFromReception(eventId: string) {
 
         revalidatePath('/reception')
         revalidatePath(`/events/${eventId}`)
+        revalidatePath('/validation')
+        revalidatePath('/projects')
+        if (event.projectId) {
+            revalidatePath(`/projects/${event.projectId}`)
+        }
         return { success: true, dischargedAt: now.toISOString() }
     } catch (error) {
         console.error('[dischargePatientFromReception]', error)
