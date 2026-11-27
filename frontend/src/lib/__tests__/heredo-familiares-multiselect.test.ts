@@ -18,8 +18,9 @@ describe('heredo-familiares multiselect', () => {
     expect(serializeHeredoFamiliaresSelection(['HERMANOS', 'PADRE'])).toBe('PADRE, HERMANOS')
   })
 
-  it('NEGADOS es exclusivo', () => {
+  it('NEGADOS es exclusivo y desmarcable', () => {
     expect(toggleHeredoFamiliaresOption(['PADRE'], 'NEGADOS')).toEqual(['NEGADOS'])
     expect(toggleHeredoFamiliaresOption(['NEGADOS'], 'MADRE')).toEqual(['MADRE'])
+    expect(toggleHeredoFamiliaresOption(['NEGADOS'], 'NEGADOS')).toEqual([])
   })
 })

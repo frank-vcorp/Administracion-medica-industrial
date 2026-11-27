@@ -31,6 +31,9 @@ export function serializeHeredoFamiliaresSelection(selected: string[]): string {
 
 export function toggleHeredoFamiliaresOption(current: string[], option: string): string[] {
   if (option === 'NEGADOS') {
+    if (current.includes('NEGADOS')) {
+      return []
+    }
     return ['NEGADOS']
   }
   const withoutNegados = current.filter((v) => v !== 'NEGADOS')
