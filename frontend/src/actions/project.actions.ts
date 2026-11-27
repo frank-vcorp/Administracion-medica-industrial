@@ -15,6 +15,7 @@ import prisma from '@/lib/prisma'
 import { ProjectStatus, Prisma } from '@prisma/client'
 import { createProjectReceptionEvent } from '@/actions/event.actions'
 import { summarizeConflicts } from '@/lib/calendar-utils'
+import { isAdminLike } from '@/lib/auth/roles'
 import { zFreeTextMax, zFreeTextMaxOptional } from '@/lib/text/zod-free-text'
 
 // ─── Schemas de validación ────────────────────────────────────────────────────
@@ -535,6 +536,60 @@ export async function updateProjectStatus(
     const err = e as Error
     console.error('[updateProjectStatus]', err.message)
     return { success: false, error: 'Error al actualizar el estado del proyecto' }
+  }
+}
+
+export async function deleteProject(
+  projectId: string
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getServerSession(authOptions)
+  if (!session || !isAdminLike(session.user.role)) {
+    return { success: false, error: 'Solo administradores pueden eliminar proyectos.' }
+  }
+
+  const trimmedId = projectId.trim()
+  if (!trimmedId) {
+    return { success: false, error: 'Proyecto inválido.' }
+  }
+
+  try {
+    const existing = await prisma.project.findUnique({
+      where: { id: trimmedId },
+      select: { id: true, mobileUnitId: true },
+    })
+
+    if (!existing) {
+      return { success: false, error: 'Proyecto no encontrado.' }
+    }
+
+    // Desvincular eventos médicos previos para preservar historial clínico y trabajadores.
+    await prisma.$transaction(async (tx) => {
+      await tx.medicalEvent.updateMany({
+        where: { projectId: trimmedId },
+        data: { projectId: null },
+      })
+      await tx.projectWorker.deleteMany({
+        where: { projectId: trimmedId },
+      })
+      await tx.projectReport.deleteMany({
+        where: { projectId: trimmedId },
+      })
+      await tx.project.delete({
+        where: { id: trimmedId },
+      })
+    })
+
+    revalidatePath('/projects')
+    revalidatePath('/operations/mobile-units')
+    revalidatePath('/reports')
+    if (existing.mobileUnitId) {
+      revalidatePath(`/admin/mobile-units/${existing.mobileUnitId}/maintenance`)
+    }
+    return { success: true }
+  } catch (e: unknown) {
+    const err = e as Error
+    console.error('[deleteProject]', err.message)
+    return { success: false, error: 'No se pudo eliminar el proyecto.' }
   }
 }
 

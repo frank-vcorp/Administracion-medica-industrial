@@ -14,7 +14,7 @@ import { useMemo, useState } from 'react'
 import { ProjectStatus } from '@prisma/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ExternalLink, UserPlus, Wrench } from 'lucide-react'
+import { ExternalLink, UserPlus, Wrench, X } from 'lucide-react'
 import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
 import ProjectFormModal, { MobileUnitOption, ProjectForEdit } from '@/components/ProjectFormModal'
 import ProjectsTable from '@/components/ProjectsTable'
@@ -650,7 +650,11 @@ export default function ProjectsCalendar({
                               <div className="grid grid-cols-2 gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => setReceptionProjectId(project.id)}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setReceptionError(null)
+                                    setReceptionProjectId(project.id)
+                                  }}
                                   className="rounded-lg border border-white/80 bg-white/80 px-2 py-1.5 text-[10px] font-bold tracking-[0.06em] text-slate-700 hover:bg-white"
                                 >
                                   Recepción
@@ -700,150 +704,188 @@ export default function ProjectsCalendar({
         </div>
 
         {selectedReceptionProject && (
-          <div className="mt-6 rounded-3xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-xs font-black tracking-[0.2em] text-blue-500">Panel de recepción</p>
-                <h3 className="text-xl font-black text-slate-900">{selectedReceptionProject.name}</h3>
-                <p className="text-xs font-medium text-slate-500">
-                  {selectedReceptionProject.company?.name ?? '— sin empresa —'} · {getUnitLabel(selectedReceptionProject)}
-                </p>
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setReceptionProjectId(null)
+            }}
+          >
+            <div className="w-full max-w-3xl max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4 px-6 py-4 bg-gradient-to-r from-[#592c82] to-[#743fa6] text-white flex-shrink-0">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-purple-100">
+                    Panel de recepción
+                  </p>
+                  <h3 className="text-xl font-bold">{selectedReceptionProject.name}</h3>
+                  <p className="text-xs text-purple-100 mt-0.5">
+                    {selectedReceptionProject.company?.name ?? '— sin empresa —'} · {getUnitLabel(selectedReceptionProject)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReceptionProjectId(null)}
+                  className="text-white/75 hover:text-white transition-colors"
+                  aria-label="Cerrar panel de recepción"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
+
+              {/* Métricas y acciones rápidas */}
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/80 flex flex-col gap-3 md:flex-row md:items-center md:justify-between flex-shrink-0">
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-center">
-                    <p className="text-[10px] font-black tracking-[0.14em] text-slate-400">Pendientes</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pendientes</p>
                     <p className="text-lg font-black text-slate-700">{receptionMetrics.pending}</p>
                   </div>
                   <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center">
-                    <p className="text-[10px] font-black tracking-[0.14em] text-amber-500">Llegados</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Llegados</p>
                     <p className="text-lg font-black text-amber-700">{receptionMetrics.arrived}</p>
                   </div>
                   <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center">
-                    <p className="text-[10px] font-black tracking-[0.14em] text-emerald-500">Ingresados</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Ingresados</p>
                     <p className="text-lg font-black text-emerald-700">{receptionMetrics.checkedIn}</p>
                   </div>
                 </div>
-                {selectedReceptionProject.companyId && (
-                  <button
-                    type="button"
-                    onClick={() => openWorkersForProject(selectedReceptionProject, 'quick')}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" />
-                    + Agregar trabajadores
-                  </button>
-                )}
-                <Link
-                  href={`/projects/${selectedReceptionProject.id}`}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#592c82] px-3.5 py-2.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#49226b]"
-                >
-                  Abrir ficha / Entregables
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            </div>
 
-            {receptionError && (
-              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-                {receptionError}
-              </div>
-            )}
-
-            <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-              {receptionWorkers.length === 0 ? (
-                <div className="px-6 py-8 text-center space-y-3">
-                  <p className="text-sm font-medium text-slate-600">
-                    Este proyecto aún no tiene trabajadores registrados.
-                  </p>
+                <div className="flex flex-wrap items-center gap-2">
                   {selectedReceptionProject.companyId && (
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => openWorkersForProject(selectedReceptionProject, 'quick')}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
-                      >
-                        <UserPlus className="h-3.5 w-3.5" />
-                        Captura manual (1–20)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openWorkersForProject(selectedReceptionProject, 'excel')}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
-                      >
-                        Subir Excel
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = selectedReceptionProject
+                        setReceptionProjectId(null)
+                        openWorkersForProject(target, 'quick')
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      + Agregar trabajadores
+                    </button>
+                  )}
+                  <Link
+                    href={`/projects/${selectedReceptionProject.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#592c82] px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#49226b]"
+                  >
+                    Abrir ficha / Entregables
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Contenido */}
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+                {receptionError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                    {receptionError}
+                  </div>
+                )}
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                  {receptionWorkers.length === 0 ? (
+                    <div className="px-6 py-8 text-center space-y-3">
+                      <p className="text-sm font-medium text-slate-600">
+                        Este proyecto aún no tiene trabajadores registrados.
+                      </p>
+                      {selectedReceptionProject.companyId && (
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const target = selectedReceptionProject
+                              setReceptionProjectId(null)
+                              openWorkersForProject(target, 'quick')
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
+                          >
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Captura manual (1–20)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const target = selectedReceptionProject
+                              setReceptionProjectId(null)
+                              openWorkersForProject(target, 'excel')
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                          >
+                            Subir Excel
+                          </button>
+                        </div>
+                      )}
                     </div>
+                  ) : (
+                    <table className="min-w-full divide-y divide-slate-100">
+                      <thead className="bg-slate-50">
+                        <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          <th className="px-3 py-2.5">Trabajador</th>
+                          <th className="px-3 py-2.5">Estado</th>
+                          <th className="px-3 py-2.5">Llegada</th>
+                          <th className="px-3 py-2.5">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-sm">
+                        {receptionWorkers.map((row) => {
+                          const arrivalKey = `${selectedReceptionProject.id}:${row.workerId}:ARRIVED`
+                          const checkInKey = `${selectedReceptionProject.id}:${row.workerId}:CHECKED_IN`
+                          const isBusyArrival = workerActionKey === arrivalKey
+                          const isBusyCheckIn = workerActionKey === checkInKey
+                          const fullName = `${row.worker.lastName}, ${row.worker.firstName}`
+
+                          return (
+                            <tr key={`${selectedReceptionProject.id}:${row.workerId}`}>
+                              <td className="px-3 py-2.5">
+                                <p className="font-semibold text-slate-800">{fullName}</p>
+                                <p className="text-xs text-slate-500">#{row.worker.universalId}</p>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${RECEPTION_STATUS_BADGES[row.receptionStatus]}`}>
+                                  {RECEPTION_STATUS_LABELS[row.receptionStatus]}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-xs font-medium text-slate-600">{formatArrivedAt(row.arrivedAt)}</td>
+                              <td className="px-3 py-2.5">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {row.receptionStatus === 'PENDING' && (
+                                    <button
+                                      type="button"
+                                      disabled={isBusyArrival || Boolean(workerActionKey)}
+                                      onClick={() => handleMarkArrival(selectedReceptionProject.id, row.workerId)}
+                                      className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {isBusyArrival ? 'Marcando...' : 'Marcar llegada'}
+                                    </button>
+                                  )}
+                                  {row.receptionStatus !== 'CHECKED_IN' && (
+                                    <button
+                                      type="button"
+                                      disabled={isBusyCheckIn || Boolean(workerActionKey)}
+                                      onClick={() => handleCheckIn(selectedReceptionProject.id, row.workerId)}
+                                      className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                      {isBusyCheckIn ? 'Ingresando...' : 'Ingresar a clínica'}
+                                    </button>
+                                  )}
+                                  {row.eventId && (
+                                    <Link
+                                      href={`/events/${row.eventId}`}
+                                      className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                                    >
+                                      Abrir evento
+                                    </Link>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   )}
                 </div>
-              ) : (
-              <table className="min-w-full divide-y divide-slate-100">
-                <thead className="bg-slate-50">
-                  <tr className="text-left text-[11px] font-black tracking-[0.14em] text-slate-400">
-                    <th className="px-3 py-2">Trabajador</th>
-                    <th className="px-3 py-2">Estado</th>
-                    <th className="px-3 py-2">Llegada</th>
-                    <th className="px-3 py-2">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {receptionWorkers.map((row) => {
-                    const arrivalKey = `${selectedReceptionProject.id}:${row.workerId}:ARRIVED`
-                    const checkInKey = `${selectedReceptionProject.id}:${row.workerId}:CHECKED_IN`
-                    const isBusyArrival = workerActionKey === arrivalKey
-                    const isBusyCheckIn = workerActionKey === checkInKey
-                    const fullName = `${row.worker.lastName}, ${row.worker.firstName}`
-
-                    return (
-                      <tr key={`${selectedReceptionProject.id}:${row.workerId}`}>
-                        <td className="px-3 py-2">
-                          <p className="font-semibold text-slate-800">{fullName}</p>
-                          <p className="text-xs text-slate-500">#{row.worker.universalId}</p>
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black tracking-[0.14em] ${RECEPTION_STATUS_BADGES[row.receptionStatus]}`}>
-                            {RECEPTION_STATUS_LABELS[row.receptionStatus]}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-xs font-medium text-slate-600">{formatArrivedAt(row.arrivedAt)}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {row.receptionStatus === 'PENDING' && (
-                              <button
-                                type="button"
-                                disabled={isBusyArrival || Boolean(workerActionKey)}
-                                onClick={() => handleMarkArrival(selectedReceptionProject.id, row.workerId)}
-                                className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {isBusyArrival ? 'Marcando...' : 'Marcar llegada'}
-                              </button>
-                            )}
-                            {row.receptionStatus !== 'CHECKED_IN' && (
-                              <button
-                                type="button"
-                                disabled={isBusyCheckIn || Boolean(workerActionKey)}
-                                onClick={() => handleCheckIn(selectedReceptionProject.id, row.workerId)}
-                                className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {isBusyCheckIn ? 'Ingresando...' : 'Ingresar a clínica'}
-                              </button>
-                            )}
-                            {row.eventId && (
-                              <Link
-                                href={`/events/${row.eventId}`}
-                                className="rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
-                              >
-                                Abrir evento
-                              </Link>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              )}
+              </div>
             </div>
           </div>
         )}
@@ -857,6 +899,10 @@ export default function ProjectsCalendar({
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
         onSuccess={() => router.refresh()}
+        onDeleted={(deletedId) => {
+          if (receptionProjectId === deletedId) setReceptionProjectId(null)
+          router.refresh()
+        }}
       />
 
       <BulkWorkerImportModal

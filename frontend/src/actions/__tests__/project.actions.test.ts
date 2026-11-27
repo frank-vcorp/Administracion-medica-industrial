@@ -11,7 +11,11 @@ const mockProjectsFindMany = vi.fn()
 const mockProjectsCount = vi.fn()
 const mockProjectsCreate = vi.fn()
 const mockProjectsUpdate = vi.fn()
+const mockProjectsDelete = vi.fn()
 const mockProjectsFindUnique = vi.fn()
+const mockProjectWorkerDeleteMany = vi.fn()
+const mockProjectReportDeleteMany = vi.fn()
+const mockMedicalEventUpdateMany = vi.fn()
 const mockMaintenanceFindMany = vi.fn()
 const mockMaintenanceCount = vi.fn()
 
@@ -31,17 +35,40 @@ vi.mock('@/lib/prisma', () => ({
       count: (...args: unknown[]) => mockProjectsCount(...args),
       create: (...args: unknown[]) => mockProjectsCreate(...args),
       update: (...args: unknown[]) => mockProjectsUpdate(...args),
+      delete: (...args: unknown[]) => mockProjectsDelete(...args),
       findUnique: (...args: unknown[]) => mockProjectsFindUnique(...args),
+    },
+    projectWorker: {
+      deleteMany: (...args: unknown[]) => mockProjectWorkerDeleteMany(...args),
+    },
+    projectReport: {
+      deleteMany: (...args: unknown[]) => mockProjectReportDeleteMany(...args),
+    },
+    medicalEvent: {
+      updateMany: (...args: unknown[]) => mockMedicalEventUpdateMany(...args),
     },
     maintenanceRecord: {
       findMany: (...args: unknown[]) => mockMaintenanceFindMany(...args),
       count: (...args: unknown[]) => mockMaintenanceCount(...args),
     },
+    $transaction: async (cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        medicalEvent: { updateMany: (...args: unknown[]) => mockMedicalEventUpdateMany(...args) },
+        projectWorker: { deleteMany: (...args: unknown[]) => mockProjectWorkerDeleteMany(...args) },
+        projectReport: { deleteMany: (...args: unknown[]) => mockProjectReportDeleteMany(...args) },
+        project: { delete: (...args: unknown[]) => mockProjectsDelete(...args) },
+      }),
   },
 }))
 
 import { getServerSession } from 'next-auth/next'
-import { validateUnitAvailability, suggestMaintenanceDates, createProject, updateProject } from '@/actions/project.actions'
+import {
+  validateUnitAvailability,
+  suggestMaintenanceDates,
+  createProject,
+  updateProject,
+  deleteProject,
+} from '@/actions/project.actions'
 import { summarizeConflicts } from '@/lib/calendar-utils'
 
 describe('project.actions validateUnitAvailability (mobile unit)', () => {
@@ -417,5 +444,54 @@ describe('calendar-utils summarizeConflicts (ARCH-20260804-04 §4.3)', () => {
 
   it('23. cero conflictos → string vacío', () => {
     expect(summarizeConflicts([])).toBe('')
+  })
+})
+
+describe('project.actions deleteProject', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('25. deleteProject rechaza rol RECEPTIONIST (solo ADMIN/SUPERADMIN)', async () => {
+    vi.mocked(getServerSession).mockResolvedValue({
+      user: { id: 'rec-1', role: 'RECEPTIONIST', email: 'r@x', name: 'R' },
+      expires: '2099-12-31',
+    } as unknown as Awaited<ReturnType<typeof getServerSession>>)
+
+    const res = await deleteProject('proj-1')
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/administradores/i)
+    expect(mockProjectsDelete).not.toHaveBeenCalled()
+  })
+
+  it('26. deleteProject desvincula eventos, limpia project_workers y elimina el proyecto', async () => {
+    vi.mocked(getServerSession).mockResolvedValue({
+      user: { id: 'admin-1', role: 'ADMIN', email: 'a@x', name: 'A' },
+      expires: '2099-12-31',
+    } as unknown as Awaited<ReturnType<typeof getServerSession>>)
+    mockProjectsFindUnique.mockResolvedValue({
+      id: 'proj-1',
+      mobileUnitId: 'unit-1',
+    })
+    mockMedicalEventUpdateMany.mockResolvedValue({ count: 0 })
+    mockProjectWorkerDeleteMany.mockResolvedValue({ count: 0 })
+    mockProjectReportDeleteMany.mockResolvedValue({ count: 0 })
+    mockProjectsDelete.mockResolvedValue({ id: 'proj-1' })
+
+    const res = await deleteProject('proj-1')
+    expect(res.success).toBe(true)
+    expect(mockMedicalEventUpdateMany).toHaveBeenCalledWith({
+      where: { projectId: 'proj-1' },
+      data: { projectId: null },
+    })
+    expect(mockProjectWorkerDeleteMany).toHaveBeenCalledWith({
+      where: { projectId: 'proj-1' },
+    })
+    expect(mockProjectReportDeleteMany).toHaveBeenCalledWith({
+      where: { projectId: 'proj-1' },
+    })
+    expect(mockProjectsDelete).toHaveBeenCalledWith({
+      where: { id: 'proj-1' },
+    })
   })
 })

@@ -10,8 +10,8 @@
  */
 
 import { useState, useTransition, useEffect, useRef, useMemo } from 'react'
-import { FolderKanban, Plus, Truck, X } from 'lucide-react'
-import { createProject, updateProject, validateUnitAvailability } from '@/actions/project.actions'
+import { FolderKanban, Plus, Trash2, Truck, X } from 'lucide-react'
+import { createProject, deleteProject, updateProject, validateUnitAvailability } from '@/actions/project.actions'
 import type { AvailabilityConflict } from '@/actions/project.actions'
 
 export interface CompanyOption {
@@ -55,6 +55,8 @@ interface ProjectFormModalProps {
   onClose?: () => void
   /** Callback tras crear/actualizar exitosamente */
   onSuccess?: (projectId: string, projectName: string, companyId?: string, startDateISO?: string) => void
+  /** Callback tras eliminar el proyecto */
+  onDeleted?: (projectId: string) => void
   /** Texto del botón trigger (solo en modo no controlado) */
   triggerLabel?: string
 }
@@ -74,6 +76,7 @@ export default function ProjectFormModal({
   isOpen: isOpenProp,
   onClose,
   onSuccess,
+  onDeleted,
   triggerLabel = 'Nuevo Proyecto',
 }: ProjectFormModalProps) {
   const isControlled = isOpenProp !== undefined
@@ -82,6 +85,7 @@ export default function ProjectFormModal({
 
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   // Campos del formulario
   const [name, setName] = useState('')
@@ -151,6 +155,7 @@ export default function ProjectFormModal({
     }
     setError(null)
     setAvailabilityState(null)
+    setConfirmDelete(false)
   })
 
   const availabilityKey = useMemo(() => {
@@ -205,12 +210,34 @@ export default function ProjectFormModal({
   }
 
   function closeModal() {
+    setConfirmDelete(false)
     if (isControlled) {
       onClose?.()
     } else {
       setInternalOpen(false)
     }
     setError(null)
+  }
+
+  function handleDelete() {
+    if (!projectToEdit) return
+    setError(null)
+    startTransition(async () => {
+      const res = await deleteProject(projectToEdit.id)
+      if (!res.success) {
+        setConfirmDelete(false)
+        setError(res.error ?? 'No se pudo eliminar el proyecto')
+        return
+      }
+      const deletedId = projectToEdit.id
+      const deletedName = projectToEdit.name
+      closeModal()
+      if (onDeleted) {
+        onDeleted(deletedId)
+      } else {
+        onSuccess?.(deletedId, deletedName)
+      }
+    })
   }
 
   function handleMobileUnitChange(nextId: string) {
@@ -497,28 +524,71 @@ export default function ProjectFormModal({
                 />
               </div>
 
+              {/* Confirmación inline de borrado */}
+              {isEditMode && projectToEdit && confirmDelete && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <p className="text-xs text-red-800">
+                    ¿Eliminar <strong>«{projectToEdit.name}»</strong>? Se conservarán pacientes y expedientes médicos.
+                  </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => setConfirmDelete(false)}
+                      className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={handleDelete}
+                      className="rounded-lg bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isPending ? 'Eliminando...' : 'Sí, eliminar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Acciones */}
-              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="px-5 py-2 bg-[#592c82] hover:bg-[#49226b] disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
-                >
-                  {isPending
-                    ? isEditMode
-                      ? 'Guardando...'
-                      : 'Creando...'
-                    : isEditMode
-                      ? 'Guardar Cambios'
-                      : 'Crear Proyecto'}
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  {isEditMode && !confirmDelete && (
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => setConfirmDelete(true)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Eliminar proyecto
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 ml-auto">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    className="px-5 py-2 bg-[#592c82] hover:bg-[#49226b] disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-colors"
+                  >
+                    {isPending
+                      ? isEditMode
+                        ? 'Guardando...'
+                        : 'Creando...'
+                      : isEditMode
+                        ? 'Guardar Cambios'
+                        : 'Crear Proyecto'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

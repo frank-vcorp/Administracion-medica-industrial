@@ -12,6 +12,7 @@ import { Building2, Calendar, FolderKanban, Truck, Users } from 'lucide-react'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/auth'
 import prisma from '@/lib/prisma'
+import { isAdminLike } from '@/lib/auth/roles'
 import { getCompanies, getBranches } from '@/actions/admin.actions'
 import { getMobileUnits } from '@/actions/mobile-unit.actions'
 import { ProjectMassiveReportButton } from '@/components/projects/ProjectMassiveReportButton'
@@ -237,6 +238,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
             branches={branchOptions}
             mobileUnits={mobileUnitOptions}
             canManage={canManage}
+            canDelete={isAdminLike(role)}
           />
           {canGenerateReport && (
             <ProjectMassiveReportButton
