@@ -188,3 +188,76 @@ export async function saveCertificadoMedico(
     }
   }
 }
+
+export interface GenerateExploracionFisicaInput {
+  organos: Record<string, { estado: 'NORMAL' | 'ANORMAL'; detalle: string }>
+  tatuajes?: string
+  formato?: 'sistemas' | 'narrativo'
+}
+
+export interface GenerateExploracionFisicaResult {
+  ok: boolean
+  texto: string
+  source?: 'minimax' | 'template' | 'template_fallback'
+  error?: string
+}
+
+export async function generateExploracionFisicaIA(
+  input: GenerateExploracionFisicaInput,
+): Promise<GenerateExploracionFisicaResult> {
+  const access = await assertClinicalAccess()
+  if (!access.ok) return { ok: false, texto: '', error: access.error }
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    'http://localhost:8000'
+
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 25_000)
+
+    const res = await fetch(`${baseUrl}/api/v2/clinical/generate-exploracion-fisica`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+
+    if (res.ok) {
+      const data = await res.json()
+      if (data && typeof data.texto === 'string' && data.texto.trim()) {
+        return { ok: true, texto: data.texto.trim(), source: data.source }
+      }
+    }
+  } catch (err) {
+    console.warn('[generateExploracionFisicaIA] Backend error o timeout, usando fallback local', err)
+  }
+
+  const getF = (k: string, norm: string) => {
+    const o = input.organos?.[k]
+    if (o?.estado === 'ANORMAL' && o.detalle?.trim()) return o.detalle.trim()
+    return norm
+  }
+
+  const neurol = `Consciente, orientado en sus cuatro esferas. ${getF('fuerza', 'Fuerza 5/5 (Daniels), sensibilidad y reflejos osteotendinosos conservados.')} ${getF('romberg_tandem', 'Coordinación, Romberg y marcha en tándem normales.')}`
+  const cabezaCuello = `${getF('boca', 'Mucosa oral hidratada, dentadura completa sin caries ni sarro, faringe normal.')} ${getF('ojos', 'Pupilas isocóricas normorreflécticas, globos oculares sin alteraciones.')} ${getF('oidos', 'Conductos auditivos permeables.')}`
+  const piel = input.tatuajes?.trim()
+    ? `Tatuajes en ${input.tatuajes.trim()}.`
+    : 'Sin lesiones ni alteraciones aparentes.'
+
+  const fallback = [
+    `Neurológico: ${neurol}`,
+    `Cabeza y cuello: ${cabezaCuello}`,
+    `Tórax: ${getF('torax', 'Mesomórfico, amplexión y amplexación normales, auscultación cardiopulmonar sin alteraciones.')}`,
+    `Abdomen: ${getF('abdomen', 'Globoso, depresible, no doloroso.')}`,
+    `Extremidades: ${getF('extremidades', 'Íntegras, eutróficas, llenado capilar inmediato, sin edema.')}`,
+    `Piel: ${piel}`,
+    `Romberg: ${getF('romberg_tandem', 'Negativo.')}`,
+    `Tándem: ${getF('romberg_tandem', 'Negativo.')}`,
+  ].join('\n')
+
+  return { ok: true, texto: fallback, source: 'template_fallback' }
+}

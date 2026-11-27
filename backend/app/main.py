@@ -2075,6 +2075,139 @@ async def v2_event_test_audiometry_source_crop(body: AudiometrySourceCropRequest
     }
 
 
+class GenerateExploracionFisicaRequest(BaseModel):
+    organos: Dict[str, Any] = {}
+    tatuajes: Optional[str] = None
+    formato: Optional[str] = "sistemas"
+
+
+@app.post("/api/v2/clinical/generate-exploracion-fisica")
+async def v2_clinical_generate_exploracion_fisica(body: GenerateExploracionFisicaRequest):
+    """
+    Sintetiza la exploración física clínica a partir de la lista de verificación por órganos.
+    Usa MiniMax M3 si está disponible, o cae al template estructurado de Dra. Erika.
+    """
+    from app.services.ai.prediagnostic import (
+        _resolve_m3_clinical_config,
+        _m3_chat_completions_url,
+    )
+    from app.services.ai.m3_model import resolve_m3_model, m3_performance_body
+    from app.services.ai.base import GeminiBase
+    import requests
+
+    organos_info = []
+    for k, v in (body.organos or {}).items():
+        if isinstance(v, dict):
+            est = v.get("estado", "NORMAL")
+            det = (v.get("detalle") or "").strip()
+            organos_info.append(f"- {k}: {est}" + (f" (Hallazgo: {det})" if det else ""))
+        elif isinstance(v, str):
+            organos_info.append(f"- {k}: {v}")
+
+    organos_str = "\n".join(organos_info)
+    tatuajes_str = (body.tatuajes or "").strip()
+
+    def _build_fallback() -> str:
+        def get_f(k: str, norm: str) -> str:
+            val = (body.organos or {}).get(k)
+            if isinstance(val, dict) and val.get("estado") == "ANORMAL" and val.get("detalle"):
+                return str(val.get("detalle")).strip()
+            return norm
+
+        neurol = f"Consciente, orientado en sus cuatro esferas. {get_f('fuerza', 'Fuerza 5/5 (Daniels), sensibilidad y reflejos osteotendinosos conservados.')} {get_f('romberg_tandem', 'Coordinación, Romberg y marcha en tándem normales.')}"
+        cabeza_cuello = f"{get_f('boca', 'Mucosa oral hidratada, dentadura completa sin caries ni sarro, faringe normal.')} {get_f('ojos', 'Pupilas isocóricas normorreflécticas, globos oculares sin alteraciones.')} {get_f('oidos', 'Conductos auditivos permeables.')}"
+        piel = f"Tatuajes en {tatuajes_str}." if tatuajes_str else "Sin lesiones ni alteraciones aparentes."
+        return "\n".join([
+            f"Neurológico: {neurol}",
+            f"Cabeza y cuello: {cabeza_cuello}",
+            f"Tórax: {get_f('torax', 'Mesomórfico, amplexión y amplexación normales, auscultación cardiopulmonar sin alteraciones.')}",
+            f"Abdomen: {get_f('abdomen', 'Globoso, depresible, no doloroso.')}",
+            f"Extremidades: {get_f('extremidades', 'Íntegras, eutróficas, llenado capilar inmediato, sin edema.')}",
+            f"Piel: {piel}",
+            f"Romberg: {get_f('romberg_tandem', 'Negativo.')}",
+            f"Tándem: {get_f('romberg_tandem', 'Negativo.')}",
+        ])
+
+    m3_cfg = _resolve_m3_clinical_config()
+    api_key = (m3_cfg.get("api_key") or "").strip()
+    if not api_key:
+        return {
+            "ok": True,
+            "texto": _build_fallback(),
+            "source": "template",
+            "message": "MiniMax no configurado localmente; usando plantilla estructurada.",
+        }
+
+    base_url = m3_cfg.get("base_url") or M3_BASE_URL or "https://api.minimax.io/v1"
+    model = resolve_m3_model(m3_cfg.get("model") or M3_DEFAULT_MODEL or "MiniMax-M3.1-Flash")
+    url = _m3_chat_completions_url(str(base_url))
+
+    system_prompt = (
+        "Eres un médico especialista en medicina del trabajo y salud ocupacional de Soluciones Médico Empresariales (SME) en México. "
+        "Tu función es redactar la sección de 'Exploración física' de un Certificado Médico laboral oficial en México. "
+        "Recibes la revisión por órganos y sistemas (estado Normal/Anormal con hallazgos anotados por el médico) y posibles antecedentes de tatuajes.\n\n"
+        "REGLAS ESTRICTAS:\n"
+        "1. Redacta en español médico formal, pulcro y conciso.\n"
+        "2. Si formato es 'sistemas' (o no se especifica), debes utilizar exactamente esta estructura de 8 apartados:\n"
+        "Neurológico: ...\n"
+        "Cabeza y cuello: ...\n"
+        "Tórax: ...\n"
+        "Abdomen: ...\n"
+        "Extremidades: ...\n"
+        "Piel: ...\n"
+        "Romberg: Negativo. (o el hallazgo reportado)\n"
+        "Tándem: Negativo. (o el hallazgo reportado)\n"
+        "3. Incorpora fluidamente cualquier nota o hallazgo anormal, traduciendo notas breves a redacción médica formal.\n"
+        "4. Para órganos normales, conserva descripciones estándar.\n"
+        "5. En 'Piel', si se reportan tatuajes, descríbelos; si no, indica 'Sin lesiones ni alteraciones aparentes.'\n"
+        "6. Devuelve ÚNICAMENTE un JSON válido con la forma: {\"texto\": \"<texto de la exploracion fisica>\"} sin markdown ni explicaciones."
+    )
+    user_prompt = (
+        f"Formato requerido: {body.formato or 'sistemas'}\n"
+        f"Antecedente de tatuajes: {tatuajes_str or 'Ninguno reportado'}\n"
+        f"Revisión por órganos:\n{organos_str}"
+    )
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 1500,
+        "response_format": {"type": "json_object"},
+    }
+    payload.update(m3_performance_body(model))
+
+    try:
+        resp = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=(5, 20),
+        )
+        if resp.status_code >= 400:
+            print(f"⚠️ MiniMax generación exploración HTTP {resp.status_code}")
+            return {"ok": True, "texto": _build_fallback(), "source": "template_fallback"}
+
+        data = resp.json()
+        raw_content = ((data.get("choices") or [{}])[0].get("message") or {}).get("content", "")
+        parsed = GeminiBase._tolerant_json_parse(GeminiBase._sanitize_model_json_text(raw_content))
+        texto = parsed.get("texto") if isinstance(parsed, dict) else ""
+        if not texto or not str(texto).strip():
+            texto = _build_fallback()
+            return {"ok": True, "texto": texto, "source": "template_fallback"}
+
+        return {"ok": True, "texto": str(texto).strip(), "source": "minimax"}
+    except Exception as exc:
+        print(f"⚠️ MiniMax generación exploración error: {exc}")
+        return {"ok": True, "texto": _build_fallback(), "source": "template_fallback"}
+
+
 @app.post("/api/v2/event-tests/espirometry-source-crop")
 async def v2_event_test_espirometry_source_crop(body: EspirometrySourceCropRequest):
     """
