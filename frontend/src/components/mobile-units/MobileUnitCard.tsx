@@ -3,21 +3,17 @@
  * @id IMPL-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS
  * @spec context/SPECs/SPEC_ARCH-20260711-01-MODULO-UNIDADES-MOVILES.md §5.1
  *
- * Paridad visual con BranchCard:
- *   - bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md
- *   - Header con emoji 🚑 grande (h-24 bg-slate-100)
- *   - Body con nombre + status badge
- *   - Datos en grid de líneas con emoji (📞 / 🪪 / 👥 / 🔧)
- *   - Footer con botón ghost "Configurar" (o "Ver" en readOnly)
- *
- * En modo readOnly (staff no-admin en /operations/mobile-units) el botón
- * apunta a /admin/mobile-units/{id} (middleware redirige a /, pero se
- * mantiene por consistencia; OBS-2 GEMINI pendiente de fix futuro).
+ * Paridad visual institucional SME:
+ *   - rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md
+ *   - Header visual con foto o ícono circular Lucide <Ambulance /> en gradiente suave
+ *   - Datos con íconos circulares Lucide (sin emojis crudos)
+ *   - Footer con botón "Configurar" (o "Ver" en readOnly)
  */
 'use client'
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { Ambulance, FolderKanban, Users, Wrench } from 'lucide-react'
 import { MobileUnitStatusBadge } from './MobileUnitStatusBadge'
 
 export type MobileUnitCardData = {
@@ -43,8 +39,8 @@ export function MobileUnitCard({ unit, readOnly = false }: Props) {
     : null
 
   return (
-    <div className="bg-white p-0 rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-all">
-      <div className="h-24 bg-slate-100 flex items-center justify-center text-4xl border-b border-slate-100 relative">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all hover:shadow-md flex flex-col">
+      <div className="relative flex h-24 items-center justify-center border-b border-slate-100 bg-gradient-to-br from-[#592c82]/10 via-slate-50 to-teal-50/70">
         {unit.imageUrl ? (
           <Image
             src={unit.imageUrl}
@@ -54,45 +50,61 @@ export function MobileUnitCard({ unit, readOnly = false }: Props) {
             unoptimized
           />
         ) : (
-          <span>🚑</span>
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#592c82] shadow-sm ring-1 ring-[#592c82]/15">
+            <Ambulance className="h-6 w-6" />
+          </span>
         )}
       </div>
-      <div className="p-6">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-slate-800 text-lg">{unit.name}</h3>
+
+      <div className="flex flex-1 flex-col p-5">
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <h3 className="text-base font-bold text-slate-900 leading-snug">{unit.name}</h3>
           <MobileUnitStatusBadge status={unit.status} />
         </div>
-        <p className="text-sm text-slate-500 mb-4">
+        <p className="mb-4 text-xs font-medium text-slate-500">
           {unit.plate ? `Placa: ${unit.plate}` : 'Sin placa asignada'}
         </p>
 
-        <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-2 text-slate-600">
-            <span>👥</span>{' '}
-            {unit.capacity != null ? `${unit.capacity} pacientes / día` : 'Capacidad N/A'}
+        <div className="space-y-2.5 text-sm flex-1">
+          <div className="flex items-center gap-2.5 text-slate-600">
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#592c82]/10 text-[#592c82]">
+              <Users className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs">
+              {unit.capacity != null ? `${unit.capacity} pacientes / día` : 'Capacidad N/A'}
+            </span>
           </div>
-          <div className="flex items-center gap-2 text-slate-600">
-            <span>🗂️</span> {unit._count.projects} proyecto(s) asignado(s)
+          <div className="flex items-center gap-2.5 text-slate-600">
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+              <FolderKanban className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs">
+              {unit._count.projects} proyecto(s) asignado(s)
+            </span>
           </div>
-          <div className="flex items-center gap-2 text-slate-600">
-            <span>🔧</span>{' '}
-            {nextDate ? (
-              <>
-                Próx. mantto: <strong className="text-slate-800">{nextDate}</strong>
-                {unit.nextMaintenanceType && (
-                  <span className="text-xs text-slate-500"> ({unit.nextMaintenanceType})</span>
-                )}
-              </>
-            ) : (
-              'Sin mantenimiento programado'
-            )}
+          <div className="flex items-center gap-2.5 text-slate-600">
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <Wrench className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-xs">
+              {nextDate ? (
+                <>
+                  Próx. mantto: <strong className="text-slate-800">{nextDate}</strong>
+                  {unit.nextMaintenanceType && (
+                    <span className="text-slate-500"> ({unit.nextMaintenanceType})</span>
+                  )}
+                </>
+              ) : (
+                'Sin mantenimiento programado'
+              )}
+            </span>
           </div>
         </div>
 
-        <div className="mt-6 flex gap-2">
+        <div className="mt-5 flex gap-2 border-t border-slate-100 pt-4">
           <Link
             href={`/admin/mobile-units/${unit.id}`}
-            className="flex-1 text-center border border-slate-200 text-slate-600 py-1.5 rounded text-xs font-medium hover:bg-slate-50"
+            className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 py-2 text-center text-xs font-semibold text-slate-700 transition-colors hover:border-[#592c82]/30 hover:bg-[#592c82]/5 hover:text-[#592c82]"
           >
             {readOnly ? 'Ver' : 'Configurar'}
           </Link>

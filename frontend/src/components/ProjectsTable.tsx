@@ -8,9 +8,10 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ExternalLink, FolderKanban } from 'lucide-react'
 import { updateProjectStatus } from '@/actions/project.actions'
-import ProjectFormModal, { ProjectForEdit } from '@/components/ProjectFormModal'
+import ProjectFormModal, { MobileUnitOption, ProjectForEdit } from '@/components/ProjectFormModal'
 import { ProjectStatus } from '@prisma/client'
 
 interface CompanyOption { id: string; name: string }
@@ -28,6 +29,7 @@ interface ProjectRow {
   branchId: string | null
   company: { id: string; name: string } | null // ARCH-20260730-01: nullable tras eliminación de empresa
   branch: { id: string; name: string } | null
+  mobileUnit?: { id: string; name: string; plate: string | null; status: string } | null
   _count: { workers: number }
 }
 
@@ -35,6 +37,7 @@ interface ProjectsTableProps {
   projects: ProjectRow[]
   companies: CompanyOption[]
   branches: BranchOption[]
+  mobileUnits?: MobileUnitOption[]
 }
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
@@ -63,7 +66,8 @@ function formatDate(d: Date) {
   })
 }
 
-export default function ProjectsTable({ projects, companies, branches }: ProjectsTableProps) {
+export default function ProjectsTable({ projects, companies, branches, mobileUnits = [] }: ProjectsTableProps) {
+  const router = useRouter()
   const [editProject, setEditProject] = useState<ProjectForEdit | null>(null)
   const [editOpen, setEditOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -77,6 +81,7 @@ export default function ProjectsTable({ projects, companies, branches }: Project
       startDate: p.startDate,
       endDate: p.endDate,
       branchId: p.branchId,
+      mobileUnitId: p.mobileUnit?.id ?? null,
       unitRef: p.unitRef,
       notes: p.notes,
     })
@@ -141,8 +146,15 @@ export default function ProjectsTable({ projects, companies, branches }: Project
                   {formatDate(p.endDate)}
                 </td>
                 <td className="px-4 py-3 text-slate-600">
-                  {p.unitRef ?? p.branch?.name ?? (
-                    <span className="text-slate-400 italic">Sin asignar</span>
+                  {p.mobileUnit ? (
+                    <span className="font-medium text-slate-800">
+                      {p.mobileUnit.name}
+                      {p.mobileUnit.plate ? ` · ${p.mobileUnit.plate}` : ''}
+                    </span>
+                  ) : (
+                    p.unitRef ?? p.branch?.name ?? (
+                      <span className="text-slate-400 italic">Sin asignar</span>
+                    )
                   )}
                 </td>
                 <td className="px-4 py-3 text-center">
@@ -189,9 +201,11 @@ export default function ProjectsTable({ projects, companies, branches }: Project
       <ProjectFormModal
         companies={companies}
         branches={branches}
+        mobileUnits={mobileUnits}
         projectToEdit={editProject}
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
+        onSuccess={() => router.refresh()}
       />
     </>
   )

@@ -11,6 +11,15 @@
  */
 
 import { useState, useTransition, useRef, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  FileSpreadsheet,
+  Search,
+  XCircle,
+} from 'lucide-react'
 import * as XLSX from 'xlsx'
 import {
   bulkImportWorkers,
@@ -142,6 +151,7 @@ export default function BulkWorkerImportModal({
   hideTrigger = false,
   initialMode = 'excel',
 }: BulkWorkerImportModalProps) {
+  const router = useRouter()
   const isControlled = isOpenProp !== undefined
   const [internalOpen, setInternalOpen] = useState(false)
   const open = isControlled ? isOpenProp : internalOpen
@@ -211,6 +221,9 @@ export default function BulkWorkerImportModal({
   }
 
   function closeModal() {
+    if (importResult && importResult.created > 0) {
+      router.refresh()
+    }
     if (isControlled) {
       onOpenChange?.(false)
     } else {
@@ -310,6 +323,7 @@ export default function BulkWorkerImportModal({
         const result = await bulkImportWorkers(validRows as BulkWorkerRow[], selectedProjectId)
         setImportResult(result)
         setStep('result')
+        if (result.created > 0) router.refresh()
       })
       return
     }
@@ -352,6 +366,7 @@ export default function BulkWorkerImportModal({
       const result = await quickRegisterWorkersSameDay(validRows, selectedProjectId)
       setImportResult(result)
       setStep('result')
+      if (result.created > 0) router.refresh()
     })
   }
 
@@ -568,8 +583,10 @@ export default function BulkWorkerImportModal({
                           className="hidden"
                           id="bulk-file-input"
                         />
-                        <label htmlFor="bulk-file-input" className="cursor-pointer">
-                          <div className="text-4xl mb-2">📊</div>
+                        <label htmlFor="bulk-file-input" className="cursor-pointer block">
+                          <span className="mx-auto mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                            <FileSpreadsheet className="h-6 w-6" />
+                          </span>
                           <p className="text-slate-600 font-semibold">Seleccionar archivo .xlsx o .csv</p>
                           <p className="text-slate-400 text-xs mt-1">Máximo {MAX_ROWS} trabajadores por carga</p>
                         </label>
@@ -640,11 +657,13 @@ export default function BulkWorkerImportModal({
               {step === 'preview' && (
                 <div className="space-y-3">
                   <div className="flex gap-3 text-xs">
-                    <span className="flex items-center gap-1 bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">
-                      🟢 {validCount} válidos
+                    <span className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-semibold">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {validCount} válidos
                     </span>
-                    <span className="flex items-center gap-1 bg-red-100 text-red-600 px-2 py-1 rounded-full font-semibold">
-                      🔴 {errorCount} con error
+                    <span className="inline-flex items-center gap-1.5 bg-red-100 text-red-600 px-2.5 py-1 rounded-full font-semibold">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      {errorCount} con error
                     </span>
                   </div>
 
@@ -698,19 +717,31 @@ export default function BulkWorkerImportModal({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-xl bg-green-50 border border-green-200 p-4 text-center">
                       <p className="text-3xl font-black text-green-700">{importResult.created}</p>
-                      <p className="text-xs text-green-600 font-semibold mt-1">✅ Creados</p>
+                      <p className="mt-1 inline-flex items-center justify-center gap-1 text-xs text-green-600 font-semibold">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Creados
+                      </p>
                     </div>
                     <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-center">
                       <p className="text-3xl font-black text-amber-700">{importResult.duplicates.length}</p>
-                      <p className="text-xs text-amber-600 font-semibold mt-1">⚠️ Duplicados omitidos</p>
+                      <p className="mt-1 inline-flex items-center justify-center gap-1 text-xs text-amber-600 font-semibold">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Duplicados omitidos
+                      </p>
                     </div>
                     <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 text-center">
                       <p className="text-3xl font-black text-blue-700">{importResult.warnings.length}</p>
-                      <p className="text-xs text-blue-600 font-semibold mt-1">🔍 Requieren revisión</p>
+                      <p className="mt-1 inline-flex items-center justify-center gap-1 text-xs text-blue-600 font-semibold">
+                        <Search className="h-3.5 w-3.5" />
+                        Requieren revisión
+                      </p>
                     </div>
                     <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-center">
                       <p className="text-3xl font-black text-red-700">{importResult.errors.length}</p>
-                      <p className="text-xs text-red-600 font-semibold mt-1">❌ Errores</p>
+                      <p className="mt-1 inline-flex items-center justify-center gap-1 text-xs text-red-600 font-semibold">
+                        <XCircle className="h-3.5 w-3.5" />
+                        Errores
+                      </p>
                     </div>
                   </div>
 

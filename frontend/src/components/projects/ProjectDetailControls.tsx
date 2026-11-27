@@ -1,0 +1,328 @@
+'use client'
+
+/**
+ * Controles interactivos para la ficha de detalle de Proyecto (/projects/[id]).
+ * Permite:
+ *   - Cambiar estado del proyecto y editarlo (incluyendo asignación de Unidad Móvil)
+ *   - Cargar trabajadores por Excel (Alta masiva) o Manual (Captura rápida) contextualizados
+ *   - Marcar llegada e ingresar trabajadores a atención clínica directamente desde la ficha
+ */
+
+import { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  ArrowRight,
+  CheckCircle2,
+  ExternalLink,
+  FileSpreadsheet,
+  Pencil,
+  UserCheck,
+  UserPlus,
+} from 'lucide-react'
+import { ProjectStatus } from '@prisma/client'
+import {
+  checkInProjectWorkerToClinical,
+  markProjectWorkerArrived,
+  updateProjectStatus,
+} from '@/actions/project.actions'
+import ProjectFormModal, {
+  type BranchOption,
+  type CompanyOption,
+  type MobileUnitOption,
+  type ProjectForEdit,
+} from '@/components/ProjectFormModal'
+import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
+
+const PROJECT_STATUS_OPTIONS: Array<{ value: ProjectStatus; label: string }> = [
+  { value: 'DRAFT', label: 'Borrador' },
+  { value: 'CONFIRMED', label: 'Confirmado' },
+  { value: 'IN_PROGRESS', label: 'En curso' },
+  { value: 'COMPLETED', label: 'Completado' },
+  { value: 'CANCELLED', label: 'Cancelado' },
+]
+
+const STATUS_SELECT_COLORS: Record<ProjectStatus, string> = {
+  DRAFT: 'border-slate-200 bg-slate-50 text-slate-700',
+  CONFIRMED: 'border-blue-200 bg-blue-50 text-blue-700',
+  IN_PROGRESS: 'border-amber-200 bg-amber-50 text-amber-700',
+  COMPLETED: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  CANCELLED: 'border-red-200 bg-red-50 text-red-700',
+}
+
+interface ProjectHeaderControlsProps {
+  project: ProjectForEdit & { status: ProjectStatus }
+  companies: CompanyOption[]
+  branches: BranchOption[]
+  mobileUnits: MobileUnitOption[]
+  canManage: boolean
+}
+
+export function ProjectHeaderControls({
+  project,
+  companies,
+  branches,
+  mobileUnits,
+  canManage,
+}: ProjectHeaderControlsProps) {
+  const router = useRouter()
+  const [editOpen, setEditOpen] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  if (!canManage) return null
+
+  function handleStatusChange(nextStatus: ProjectStatus) {
+    setStatusError(null)
+    startTransition(async () => {
+      const res = await updateProjectStatus(project.id, nextStatus)
+      if (!res.success) {
+        setStatusError(res.error ?? 'No se pudo actualizar el estado del proyecto.')
+        return
+      }
+      router.refresh()
+    })
+  }
+
+  return (
+    <>
+      <div className="flex flex-col items-stretch sm:items-end gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
+            <span>Estado:</span>
+            <select
+              aria-label="Estado del proyecto"
+              value={project.status}
+              disabled={isPending}
+              onChange={(e) => handleStatusChange(e.target.value as ProjectStatus)}
+              className={`rounded-xl border px-3 py-2 text-xs font-bold cursor-pointer focus:outline-none disabled:opacity-60 ${STATUS_SELECT_COLORS[project.status]}`}
+            >
+              {PROJECT_STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5 text-[#592c82]" />
+            Editar proyecto
+          </button>
+        </div>
+
+        {statusError && (
+          <p className="text-xs font-medium text-red-600" role="alert">
+            {statusError}
+          </p>
+        )}
+      </div>
+
+      <ProjectFormModal
+        companies={companies}
+        branches={branches}
+        mobileUnits={mobileUnits}
+        projectToEdit={project}
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        onSuccess={() => router.refresh()}
+      />
+    </>
+  )
+}
+
+interface ProjectWorkersToolbarProps {
+  projectId: string
+  companyId: string | null
+  companies: CompanyOption[]
+  branches: BranchOption[]
+  canManage: boolean
+  compact?: boolean
+}
+
+export function ProjectWorkersToolbar({
+  projectId,
+  companyId,
+  companies,
+  branches,
+  canManage,
+  compact = false,
+}: ProjectWorkersToolbarProps) {
+  const [importOpen, setImportOpen] = useState(false)
+  const [importMode, setImportMode] = useState<'excel' | 'quick'>('excel')
+
+  if (!canManage) return null
+
+  const disabledNoCompany = !companyId
+
+  function openWithMode(mode: 'excel' | 'quick') {
+    setImportMode(mode)
+    setImportOpen(true)
+  }
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => openWithMode('excel')}
+          disabled={disabledNoCompany}
+          title={
+            disabledNoCompany
+              ? 'Asigna primero una empresa al proyecto para importar trabajadores'
+              : undefined
+          }
+          className={`inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 font-semibold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 ${
+            compact ? 'px-3 py-1.5 text-xs' : 'px-3.5 py-2 text-xs'
+          }`}
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          + Alta masiva (Excel)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openWithMode('quick')}
+          disabled={disabledNoCompany}
+          title={
+            disabledNoCompany
+              ? 'Asigna primero una empresa al proyecto para registrar trabajadores'
+              : undefined
+          }
+          className={`inline-flex items-center gap-1.5 rounded-xl bg-[#592c82] font-semibold text-white shadow-sm transition-colors hover:bg-[#49226b] disabled:cursor-not-allowed disabled:opacity-50 ${
+            compact ? 'px-3 py-1.5 text-xs' : 'px-3.5 py-2 text-xs'
+          }`}
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+          + Agregar trabajador
+        </button>
+      </div>
+
+      <BulkWorkerImportModal
+        companies={companies}
+        branches={branches}
+        isOpen={importOpen}
+        onOpenChange={setImportOpen}
+        initialCompanyId={companyId ?? undefined}
+        initialProjectId={projectId}
+        lockProjectContext={Boolean(companyId)}
+        initialMode={importMode}
+        hideTrigger
+      />
+    </>
+  )
+}
+
+interface ProjectWorkerRowActionsProps {
+  projectId: string
+  workerId: string
+  receptionStatus: 'PENDING' | 'ARRIVED' | 'CHECKED_IN'
+  eventId: string | null
+  eventStatus: string | null
+  canManage: boolean
+}
+
+const EVENT_STATUS_LABEL: Record<string, string> = {
+  SCHEDULED: 'Programado',
+  CHECKED_IN: 'Ingresado',
+  IN_PROGRESS: 'En atención',
+  VALIDATING: 'En validación',
+  COMPLETED: 'Atendido',
+  CANCELED: 'Cancelado',
+}
+
+export function ProjectWorkerRowActions({
+  projectId,
+  workerId,
+  receptionStatus,
+  eventId,
+  eventStatus,
+  canManage,
+}: ProjectWorkerRowActionsProps) {
+  const router = useRouter()
+  const [busyAction, setBusyAction] = useState<'ARRIVED' | 'CHECK_IN' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (eventId) {
+    return (
+      <Link
+        href={`/events/${eventId}`}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        <span>{eventStatus ? EVENT_STATUS_LABEL[eventStatus] ?? eventStatus : 'Expediente'} · Abrir</span>
+        <ExternalLink className="h-3 w-3" />
+      </Link>
+    )
+  }
+
+  if (!canManage) {
+    return <span className="text-xs text-slate-400">Sin evento aún</span>
+  }
+
+  async function handleMarkArrival() {
+    setError(null)
+    setBusyAction('ARRIVED')
+    const res = await markProjectWorkerArrived(projectId, workerId)
+    setBusyAction(null)
+    if (!res.success) {
+      setError(res.error ?? 'No se pudo marcar llegada.')
+      return
+    }
+    router.refresh()
+  }
+
+  async function handleCheckIn() {
+    setError(null)
+    setBusyAction('CHECK_IN')
+    const res = await checkInProjectWorkerToClinical(projectId, workerId)
+    setBusyAction(null)
+    if (!res.success) {
+      setError(res.error ?? 'No se pudo ingresar a clínica.')
+      return
+    }
+    if (res.eventId) {
+      router.push(`/events/${res.eventId}`)
+      return
+    }
+    router.refresh()
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {receptionStatus === 'PENDING' && (
+          <button
+            type="button"
+            disabled={busyAction !== null}
+            onClick={handleMarkArrival}
+            className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <UserCheck className="h-3.5 w-3.5" />
+            {busyAction === 'ARRIVED' ? 'Marcando…' : 'Marcar llegada'}
+          </button>
+        )}
+
+        <button
+          type="button"
+          disabled={busyAction !== null}
+          onClick={handleCheckIn}
+          className="inline-flex items-center gap-1 rounded-lg border border-[#592c82]/25 bg-[#592c82]/10 px-2.5 py-1.5 text-xs font-semibold text-[#592c82] transition-colors hover:bg-[#592c82]/20 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span>{busyAction === 'CHECK_IN' ? 'Ingresando…' : 'Ingresar a clínica'}</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {error && (
+        <p className="text-[11px] font-medium text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}

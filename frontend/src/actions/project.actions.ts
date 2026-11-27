@@ -49,13 +49,13 @@ const UpdateProjectSchema = z
     endDate: z.string().datetime().optional(),
     branchId: z.string().uuid().optional().or(z.literal('').transform(() => undefined)),
     unitRef: z.string().max(100).optional(),
-    // IMPL-20260711-01: idem para updates.
+    // IMPL-20260711-01: permite actualizar o desasignar explícitamente la unidad móvil.
     mobileUnitId: z
       .string()
       .uuid()
+      .nullable()
       .optional()
-      .or(z.literal('').transform(() => undefined))
-      .or(z.null().transform(() => undefined)),
+      .or(z.literal('').transform(() => null)),
     notes: zFreeTextMaxOptional(1000),
   })
   .refine(
@@ -76,7 +76,7 @@ export type ProjectWithCompany = Awaited<ReturnType<typeof getProjects>>[number]
 async function requireAdminOrReceptionist() {
   const session = await getServerSession(authOptions)
   if (!session) return null
-  const allowed = ['ADMIN', 'RECEPTIONIST']
+  const allowed = ['SUPERADMIN', 'ADMIN', 'RECEPTIONIST']
   if (!allowed.includes(session.user.role)) return null
   return session
 }
@@ -148,6 +148,7 @@ export async function markProjectWorkerArrived(projectId: string, workerId: stri
     })
 
     revalidatePath('/projects')
+    revalidatePath(`/projects/${projectId}`)
     return { success: true }
   } catch (error) {
     console.error('[markProjectWorkerArrived]', error)
@@ -166,6 +167,7 @@ export async function checkInProjectWorkerToClinical(projectId: string, workerId
         id: true,
         branchId: true,
         companyId: true,
+        mobileUnitId: true,
       },
     })
 
@@ -173,8 +175,28 @@ export async function checkInProjectWorkerToClinical(projectId: string, workerId
       return { success: false, error: 'Proyecto no encontrado.' }
     }
 
-    if (!project.branchId) {
-      return { success: false, error: 'El proyecto no tiene sucursal operativa asignada.' }
+    // ARCH-20260730-01: project.companyId es nullable. Si fue desvinculado por
+    // eliminación de la empresa, no podemos crear el evento de recepción sin
+    // billingCompanyId.
+    if (!project.companyId) {
+      return {
+        success: false,
+        error: 'El proyecto no tiene empresa de facturación asignada.',
+      }
+    }
+
+    // Para campañas UMM en planta cliente sin sucursal fija, usar la primera sucursal AMI registrada.
+    let effectiveBranchId = project.branchId
+    if (!effectiveBranchId) {
+      const fallbackBranch = await prisma.branch.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      })
+      effectiveBranchId = fallbackBranch?.id ?? null
+    }
+
+    if (!effectiveBranchId) {
+      return { success: false, error: 'No hay sucursal operativa configurada para registrar el ingreso.' }
     }
 
     const projectWorker = await prisma.projectWorker.findUnique({
@@ -193,21 +215,12 @@ export async function checkInProjectWorkerToClinical(projectId: string, workerId
       return { success: true, eventId: projectWorker.eventId }
     }
 
-    // ARCH-20260730-01: project.companyId es nullable. Si fue desvinculado por
-    // eliminación de la empresa, no podemos crear el evento de recepción sin
-    // billingCompanyId.
-    if (!project.companyId) {
-      return {
-        success: false,
-        error: 'El proyecto no tiene empresa de facturación asignada.',
-      }
-    }
-
     const eventId = await createProjectReceptionEvent({
       workerId,
-      branchId: project.branchId,
+      branchId: effectiveBranchId,
       projectId: project.id,
       billingCompanyId: project.companyId,
+      mobileUnitId: project.mobileUnitId ?? null,
       intakeCreatedByUserId: session.user.id,
     })
 
@@ -221,6 +234,7 @@ export async function checkInProjectWorkerToClinical(projectId: string, workerId
     })
 
     revalidatePath('/projects')
+    revalidatePath(`/projects/${projectId}`)
     return { success: true, eventId }
   } catch (error) {
     console.error('[checkInProjectWorkerToClinical]', error)
@@ -295,6 +309,7 @@ export async function createProject(data: {
   endDate: string
   branchId?: string
   unitRef?: string
+  mobileUnitId?: string | null
   notes?: string
 }): Promise<{
   success: boolean
@@ -361,6 +376,7 @@ export async function createProject(data: {
       },
     })
     revalidatePath('/projects')
+    revalidatePath('/operations/mobile-units')
     // ARCH-20260804-03 — Fase 4 / §9.2: si el proyecto tiene unidad, revalidar su calendario de mantenimiento.
     if (mobileUnitId) {
       revalidatePath(`/admin/mobile-units/${mobileUnitId}/maintenance`)
@@ -381,6 +397,7 @@ export async function updateProject(
     endDate?: string
     branchId?: string
     unitRef?: string
+    mobileUnitId?: string | null
     notes?: string
   }
 ): Promise<{
@@ -401,7 +418,7 @@ export async function updateProject(
   const { name, startDate, endDate, branchId, unitRef, mobileUnitId, notes } = parsed.data
 
   // IMPL-20260711-01 — Si cambia la unidad o el rango de fechas, validar.
-  if (mobileUnitId || startDate || endDate) {
+  if (mobileUnitId !== undefined || startDate || endDate) {
     const existing = await prisma.project.findUnique({
       where: { id: projectId },
       select: { mobileUnitId: true, startDate: true, endDate: true },
@@ -460,9 +477,11 @@ export async function updateProject(
       },
     })
     revalidatePath('/projects')
+    revalidatePath(`/projects/${projectId}`)
+    revalidatePath('/operations/mobile-units')
     // ARCH-20260804-03 — Fase 4 / §9.2: si el proyecto tiene unidad efectiva, revalidar su calendario.
     let effectiveUnitId: string | null = mobileUnitId !== undefined ? mobileUnitId : null
-    if (effectiveUnitId === null) {
+    if (mobileUnitId === undefined) {
       const fallback = await prisma.project.findUnique({
         where: { id: projectId },
         select: { mobileUnitId: true },
@@ -493,6 +512,8 @@ export async function updateProjectStatus(
       data: { status },
     })
     revalidatePath('/projects')
+    revalidatePath(`/projects/${projectId}`)
+    revalidatePath('/operations/mobile-units')
     return { success: true }
   } catch (e: unknown) {
     const err = e as Error

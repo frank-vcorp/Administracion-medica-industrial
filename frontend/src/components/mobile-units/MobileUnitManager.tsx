@@ -2,21 +2,14 @@
  * @file MobileUnitManager — Vista cliente para el catálogo de unidades móviles.
  * @id IMPL-20260711-01
  * @id IMPL-20260804-01-UNIFICAR-UI-UNIDADES-MOVILES: readOnly/showCreate
- * @id IMPL-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS: grid de cards (paridad /branches)
+ * @id IMPL-20260804-02-ALINEAR-ESTILO-MOBILE-UNITS: grid de cards (paridad SME)
  * @spec context/SPECs/SPEC_ARCH-20260711-01-MODULO-UNIDADES-MOVILES.md
- *
- * Migrado a tokens del sistema:
- *   - Header text-2xl font-bold text-slate-800 + subtítulo text-sm text-slate-500
- *   - Botón primario MobileUnitCreateModal (slate-900)
- *   - Toggle "Mostrar todas / solo activas" (text-xs text-slate-500 underline)
- *   - Filtros en card bg-white p-4 rounded-xl border border-slate-200 shadow-sm
- *   - Lista en grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 (MobileUnitCard)
- *   - Empty state banner ámbar (paridad con branches)
  */
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { Ambulance, RefreshCw } from 'lucide-react'
 import { getMobileUnits } from '@/actions/mobile-unit.actions'
 import { MOBILE_UNIT_STATUS_OPTIONS } from './constants'
 import { MobileUnitCard } from './MobileUnitCard'
@@ -55,53 +48,25 @@ export default function MobileUnitManager({ initialUnits, readOnly = false }: Pr
     })
   }
 
-  // IMPL-20260804-02: la eliminación de unidades se hace desde la página de
-  // detalle /admin/mobile-units/[id] (visible solo para ADMIN), no desde la card.
-  // Ver MobileUnitDeleteButton.
-
   return (
     <div className="space-y-6">
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Catálogo de Unidades Móviles</h2>
-          <p className="text-sm text-slate-500">
-            Gestión de trailers/vehículos equipados como clínicas móviles.
-            {units.length > 0 && ` (${units.length} en sistema)`}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowInactive((v) => !v)}
-            className="text-xs text-slate-500 hover:text-slate-700 underline"
-            aria-label="Toggle mostrar inactivas"
-          >
-            {showInactive ? 'Ocultar inactivas' : 'Mostrar inactivas'}
-          </button>
-          <button
-            onClick={refresh}
-            disabled={isPending}
-            className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white hover:bg-slate-50 disabled:opacity-50"
-          >
-            {isPending ? 'Actualizando…' : 'Actualizar'}
-          </button>
-          {!readOnly && <MobileUnitCreateModal />}
-        </div>
-      </header>
-
-      {/* Filtros en card (paridad con /companies) */}
+      {/* Barra de filtros y acciones institucional */}
       <form
         onSubmit={(e) => e.preventDefault()}
-        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-3"
+        className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-end md:justify-between"
       >
-        <div>
-          <label htmlFor="status-filter" className="text-[11px] font-bold text-slate-500">
-            Estado
+        <div className="w-full md:w-72">
+          <label
+            htmlFor="status-filter"
+            className="block text-xs font-semibold uppercase tracking-wide text-slate-500"
+          >
+            Filtrar por estado
           </label>
           <select
             id="status-filter"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-full bg-slate-50 ring-1 ring-slate-200 rounded-lg p-2 text-sm mt-1"
+            className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 focus:border-[#592c82] focus:bg-white focus:outline-none"
             data-testid="status-filter"
           >
             {MOBILE_UNIT_STATUS_OPTIONS.map((opt) => (
@@ -111,24 +76,44 @@ export default function MobileUnitManager({ initialUnits, readOnly = false }: Pr
             ))}
           </select>
         </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowInactive((v) => !v)}
+            className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            aria-label="Toggle mostrar inactivas"
+          >
+            {showInactive ? 'Ocultar inactivas' : 'Mostrar inactivas'}
+          </button>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className={`h-4 w-4 ${isPending ? 'animate-spin' : ''}`} />
+            {isPending ? 'Actualizando…' : 'Actualizar'}
+          </button>
+          {!readOnly && <MobileUnitCreateModal />}
+        </div>
       </form>
 
       {filtered.length === 0 ? (
-        <div className="col-span-full text-center py-12 text-slate-600 bg-amber-50 rounded-xl border border-amber-300">
-          <p className="font-medium mb-2">No hay unidades que coincidan.</p>
+        <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 py-12 text-center text-slate-700">
+          <span className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+            <Ambulance className="h-6 w-6" />
+          </span>
+          <p className="font-semibold text-slate-800">No hay unidades que coincidan.</p>
           {units.length === 0 && (
-            <p className="text-xs">
-              Si esperas ver unidades, verifica que:
-              <br />
-              (a) tu sesión tenga permisos ADMIN,
-              <br />
-              (b) las unidades no estén filtradas como "inactivas".
+            <p className="mt-1 text-xs text-slate-500">
+              Verifica los permisos ADMIN o el filtro de unidades inactivas.
             </p>
           )}
         </div>
       ) : (
         <div
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+          className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
           data-testid="units-table"
         >
           {filtered.map((u) => (

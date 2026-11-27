@@ -782,6 +782,10 @@ export async function bulkImportWorkers(
     }
 
     revalidatePath('/workers')
+    revalidatePath('/projects')
+    if (projectId) {
+        revalidatePath(`/projects/${projectId}`)
+    }
     return result
 }
 

@@ -16,7 +16,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ExternalLink, Wrench } from 'lucide-react'
 import BulkWorkerImportModal from '@/components/BulkWorkerImportModal'
-import ProjectFormModal, { ProjectForEdit } from '@/components/ProjectFormModal'
+import ProjectFormModal, { MobileUnitOption, ProjectForEdit } from '@/components/ProjectFormModal'
 import ProjectsTable from '@/components/ProjectsTable'
 import { checkInProjectWorkerToClinical, markProjectWorkerArrived } from '@/actions/project.actions'
 import type { UnitMaintenanceItem } from '@/components/mobile-units/maintenance-calendar-types'
@@ -65,6 +65,7 @@ interface ProjectsCalendarProps {
   projects: ProjectItem[]
   companies: CompanyOption[]
   branches: BranchOption[]
+  mobileUnits?: MobileUnitOption[]
   // ARCH-20260804-03 — Fase 4 / §8.2: badge 🔧 Mant. en pills de proyecto.
   unitMaintenances?: UnitMaintenanceItem[]
 }
@@ -169,6 +170,9 @@ function formatRange(startDate: Date | string, endDate: Date | string) {
 }
 
 function getUnitLabel(project: ProjectItem) {
+  if (project.mobileUnit) {
+    return `${project.mobileUnit.name}${project.mobileUnit.plate ? ` · ${project.mobileUnit.plate}` : ''}`
+  }
   return project.unitRef ?? project.branch?.name ?? 'Planta cliente'
 }
 
@@ -180,12 +184,19 @@ function toProjectForEdit(project: ProjectItem): ProjectForEdit {
     startDate: project.startDate,
     endDate: project.endDate,
     branchId: project.branchId,
+    mobileUnitId: project.mobileUnit?.id ?? null,
     unitRef: project.unitRef,
     notes: project.notes,
   }
 }
 
-export default function ProjectsCalendar({ projects, companies, branches, unitMaintenances }: ProjectsCalendarProps) {
+export default function ProjectsCalendar({
+  projects,
+  companies,
+  branches,
+  mobileUnits = [],
+  unitMaintenances,
+}: ProjectsCalendarProps) {
   const router = useRouter()
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
@@ -305,6 +316,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
   }
 
   function handleProjectCreated(projectId: string, projectName: string, companyId?: string) {
+    router.refresh()
     if (!companyId) return
     setBulkImportContext({ projectId, projectName, companyId })
     setShowBulkImportBanner(true)
@@ -357,6 +369,7 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
             <ProjectFormModal
               companies={companies}
               branches={branches}
+              mobileUnits={mobileUnits}
               onSuccess={handleProjectCreated}
             />
             <button
@@ -614,7 +627,12 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
             </div>
           ) : (
             <div className="mt-6">
-              <ProjectsTable projects={tableProjects} companies={companies} branches={branches} />
+              <ProjectsTable
+                projects={tableProjects}
+                companies={companies}
+                branches={branches}
+                mobileUnits={mobileUnits}
+              />
             </div>
           )}
         </div>
@@ -735,9 +753,11 @@ export default function ProjectsCalendar({ projects, companies, branches, unitMa
       <ProjectFormModal
         companies={companies}
         branches={branches}
+        mobileUnits={mobileUnits}
         projectToEdit={editProject}
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
+        onSuccess={() => router.refresh()}
       />
 
       <BulkWorkerImportModal

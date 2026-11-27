@@ -451,6 +451,7 @@ export async function createProjectReceptionEvent(input: {
     branchId: string
     projectId: string
     billingCompanyId: string
+    mobileUnitId?: string | null
     intakeCreatedByUserId?: string | null
 }) {
     const created = await prisma.medicalEvent.create({
@@ -462,6 +463,7 @@ export async function createProjectReceptionEvent(input: {
             intakeSource: 'PROJECT_PRE_REGISTERED',
             projectId: input.projectId,
             billingCompanyId: input.billingCompanyId,
+            mobileUnitId: input.mobileUnitId ?? null,
             intakeCreatedByUserId: input.intakeCreatedByUserId ?? null
         },
         select: { id: true }

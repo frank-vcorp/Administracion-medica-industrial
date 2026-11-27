@@ -14,15 +14,17 @@ export const dynamic = 'force-dynamic'
 import { getProjects } from '@/actions/project.actions'
 import { getCompanies, getBranches } from '@/actions/admin.actions'
 import { getMaintenancesByUnitIds } from '@/actions/maintenance.actions'
+import { getMobileUnits } from '@/actions/mobile-unit.actions'
 import ProjectsCalendar from '@/components/ProjectsCalendar'
 
 type ProjectLike = { mobileUnit?: { id: string } | null }
 
 export default async function ProjectsPage() {
-  const [projectsResult, companiesResult, branchesResult] = await Promise.allSettled([
+  const [projectsResult, companiesResult, branchesResult, mobileUnitsResult] = await Promise.allSettled([
     getProjects(),
     getCompanies(),
     getBranches(),
+    getMobileUnits(),
   ])
 
   if (projectsResult.status !== 'fulfilled' || companiesResult.status !== 'fulfilled') {
@@ -32,8 +34,9 @@ export default async function ProjectsPage() {
   const projects = projectsResult.value
   const companies = companiesResult.value
   const branches = branchesResult.status === 'fulfilled' ? branchesResult.value : []
+  const mobileUnits = mobileUnitsResult.status === 'fulfilled' ? mobileUnitsResult.value : []
 
-  // Normalizar branches al mínimo necesario
+  // Normalizar branches y unidades móviles al mínimo necesario
   const branchOptions = branches.map((b: { id: string; name: string }) => ({
     id: b.id,
     name: b.name,
@@ -42,6 +45,13 @@ export default async function ProjectsPage() {
   const companyOptions = companies.map((c: { id: string; name: string }) => ({
     id: c.id,
     name: c.name,
+  }))
+
+  const mobileUnitOptions = mobileUnits.map((u: { id: string; name: string; plate: string | null; status: string }) => ({
+    id: u.id,
+    name: u.name,
+    plate: u.plate,
+    status: u.status,
   }))
 
   // ARCH-20260804-03 — Fase 4 / §8.1: extraer unidades referenciadas y obtener mantenimientos activos.
@@ -64,6 +74,7 @@ export default async function ProjectsPage() {
         projects={projects}
         companies={companyOptions}
         branches={branchOptions}
+        mobileUnits={mobileUnitOptions}
         unitMaintenances={unitMaintenances}
       />
     </div>
