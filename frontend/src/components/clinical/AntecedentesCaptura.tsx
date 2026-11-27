@@ -629,20 +629,16 @@ export function AntecedentesCaptura({
   return (
     <div className="space-y-4">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      {!hideHeader && (
+      {!hideHeader && !certificadoLayout && (
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl px-4 py-2.5 flex-1">
             <span className="text-teal-600">📋</span>
             <div>
               <p className="text-xs font-bold text-teal-800">
-                {certificadoLayout
-                  ? 'Antecedentes — Certificado médico'
-                  : 'Antecedentes — Captura por cita'}
+                Antecedentes — Captura por cita
               </p>
               <p className="text-[10px] text-teal-600 mt-0.5">
-                {certificadoLayout
-                  ? 'Antecedentes heredofamiliares, personales no patológicos y personales patológicos para las secciones I–III del PDF. Sin puesto, turno ni historia laboral.'
-                  : 'Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita. Se guarda junto con el resto del Examen Médico.'}
+                Cuestionario del paciente + gineco/reproductivos e inmunizaciones para esta cita. Se guarda junto con el resto del Examen Médico.
                 {portalPrefillHint && (
                   <span className="ml-1 text-emerald-700 font-semibold">
                     Snapshot del portal disponible.
@@ -657,8 +653,8 @@ export function AntecedentesCaptura({
         </div>
       )}
 
-      {/* ── CTA al historial maestro ────────────────────────────────────── */}
-      {workerId && (
+      {/* ── CTA al historial maestro (oculto en certificado para no saturar) ── */}
+      {workerId && !certificadoLayout && (
         <a
           href={`/history/${workerId}`}
           target="_blank"
@@ -673,13 +669,7 @@ export function AntecedentesCaptura({
         </a>
       )}
 
-      {certificadoLayout ? (
-        <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-          <strong>Antecedentes heredofamiliares</strong> (familiares) ·{' '}
-          <strong>Antecedentes personales no patológicos</strong> (hábitos) ·{' '}
-          <strong>Antecedentes personales patológicos</strong> (padecimientos del paciente).
-        </p>
-      ) : (
+      {!certificadoLayout && (
         <p className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
           <strong>AHF</strong> (Familiares) = en parientes · <strong>APP</strong> (Personales) = en el
           trabajador · <strong>ANP</strong> (Hábitos) = tabaco, alcohol, etc.

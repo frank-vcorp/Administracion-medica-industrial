@@ -141,9 +141,42 @@ export function emptySignosVitalesCertificado(): z.infer<typeof SignosVitalesCer
   }
 }
 
-export function buildDefaultExploracionCertificado(): string {
-  return [
-    'Se encuentra paciente consciente, orientado en espacio, tiempo, persona y situación.',
-    'Con buen estado de hidratación. Resto de la exploración sin alteraciones relevantes.',
-  ].join(' ')
+export const PLANTILLA_EXPLORACION_NARRATIVA =
+  'Se encuentra paciente consciente, orientado en espacio, tiempo, persona y situación. Con buen estado de hidratación. Cavidad oral hidratada, dentadura completa, sin datos de sarro y caries, faringe sin alteraciones. Ojos con reflejo fotomotor y consensual conservado, pupilas simétricas, conjuntiva, iris, córnea y esclera sin anormalidades. Oídos de características normales, conductos auditivos permeables. Tórax mesomórfico con movimientos de amplexión y amplexación normales sin alteraciones a la auscultación pulmonar y cardiaca. Abdomen globoso, depresible, no doloroso a la palpación, sin anormalidades. Extremidades íntegras, eutróficas, piel y tegumentos sin lesiones aparentes, fuerza muscular en escala de Daniels 5/5, sensibilidad conservada, prueba dedo-nariz y talón-rodilla negativas, llenado capilar inmediato, sin edema, reflejos osteotendinosos normales, prueba de Romberg negativa, marcha talón-punta (Tándem) normal, resto sin alteraciones.'
+
+export const PLANTILLA_EXPLORACION_SISTEMAS = `Neurológico: Consciente, orientado en sus cuatro esferas. Fuerza 5/5 (Daniels), sensibilidad y reflejos osteotendinosos conservados. Coordinación, Romberg y marcha en tándem normales.
+Cabeza y cuello: Mucosa oral hidratada, dentadura completa sin caries ni sarro, faringe normal. Pupilas isocóricas normorreflécticas, globos oculares sin alteraciones. Conductos auditivos permeables.
+Tórax: Mesomórfico, amplexión y amplexación normales, auscultación cardiopulmonar sin alteraciones.
+Abdomen: Globoso, depresible, no doloroso.
+Extremidades: Íntegras, eutróficas, llenado capilar inmediato, sin edema.
+Piel: Sin lesiones ni alteraciones aparentes.
+Romberg: Negativo.
+Tándem: Negativo.`
+
+export function buildDefaultExploracionCertificado(antecedentes?: Record<string, unknown> | null): string {
+  return buildExploracionPorSistemas(antecedentes)
+}
+
+export function buildExploracionNarrativa(antecedentes?: Record<string, unknown> | null): string {
+  const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
+  const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
+  const esp = typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
+
+  if (hasTattoos) {
+    const tatText = esp ? `presencia de múltiples tatuajes en ${esp}` : 'presencia de tatuajes'
+    return PLANTILLA_EXPLORACION_NARRATIVA.replace('piel y tegumentos sin lesiones aparentes', tatText)
+  }
+  return PLANTILLA_EXPLORACION_NARRATIVA
+}
+
+export function buildExploracionPorSistemas(antecedentes?: Record<string, unknown> | null): string {
+  const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
+  const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
+  const esp = typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
+
+  if (hasTattoos) {
+    const tatText = esp ? `Tatuajes en ${esp}.` : 'Presencia de tatuajes.'
+    return PLANTILLA_EXPLORACION_SISTEMAS.replace('Piel: Sin lesiones ni alteraciones aparentes.', `Piel: ${tatText}`)
+  }
+  return PLANTILLA_EXPLORACION_SISTEMAS
 }

@@ -119,8 +119,6 @@ export function buildIntegracionDiagnosticaCertificado(input: {
   antecedentes?: Record<string, unknown> | null
   signos: CertificadoMedicoPayload['signos_vitales']
 }): string {
-  if (!hasAntecedenteSiForCertificadoIntegracion(input.antecedentes)) return ''
-
   const ant = input.antecedentes ?? {}
   const hf = sectionRecord(ant, 'heredo_familiares')
   const heredoLines = collectHeredofamiliaresSiLines(hf)
@@ -130,19 +128,53 @@ export function buildIntegracionDiagnosticaCertificado(input: {
     historia_laboral: {},
   }
 
+  const exam = examForHallazgosFromCertificadoSignos(input.signos)
   const fromPatologicosYSignos = buildImpresionDiagnosticaFromAntecedentesYExamen({
     antecedentes: sinHistoriaLaboral,
-    exam: examForHallazgosFromCertificadoSignos(input.signos),
+    exam,
     especifiquePositivos: null,
   })
 
-  if (heredoLines.length === 0) {
+  // Si hay impresión desde antecedentes patológicos estructurados
+  if (fromPatologicosYSignos.trim() && !isImpresionDiagnosticaPlaceholder(fromPatologicosYSignos)) {
+    if (heredoLines.length > 0) {
+      return `Antecedentes heredo-familiares: ${joinSentences(heredoLines)} ${fromPatologicosYSignos}`.replace(/\s+/g, ' ').trim()
+    }
     return fromPatologicosYSignos
   }
 
-  const heredoBlock = `Antecedentes heredo-familiares: ${joinSentences(heredoLines)}`
-  if (!fromPatologicosYSignos.trim()) {
-    return `${heredoBlock} Examen físico y estudios sin hallazgos agudos adicionales en la correlación clínica.`
+  // Recolectar diagnósticos desde mediciones objetivas
+  const diagnosticos: string[] = []
+
+  if (exam.estado_nutricional === 'SOBREPESO') {
+    diagnosticos.push('Sobrepeso')
+  } else if (exam.estado_nutricional === 'OBESIDAD') {
+    diagnosticos.push('Obesidad')
   }
-  return `${heredoBlock} ${fromPatologicosYSignos}`.replace(/\s+/g, ' ').trim()
+
+  if (
+    exam.agudeza_visual_resumen &&
+    exam.agudeza_visual_resumen !== 'NORMAL' &&
+    exam.agudeza_visual_resumen !== 'CORREGIDA'
+  ) {
+    diagnosticos.push('Disminución de agudeza visual lejana (requiere uso de lentes para laborar)')
+  }
+
+  if (exam.presion_arterial_resumen === 'ALTA') {
+    diagnosticos.push('Cifras tensionales elevadas al momento de la toma')
+  }
+
+  if (diagnosticos.length > 0) {
+    const list = diagnosticos.map((d, i) => `${i + 1}.- ${d}.`).join(' ')
+    if (heredoLines.length > 0) {
+      return `Antecedentes heredo-familiares: ${joinSentences(heredoLines)} ${list}`.replace(/\s+/g, ' ').trim()
+    }
+    return list
+  }
+
+  if (heredoLines.length > 0) {
+    return `Antecedentes heredo-familiares: ${joinSentences(heredoLines)} Clínicamente sano al momento de la valoración.`
+  }
+
+  return ''
 }

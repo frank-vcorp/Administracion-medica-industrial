@@ -103,12 +103,15 @@ export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput
         <Text style={styles.paragraph}>{v(c.exploracion_fisica, 'Pendiente de captura.')}</Text>
 
         <Text style={styles.sectionTitle}>
-          VI. Integración diagnóstica y dictamen:
+          VI. Integración diagnóstica y dictamen de aptitud:
         </Text>
         <Text style={styles.paragraph}>
           Habiendo examinado al paciente, éste se encuentra con diagnóstico de{' '}
-          {v(c.integracion_diagnostica, 'pendiente de integración diagnóstica')}
-          {c.dictamen_laboral_texto?.trim() ? ` ${c.dictamen_laboral_texto.trim()}` : ''}
+          {v(c.integracion_diagnostica, 'clínicamente sano al momento de la valoración.')}
+        </Text>
+
+        <Text style={[styles.paragraph, { fontWeight: 'bold' }]}>
+          {v(c.dictamen_laboral_texto, 'Apto para realizar actividades laborales.')}
         </Text>
 
         <Text style={styles.paragraph}>
@@ -117,11 +120,20 @@ export function CertificadoMedicoPDF({ data }: { data: CertificadoMedicoPdfInput
         </Text>
 
         <View style={styles.footer}>
-          <Text>{c.medico_nombre}</Text>
-          <Text>Ced. Prof. {c.medico_cedula}</Text>
+          <View
+            style={{
+              width: 220,
+              borderTopWidth: 1,
+              borderTopColor: '#334155',
+              marginBottom: 6,
+              alignSelf: 'center',
+            }}
+          />
+          <Text style={{ fontWeight: 'bold' }}>{c.medico_nombre}</Text>
+          <Text>Céd. Prof. {c.medico_cedula}</Text>
+          <Text style={styles.footerBrand}>Soluciones Médico Empresariales</Text>
+          <Text style={styles.sub}>Medicina Laboral</Text>
         </View>
-        <Text style={styles.footerBrand}>Soluciones Médico Empresariales</Text>
-        <Text style={styles.sub}>Medicina Laboral</Text>
       </Page>
     </Document>
   )

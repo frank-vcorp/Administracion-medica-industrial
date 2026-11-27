@@ -34,11 +34,36 @@ import {
   DICTAMEN_LABORAL_VALUES,
   DICTAMEN_LABORAL_LABELS,
   buildDefaultExploracionCertificado,
+  buildExploracionNarrativa,
+  buildExploracionPorSistemas,
   type CertificadoMedicoPayload,
   type DictamenLaboralValue,
 } from '@/schemas/clinical/certificado-medico.schema'
 import { visionFieldSelectOptions } from '@/lib/clinical/agudeza-visual'
 import { updateAgudezaVisual } from '@/actions/medical-exam.actions'
+
+interface OrganoItem {
+  id: string
+  organo: string
+  label: string
+}
+
+const CHECKLIST_ORGANOS: OrganoItem[] = [
+  { id: 'craneo', organo: 'Cráneo', label: 'Normocéfalo, sin hundimientos' },
+  { id: 'ojos', organo: 'Ojos', label: 'Pupilas isocóricas normorreflécticas' },
+  { id: 'oidos', organo: 'Oídos', label: 'Conductos auditivos permeables' },
+  { id: 'nariz', organo: 'Nariz', label: 'Mucosa y fosas normales' },
+  { id: 'boca', organo: 'Boca / Faringe', label: 'Mucosa hidratada, sin caries ni sarro' },
+  { id: 'cuello', organo: 'Cuello', label: 'Cilíndrico, sin adenopatías' },
+  { id: 'torax', organo: 'Tórax', label: 'Mesomórfico, amplexión y amplexación normales' },
+  { id: 'cardiopulmonar', organo: 'Cardiopulmonar', label: 'Auscultación cardiopulmonar normal' },
+  { id: 'abdomen', organo: 'Abdomen', label: 'Globoso, depresible, no doloroso' },
+  { id: 'extremidades', organo: 'Extremidades', label: 'Íntegras, eutróficas, sin edema' },
+  { id: 'fuerza', organo: 'Fuerza Daniels', label: 'Escala 5/5 bilateral' },
+  { id: 'neurologico', organo: 'Neurológico', label: 'Consciente, orientado en 4 esferas' },
+  { id: 'romberg_tandem', organo: 'Romberg y Tándem', label: 'Romberg negativo, marcha tándem normal' },
+  { id: 'piel', organo: 'Piel y anexos', label: 'Tegumentos (tatuajes / cicatrices)' },
+]
 
 type TabId = 'antecedentes' | 'vitales' | 'exploracion' | 'dictamen'
 
@@ -217,8 +242,13 @@ export default function CertificadoMedicoEstudio({
 
     void updateAgudezaVisual(eventId, nextEye, { autosave: true, revalidate: false }).catch(() => {})
   }
+  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
+    deepMergeAntecedentes(longitudinalData, parsed?.antecedentes as Record<string, unknown> | undefined),
+  )
   const [exploracion, setExploracion] = useState(
-    parsed?.exploracion_fisica ?? buildDefaultExploracionCertificado(),
+    parsed?.exploracion_fisica && parsed.exploracion_fisica.trim() !== ''
+      ? parsed.exploracion_fisica
+      : buildDefaultExploracionCertificado(longitudinalData),
   )
   const [integracion, setIntegracion] = useState(parsed?.integracion_diagnostica ?? '')
   const integracionManualRef = useRef(false)
@@ -229,9 +259,97 @@ export default function CertificadoMedicoEstudio({
   const [dictamenTexto, setDictamenTexto] = useState(
     parsed?.dictamen_laboral_texto ?? DEFAULT_DICTAMEN_LABORAL_TEXTO.APTO,
   )
-  const [antecedentes, setAntecedentes] = useState<Record<string, unknown>>(() =>
-    deepMergeAntecedentes(longitudinalData, parsed?.antecedentes as Record<string, unknown> | undefined),
-  )
+
+  const [organosState, setOrganosState] = useState<
+    Record<string, { estado: 'NORMAL' | 'ANORMAL'; detalle: string }>
+  >(() => {
+    const init: Record<string, { estado: 'NORMAL' | 'ANORMAL'; detalle: string }> = {}
+    for (const item of CHECKLIST_ORGANOS) {
+      init[item.id] = { estado: 'NORMAL', detalle: '' }
+    }
+    return init
+  })
+  const [showOrganosChecklist, setShowOrganosChecklist] = useState(true)
+
+  const handleOrganoChange = (id: string, estado: 'NORMAL' | 'ANORMAL', detalle: string) => {
+    const nextOrganos = { ...organosState, [id]: { estado, detalle } }
+    setOrganosState(nextOrganos)
+
+    const np = antecedentes?.no_patologicos as Record<string, unknown> | undefined
+    const hasTattoos = String(np?.tatuajes ?? '').toUpperCase() === 'SI'
+    const espTattoos = typeof np?.tatuajes_especifique === 'string' && np.tatuajes_especifique.trim()
+
+    const getF = (itemId: string, normalText: string) => {
+      const o = nextOrganos[itemId]
+      if (o?.estado === 'ANORMAL' && o.detalle?.trim()) return o.detalle.trim()
+      return normalText
+    }
+
+    const neurolText = [
+      getF('neurologico', 'Consciente, orientado en sus cuatro esferas.'),
+      getF('fuerza', 'Fuerza 5/5 (Daniels), sensibilidad y reflejos osteotendinosos conservados.'),
+      getF('romberg_tandem', 'Coordinación, Romberg y marcha en tándem normales.'),
+    ].join(' ')
+
+    const bocaText = getF(
+      'boca',
+      'Mucosa oral hidratada, dentadura completa sin caries ni sarro, faringe normal.',
+    )
+    const ojosText = getF(
+      'ojos',
+      'Pupilas isocóricas normorreflécticas, globos oculares sin alteraciones.',
+    )
+    const oidosText = getF('oidos', 'Conductos auditivos permeables.')
+    const craneoText =
+      nextOrganos.craneo?.estado === 'ANORMAL' && nextOrganos.craneo.detalle?.trim()
+        ? `Cráneo: ${nextOrganos.craneo.detalle.trim()}.`
+        : ''
+    const narizText =
+      nextOrganos.nariz?.estado === 'ANORMAL' && nextOrganos.nariz.detalle?.trim()
+        ? `Fosas nasales: ${nextOrganos.nariz.detalle.trim()}.`
+        : ''
+    const cuelloText =
+      nextOrganos.cuello?.estado === 'ANORMAL' && nextOrganos.cuello.detalle?.trim()
+        ? `Cuello: ${nextOrganos.cuello.detalle.trim()}.`
+        : ''
+    const cabCuelloText = [bocaText, ojosText, oidosText, craneoText, narizText, cuelloText]
+      .filter(Boolean)
+      .join(' ')
+
+    const toraxBase = getF('torax', 'Mesomórfico, amplexión y amplexación normales')
+    const cardioBase = getF('cardiopulmonar', 'auscultación cardiopulmonar sin alteraciones')
+    const toraxText = `${toraxBase}, ${cardioBase}.`
+
+    const abdomenText = getF('abdomen', 'Globoso, depresible, no doloroso.')
+
+    const extBase = getF(
+      'extremidades',
+      'Íntegras, eutróficas, llenado capilar inmediato, sin edema.',
+    )
+
+    let pielText = ''
+    if (nextOrganos.piel?.estado === 'ANORMAL' && nextOrganos.piel.detalle?.trim()) {
+      pielText = nextOrganos.piel.detalle.trim()
+    } else if (hasTattoos) {
+      pielText = espTattoos ? `Tatuajes en ${espTattoos}.` : 'Presencia de múltiples tatuajes.'
+    } else {
+      pielText = 'Sin lesiones ni alteraciones aparentes.'
+    }
+
+    const rombergVal = nextOrganos.romberg_tandem?.estado === 'ANORMAL' ? 'Alterado' : 'Negativo'
+    const tandemVal = nextOrganos.romberg_tandem?.estado === 'ANORMAL' ? 'Alterado' : 'negativo'
+
+    const fullText = `Neurológico: ${neurolText}
+Cabeza y cuello: ${cabCuelloText}
+Tórax: ${toraxText}
+Abdomen: ${abdomenText}
+Extremidades: ${extBase}
+Piel: ${pielText}
+Romberg: ${rombergVal}
+Tandem: ${tandemVal}`
+
+    setExploracion(fullText)
+  }
   const [cerradaAt, setCerradaAt] = useState(parsed?.cerrada_at ?? '')
   const editorRole = session?.user?.role
   const formReadonly = useMemo(
@@ -499,10 +617,6 @@ export default function CertificadoMedicoEstudio({
 
       {activeTab === 'antecedentes' && (
         <section className="bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-500 mb-3">
-            El PDF arma las secciones I–III a partir de estos datos (y actualiza el historial del
-            paciente al guardar).
-          </p>
           <AntecedentesCaptura
             value={antecedentes as AntecedentesCapturaData}
             onChange={(next) => setAntecedentes(next as Record<string, unknown>)}
@@ -517,10 +631,6 @@ export default function CertificadoMedicoEstudio({
 
       {activeTab === 'vitales' && (
         <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-500">
-            Mismos campos de somatometría y signos vitales que el examen médico. Se precargan desde
-            los estudios del evento cuando aún no hay captura en el certificado.
-          </p>
           <ClinicalSomaSignosVitalesCapture
             value={signosToSomaVitalsValue(signos)}
             onChange={(next) =>
@@ -737,54 +847,229 @@ export default function CertificadoMedicoEstudio({
       )}
 
       {activeTab === 'exploracion' && (
-        <section className="bg-white border border-slate-200 rounded-xl p-4">
-          <label className="text-[10px] font-semibold text-slate-500">Exploración física (V)</label>
-          <ClinicalTextarea
-            className={`${inputClass} min-h-[200px]`}
-            value={exploracion}
-            onChange={(v) => {
-              setMissingFieldsBanner('')
-              setExploracion(v)
-            }}
-            disabled={formReadonly}
-          />
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span>🩺</span> Exploración física (V)
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Usa el checklist de revisión por órganos para no omitir nada o carga una plantilla predeterminada.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const s = buildExploracionPorSistemas(antecedentes)
+                  setExploracion(s)
+                }}
+                disabled={formReadonly}
+                className="px-2.5 py-1 text-[11px] font-semibold bg-teal-50 border border-teal-200 text-teal-800 rounded-lg hover:bg-teal-100 transition-colors cursor-pointer"
+                title="Carga la plantilla estructurada de la Dra. Erika"
+              >
+                📋 Formato por sistemas
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const s = buildExploracionNarrativa(antecedentes)
+                  setExploracion(s)
+                }}
+                disabled={formReadonly}
+                className="px-2.5 py-1 text-[11px] font-semibold bg-slate-100 border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
+                title="Carga la plantilla en párrafo narrativo corrido"
+              >
+                📄 Formato narrativo
+              </button>
+              <button
+                type="button"
+                onClick={() => setExploracion('')}
+                disabled={formReadonly}
+                className="px-2 py-1 text-[11px] font-semibold text-slate-500 hover:text-red-600 rounded-lg cursor-pointer"
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+
+          {/* Checklist interactivo por órganos */}
+          <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <span>📋</span> Lista de verificación por órganos (Checklist)
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowOrganosChecklist((v) => !v)}
+                className="text-[11px] font-semibold text-teal-700 hover:underline cursor-pointer"
+              >
+                {showOrganosChecklist ? 'Ocultar checklist ▲' : 'Mostrar checklist ▼'}
+              </button>
+            </div>
+
+            {showOrganosChecklist && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {CHECKLIST_ORGANOS.map((item) => {
+                    const current = organosState[item.id] ?? { estado: 'NORMAL', detalle: '' }
+                    const isAnormal = current.estado === 'ANORMAL'
+                    return (
+                      <div
+                        key={item.id}
+                        className={`p-2.5 rounded-lg border transition-colors ${
+                          isAnormal ? 'bg-amber-50/80 border-amber-200' : 'bg-white border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="text-xs font-semibold text-slate-800 block">
+                              {item.organo}
+                            </span>
+                            <span className="text-[10px] text-slate-500">{item.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <label className="flex items-center gap-1 text-[11px] font-medium text-slate-700 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`organo_${item.id}`}
+                                checked={!isAnormal}
+                                onChange={() => handleOrganoChange(item.id, 'NORMAL', current.detalle)}
+                                disabled={formReadonly}
+                                className="text-teal-600 focus:ring-teal-500 h-3.5 w-3.5"
+                              />
+                              Normal
+                            </label>
+                            <label className="flex items-center gap-1 text-[11px] font-medium text-amber-700 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`organo_${item.id}`}
+                                checked={isAnormal}
+                                onChange={() => handleOrganoChange(item.id, 'ANORMAL', current.detalle)}
+                                disabled={formReadonly}
+                                className="text-amber-600 focus:ring-amber-500 h-3.5 w-3.5"
+                              />
+                              Anormal
+                            </label>
+                          </div>
+                        </div>
+                        {isAnormal && (
+                          <input
+                            type="text"
+                            placeholder="Describir hallazgo anormal..."
+                            value={current.detalle}
+                            onChange={(e) => handleOrganoChange(item.id, 'ANORMAL', e.target.value)}
+                            disabled={formReadonly}
+                            className="mt-2 w-full text-xs bg-white border border-amber-300 rounded px-2.5 py-1 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700">
+                Texto de Exploración física (se imprimirá en el PDF):
+              </label>
+              <span className="text-[10px] text-slate-400">Puedes editar cualquier frase libremente</span>
+            </div>
+            <ClinicalTextarea
+              className={`${inputClass} min-h-[180px] font-sans`}
+              value={exploracion}
+              onChange={(v) => {
+                setMissingFieldsBanner('')
+                setExploracion(v)
+              }}
+              disabled={formReadonly}
+            />
+          </div>
         </section>
       )}
 
       {activeTab === 'dictamen' && (
-        <section className="space-y-3 bg-white border border-slate-200 rounded-xl p-4">
+        <section className="space-y-4 bg-white border border-slate-200 rounded-xl p-4">
           <div>
-            <label className="text-[10px] font-semibold text-slate-500">
-              Integración diagnóstica (VI)
-            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div>
+                <label className="text-xs font-bold text-slate-800 block">
+                  Integración diagnóstica (VI)
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Diagnósticos clínicos encontrados. Clic en las píldoras para agregar rápidamente.
+                </p>
+              </div>
+              {!formReadonly && integracionPropuesta.trim() && (
+                <button
+                  type="button"
+                  className="text-xs font-bold text-teal-700 underline self-start sm:self-auto cursor-pointer"
+                  onClick={() => {
+                    integracionManualRef.current = false
+                    const p = integracionPropuesta.trim()
+                    lastAutoIntegracionRef.current = p
+                    setIntegracion(p)
+                  }}
+                >
+                  ↺ Regenerar desde signos y antecedentes
+                </button>
+              )}
+            </div>
+
+            {/* Píldoras de diagnósticos frecuentes */}
+            {!formReadonly && (
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
+                {[
+                  'Clínicamente sano al momento de la valoración',
+                  'Sobrepeso (IMC ≥ 25)',
+                  'Obesidad grado I',
+                  'Disminución de agudeza visual lejana (requiere lentes)',
+                  'Ametropía corregida con lentes',
+                  'Caries dental (valoración odontológica)',
+                  'Cifras tensionales elevadas',
+                ].map((diag) => (
+                  <button
+                    key={diag}
+                    type="button"
+                    onClick={() => {
+                      integracionManualRef.current = true
+                      setIntegracion((prev) => {
+                        const trimmed = prev.trim()
+                        if (!trimmed || trimmed.toLowerCase().includes('clínicamente sano')) {
+                          return diag.endsWith('.') ? diag : `${diag}.`
+                        }
+                        if (trimmed.includes(diag)) return trimmed
+                        return `${trimmed} ${diag.endsWith('.') ? diag : `${diag}.`}`
+                      })
+                    }}
+                    className="text-[10px] font-semibold bg-slate-100 hover:bg-teal-50 hover:text-teal-800 border border-slate-200 hover:border-teal-300 rounded-full px-2.5 py-1 text-slate-700 transition-colors cursor-pointer"
+                  >
+                    + {diag}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <ClinicalTextarea
-              className={`${inputClass} min-h-[80px]`}
+              className={`${inputClass} min-h-[90px]`}
               value={integracion}
               onChange={(v) => {
                 setMissingFieldsBanner('')
                 integracionManualRef.current = true
                 setIntegracion(v)
               }}
-              placeholder="Diagnóstico o integración clínica en prosa breve"
+              placeholder="Ej. Clínicamente sano al momento de la valoración."
               disabled={formReadonly}
             />
-            {!formReadonly && integracionPropuesta.trim() && (
-              <button
-                type="button"
-                className="mt-2 text-xs font-bold text-teal-700 underline"
-                onClick={() => {
-                  integracionManualRef.current = false
-                  const p = integracionPropuesta.trim()
-                  lastAutoIntegracionRef.current = p
-                  setIntegracion(p)
-                }}
-              >
-                Regenerar desde antecedentes y signos vitales
-              </button>
-            )}
           </div>
+
           <div>
-            <label className="text-[10px] font-semibold text-slate-500">Dictamen laboral</label>
+            <label className="text-xs font-bold text-slate-800 block mb-1">
+              Dictamen laboral
+            </label>
             <select
               className={inputClass}
               value={dictamen}
@@ -798,9 +1083,10 @@ export default function CertificadoMedicoEstudio({
               ))}
             </select>
           </div>
+
           <div>
-            <label className="text-[10px] font-semibold text-slate-500">
-              Frase para el PDF
+            <label className="text-xs font-bold text-slate-800 block mb-1">
+              Frase del dictamen para el PDF
             </label>
             <ClinicalTextarea
               className={`${inputClass} min-h-[72px]`}
