@@ -16,6 +16,7 @@ import {
 } from '@/actions/event.actions'
 import { ReceptionInformedConsentStep } from '@/components/reception/ReceptionInformedConsentStep'
 import { createExternalWorkerIntake, searchExternalIntakeCandidates } from '@/actions/worker.actions'
+import { UserPlus, X } from 'lucide-react'
 
 interface Worker {
     id: string
@@ -246,9 +247,12 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                     resetExternalState()
                     setOpen(true)
                 }}
-                className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow flex items-center gap-2"
+                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
             >
-                <span>➕</span> Nueva Cita / Ingreso
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
+                    <UserPlus className="h-3.5 w-3.5" strokeWidth={2.25} />
+                </span>
+                Nueva Cita / Ingreso
             </button>
 
             {open && (
@@ -264,9 +268,10 @@ export default function CheckInModal({ workers, branches }: { workers: Worker[],
                                     setStep(1)
                                     setWalkInDraft(null)
                                 }}
-                                className="text-slate-400 hover:text-red-500 font-bold"
+                                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-colors"
+                                aria-label="Cerrar"
                             >
-                                ✕
+                                <X className="h-4 w-4" strokeWidth={2.25} />
                             </button>
                         </div>
                         {step === 2 && walkInDraft ? (

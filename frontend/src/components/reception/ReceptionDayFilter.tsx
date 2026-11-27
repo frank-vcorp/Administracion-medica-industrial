@@ -2,6 +2,7 @@
 
 import { todayAgendaDateString } from '@/lib/appointment-scheduling'
 import { useRouter } from 'next/navigation'
+import { Calendar } from 'lucide-react'
 
 interface Props {
     selectedDate: string
@@ -23,8 +24,10 @@ export default function ReceptionDayFilter({ selectedDate }: Props) {
 
     return (
         <div className="flex items-center gap-2 flex-wrap">
-            <div className="bg-white border border-slate-200 px-4 py-2 rounded-xl shadow-sm flex items-center gap-2">
-                <span className="text-slate-400" aria-hidden="true">📅</span>
+            <div className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#592c82]/15 text-[#592c82]" aria-hidden="true">
+                    <Calendar className="h-3.5 w-3.5" strokeWidth={2.25} />
+                </span>
                 <label htmlFor="reception-day-filter" className="sr-only">Día del flujo clínico</label>
                 <input
                     id="reception-day-filter"

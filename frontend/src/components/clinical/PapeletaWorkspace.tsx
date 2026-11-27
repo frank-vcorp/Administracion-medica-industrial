@@ -29,7 +29,7 @@
  */
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { ClipboardList, Eye, FileCheck, Scale } from "lucide-react"
 import { StudyCaptureMissingBanner } from "@/components/clinical/studies/StudyCaptureUi"
 import type { StudyLeaveGuardFn } from "@/components/clinical/studies/useStudyLeaveGuard"
@@ -531,6 +531,13 @@ export default function PapeletaWorkspace({
   const completedCount = localTests.filter(t =>
     t.status === 'COMPLETED' || t.status === 'RESULT_REGISTERED'
   ).length
+  const isOnlyCertificadoOrConsulta = useMemo(() => {
+    if (localTests.length === 0) return false
+    return localTests.every((t) => {
+      const name = t.testNameSnapshot || ''
+      return isCertificadoMedicoTestName(name) || isConsultaMedicaTestName(name)
+    })
+  }, [localTests])
   // IMPL-FEATURE-20260824-02: estudio actualmente seleccionado para el
   // modal del cuestionario de Espirometría (puede ser distinto del
   // `activeTest` si el usuario cambió de pestaña con el modal abierto).
@@ -1084,29 +1091,56 @@ export default function PapeletaWorkspace({
           )}
 
           {completedCount === localTests.length && localTests.length > 0 && !hasMedicalVerdict && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 my-3">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
-                  <FileCheck className="h-4 w-4" />
-                </span>
-                <div>
-                  <h4 className="font-bold text-emerald-900 text-xs sm:text-sm">
-                    Todos los estudios completados ({completedCount}/{localTests.length})
-                  </h4>
-                  <p className="text-[11px] sm:text-xs text-emerald-700">
-                    Listo para emitir el dictamen y firma final.
-                  </p>
+            isOnlyCertificadoOrConsulta ? (
+              <div className="bg-teal-50 border border-teal-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 my-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-100 text-teal-800">
+                    <FileCheck className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-teal-900 text-xs sm:text-sm">
+                      Certificado médico completado ({completedCount}/{localTests.length})
+                    </h4>
+                    <p className="text-[11px] sm:text-xs text-teal-700">
+                      El certificado se descarga y envía por correo o WhatsApp directamente desde su estudio.
+                    </p>
+                  </div>
                 </div>
+                {visibleTests.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => navigateToStudy(visibleTests[0].id)}
+                    className="inline-flex items-center justify-center gap-1.5 bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-lg shadow-sm transition-all shrink-0"
+                  >
+                    <span>Abrir certificado →</span>
+                  </button>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => router.push(navigateToValidatingView(eventId))}
-                className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-lg shadow-sm transition-all shrink-0"
-              >
-                <FileCheck className="h-4 w-4" />
-                <span>Firmar y dictaminar →</span>
-              </button>
-            </div>
+            ) : (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 my-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800">
+                    <FileCheck className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-emerald-900 text-xs sm:text-sm">
+                      Todos los estudios completados ({completedCount}/{localTests.length})
+                    </h4>
+                    <p className="text-[11px] sm:text-xs text-emerald-700">
+                      Listo para emitir el dictamen y firma final.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(navigateToValidatingView(eventId))}
+                  className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-3.5 py-2 rounded-lg shadow-sm transition-all shrink-0"
+                >
+                  <FileCheck className="h-4 w-4" />
+                  <span>Firmar y dictaminar →</span>
+                </button>
+              </div>
+            )
           )}
 
           {localTests.length === 0 && (
@@ -1158,7 +1192,11 @@ export default function PapeletaWorkspace({
         completedCount={completedCount}
         totalCount={localTests.length}
         hasMedicalVerdict={hasMedicalVerdict}
-        onGoToValidating={() => router.push(navigateToValidatingView(eventId))}
+        onGoToValidating={
+          isOnlyCertificadoOrConsulta
+            ? undefined
+            : () => router.push(navigateToValidatingView(eventId))
+        }
         onBack={() => {
           if (!navigateToStudy(null)) return
           setUploadError('')

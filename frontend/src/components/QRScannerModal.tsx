@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getAppointmentForCorroborationByQr } from '@/actions/appointment.actions'
 import CorroborationModal from '@/components/CorroborationModal'
 import { Scanner } from '@yudiel/react-qr-scanner'
+import { AlertTriangle, QrCode, X } from 'lucide-react'
 
 type CorroborationAppointment = Parameters<typeof CorroborationModal>[0]['appointment']
 
@@ -58,9 +59,11 @@ export default function QRScannerModal() {
             <button
                 type="button"
                 onClick={() => setIsOpen(true)}
-                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm"
+                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm cursor-pointer"
             >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/15 text-white">
+                    <QrCode className="h-3.5 w-3.5" strokeWidth={2.25} />
+                </span>
                 Escanear QR
             </button>
 
@@ -76,16 +79,19 @@ export default function QRScannerModal() {
                                 type="button"
                                 onClick={() => setIsOpen(false)}
                                 className="text-slate-400 hover:text-slate-600 bg-white p-2 rounded-full shadow-sm"
+                                aria-label="Cerrar"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                                <X className="w-4 h-4" strokeWidth={2.25} />
                             </button>
                         </div>
 
                         <div className="p-8 flex flex-col items-center justify-center">
                             <div className={`w-full max-w-[300px] h-64 border-4 border-dashed rounded-3xl flex items-center justify-center mb-6 relative overflow-hidden transition-colors ${status.type === 'error' ? 'border-red-200 bg-red-50' : 'border-indigo-100'}`}>
                                 {status.type === 'error' ? (
-                                    <div className="text-center p-4">
-                                        <span className="text-4xl">⚠️</span>
+                                    <div className="text-center p-4 flex flex-col items-center">
+                                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-red-600">
+                                            <AlertTriangle className="h-5 w-5" strokeWidth={2.25} />
+                                        </span>
                                         <p className="text-xs font-bold text-red-500 mt-2">{status.message}</p>
                                         <button
                                             type="button"

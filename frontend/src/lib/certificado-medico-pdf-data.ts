@@ -13,6 +13,7 @@ import {
   buildDefaultExploracionCertificado,
   type CertificadoMedicoPayload,
 } from '@/schemas/clinical/certificado-medico.schema'
+import { resolveSmeLogoDataUrl } from '@/lib/sme-brand'
 
 function deepMergeAntecedentes(
   longitudinal: Record<string, unknown> | null | undefined,
@@ -187,10 +188,14 @@ export async function loadCertificadoMedicoPdfInput(
   const domicilio = certificado.domicilio_atencion?.trim() || null
 
   const edadNum = worker.dob ? computeEdad(worker.dob, eventDateRaw) : null
+  const logoUrl = await resolveSmeLogoDataUrl()
+  const folio = `CM-${eventTest.event.id.slice(0, 8).toUpperCase()}`
 
   const data: CertificadoMedicoPdfInput = {
     lugarFecha: `${certificado.lugar_expedicion} a ${formatLongDate(eventDateRaw)}`,
     isDraft,
+    logoUrl,
+    folio,
     patient: {
       nombre: `${worker.firstName} ${worker.lastName}`.trim(),
       edad: edadNum,

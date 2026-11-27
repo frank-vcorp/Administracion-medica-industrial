@@ -1155,7 +1155,7 @@ export async function getPendingStudyPatientsForDay(
  * Citas de una semana (lunes–domingo) para una sucursal.
  * @id AMI-SR F-017 — vista semanal emergente en Gestión de citas
  */
-export async function getAppointmentsForWeek(weekStartDate: string, branchId: string) {
+export async function getAppointmentsForWeek(weekStartDate: string, branchId?: string | null) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user) {
@@ -1166,7 +1166,7 @@ export async function getAppointmentsForWeek(weekStartDate: string, branchId: st
 
     const appointments = await findManyAppointmentsResilient(prisma, {
       where: {
-        branchId,
+        ...(branchId && branchId !== 'ALL' ? { branchId } : {}),
         scheduledAt: { gte, lte },
       },
       include: {
@@ -1180,6 +1180,10 @@ export async function getAppointmentsForWeek(weekStartDate: string, branchId: st
         },
         company: { select: { name: true } },
         branch: { select: { id: true, name: true } },
+        medicalEvents: {
+          select: { id: true, status: true },
+          take: 1,
+        },
       },
       orderBy: { scheduledAt: 'asc' },
     })
@@ -1214,6 +1218,10 @@ export async function getAppointmentsForOverview(date: string) {
         worker: { select: { id: true, firstName: true, lastName: true, universalId: true } },
         company: { select: { name: true } },
         branch: { select: { id: true, name: true, hourlyCapacity: true, openingTime: true, closingTime: true } },
+        medicalEvents: {
+          select: { id: true, status: true },
+          take: 1,
+        },
       },
       orderBy: { scheduledAt: 'asc' },
     })

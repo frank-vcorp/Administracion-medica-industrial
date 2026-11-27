@@ -18,6 +18,7 @@ import {
     todayAgendaDateString,
 } from "@/lib/appointment-scheduling"
 import { formatVisitDuration } from "@/lib/clinical/visit-duration"
+import { CheckCircle2, FileText, FlaskConical, Stethoscope, Users } from "lucide-react"
 
 export const dynamic = 'force-dynamic'
 
@@ -88,21 +89,42 @@ export default async function ReceptionPage(props: { searchParams: Promise<{ dat
             </div>
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 overflow-hidden min-h-0">
-                <Lane title="En sala de espera" count={scheduled.length} color="bg-slate-50/50" borderColor="border-slate-200" icon="👥">
+                <Lane
+                    title="En sala de espera"
+                    count={scheduled.length}
+                    color="bg-slate-50/50"
+                    borderColor="border-slate-200"
+                    icon={Users}
+                    iconTone="bg-[#592c82]/15 text-[#592c82]"
+                >
                     {scheduled.length === 0 ? (
                         <EmptyLane message="Sin pacientes en sala de espera para este día" />
                     ) : (
                         scheduled.map(e => <PatientCard key={e.id} event={e} status="waiting" nextStatus="IN_PROGRESS" />)
                     )}
                 </Lane>
-                <Lane title="En proceso" count={inProgress.length} color="bg-indigo-50/30" borderColor="border-indigo-100" icon="🩺">
+                <Lane
+                    title="En proceso"
+                    count={inProgress.length}
+                    color="bg-indigo-50/30"
+                    borderColor="border-indigo-100"
+                    icon={Stethoscope}
+                    iconTone="bg-indigo-100 text-indigo-700"
+                >
                     {inProgress.length === 0 ? (
                         <EmptyLane message="Nadie en proceso para este día" />
                     ) : (
                         inProgress.map(e => <PatientCard key={e.id} event={e} status="progress" />)
                     )}
                 </Lane>
-                <Lane title="Listo para checkout" count={readyForCheckout.length} color="bg-amber-50/40" borderColor="border-amber-200" icon="🚪">
+                <Lane
+                    title="Listo para checkout"
+                    count={readyForCheckout.length}
+                    color="bg-amber-50/40"
+                    borderColor="border-amber-200"
+                    icon={CheckCircle2}
+                    iconTone="bg-amber-100 text-amber-800"
+                >
                     {readyForCheckout.length === 0 ? (
                         <EmptyLane message="Sin pacientes pendientes de checkout" />
                     ) : (
@@ -128,12 +150,30 @@ function EmptyLane({ message }: { message: string }) {
     )
 }
 
-function Lane({ title, count, children, color, borderColor, icon }: { title: string, count: number, children: React.ReactNode, color: string, borderColor: string, icon: string }) {
+function Lane({
+    title,
+    count,
+    children,
+    color,
+    borderColor,
+    icon: Icon,
+    iconTone,
+}: {
+    title: string
+    count: number
+    children: React.ReactNode
+    color: string
+    borderColor: string
+    icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
+    iconTone: string
+}) {
     return (
         <div className={`flex flex-col h-full rounded-3xl ${color} border ${borderColor} p-6 shadow-sm overflow-hidden relative`}>
             <div className="flex justify-between items-center mb-6 relative z-10">
-                <div className="flex items-center gap-2">
-                    <span className="text-lg">{icon}</span>
+                <div className="flex items-center gap-2.5">
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${iconTone}`}>
+                        <Icon className="h-3.5 w-3.5" strokeWidth={2.25} />
+                    </span>
                     <h3 className="font-black text-slate-400 text-[10px] tracking-[0.2em]">{title}</h3>
                 </div>
                 <span className="bg-white text-slate-800 px-3 py-1 rounded-full text-xs font-black shadow-sm border border-slate-50">{count}</span>
@@ -196,8 +236,12 @@ function PatientCard({ event, status, nextStatus }: {
                 <div className="flex gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${status === 'waiting' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`}></span>
                     <div className="flex -space-x-1">
-                        <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">📄</div>
-                        <div className="w-4 h-4 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[7px]">🧪</div>
+                        <div className="w-4 h-4 rounded-full bg-[#592c82]/10 border-2 border-white flex items-center justify-center text-[#592c82]">
+                            <FileText className="h-2.5 w-2.5" strokeWidth={2.25} />
+                        </div>
+                        <div className="w-4 h-4 rounded-full bg-indigo-50 border-2 border-white flex items-center justify-center text-indigo-700">
+                            <FlaskConical className="h-2.5 w-2.5" strokeWidth={2.25} />
+                        </div>
                     </div>
                 </div>
                 <div className="flex gap-2 items-center">

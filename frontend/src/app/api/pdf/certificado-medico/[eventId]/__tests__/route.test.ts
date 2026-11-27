@@ -27,6 +27,7 @@ vi.mock('@react-pdf/renderer', () => ({
   Page: ({ children }: { children?: unknown }) => children ?? null,
   Text: ({ children }: { children?: unknown }) => children ?? null,
   View: ({ children }: { children?: unknown }) => children ?? null,
+  Image: ({ src }: { src?: unknown }) => null,
   StyleSheet: { create: <T extends Record<string, unknown>>(s: T) => s },
   pdf: () => ({
     toBlob: (...args: unknown[]) => mockPdfToBlob(...args),

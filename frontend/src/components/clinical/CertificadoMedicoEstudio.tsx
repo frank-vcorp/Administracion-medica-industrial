@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useSession } from 'next-auth/react'
+import { Mail, MessageSquare } from 'lucide-react'
 import { getCurrentDoctorProfile } from '@/actions/doctor-profile.actions'
-import { saveCertificadoMedico } from '@/actions/certificado-medico.actions'
+import {
+  saveCertificadoMedico,
+  sendCertificadoMedico,
+} from '@/actions/certificado-medico.actions'
+import { CierreSendModal } from '@/components/clinical/CierreSendModal'
 import { AntecedentesCaptura } from '@/components/clinical/AntecedentesCaptura'
 import {
   ClinicalSomaSignosVitalesCapture,
@@ -162,6 +167,10 @@ export default function CertificadoMedicoEstudio({
   const [saveError, setSaveError] = useState<UserFacingError | null>(null)
   const [missingFieldsBanner, setMissingFieldsBanner] = useState('')
   const [isPending, startTransition] = useTransition()
+  const [sendModal, setSendModal] = useState<{
+    isOpen: boolean
+    channel: 'email' | 'whatsapp'
+  }>({ isOpen: false, channel: 'email' })
 
   const [signos, setSignos] = useState(() =>
     mergeCertificadoSignosPrefill(parsed?.signos_vitales, somatometryData, eyeAcuityData),
@@ -1047,6 +1056,26 @@ export default function CertificadoMedicoEstudio({
             prominent
             onBeforeOpen={handleDraftPreviewClick}
           />
+          {Boolean(cerradaAt) && (
+            <>
+              <button
+                type="button"
+                onClick={() => setSendModal({ isOpen: true, channel: 'email' })}
+                className="inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl shadow-md transition-colors cursor-pointer"
+              >
+                <Mail className="h-4 w-4" strokeWidth={2.25} />
+                <span>Enviar por correo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSendModal({ isOpen: true, channel: 'whatsapp' })}
+                className="inline-flex items-center gap-1.5 bg-[#128C7E] hover:bg-[#0d6e63] text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-xl shadow-md transition-colors cursor-pointer"
+              >
+                <MessageSquare className="h-4 w-4" strokeWidth={2.25} />
+                <span>Enviar por WhatsApp</span>
+              </button>
+            </>
+          )}
           {!formReadonly && !cerradaAt && (
             <button
               type="button"
@@ -1071,6 +1100,30 @@ export default function CertificadoMedicoEstudio({
           )}
         </div>
       )}
+      <CierreSendModal
+        isOpen={sendModal.isOpen}
+        onClose={() => setSendModal((prev) => ({ ...prev, isOpen: false }))}
+        eventId={eventId}
+        channel={sendModal.channel}
+        documentTitle="Certificado Médico Laboral"
+        sendAction={async (input) => {
+          return sendCertificadoMedico({
+            ...input,
+            eventTestId,
+          })
+        }}
+        onSent={(msg, isError) => {
+          if (isError) {
+            setSaveError({
+              kind: 'technical',
+              title: 'No se pudo enviar el certificado',
+              userMessage: msg,
+            })
+          } else {
+            setSaveMsg(msg)
+          }
+        }}
+      />
     </div>
   )
 }

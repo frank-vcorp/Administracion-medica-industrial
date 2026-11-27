@@ -18,6 +18,7 @@ import {
   getCierreClinicoContactInfo,
   sendCierreClinico,
   type CierreClinicoContactInfo,
+  type SendCierreClinicoInput,
 } from '@/actions/cierre-clinico-send.actions'
 
 interface CierreSendModalProps {
@@ -26,6 +27,8 @@ interface CierreSendModalProps {
   eventId: string
   channel: 'email' | 'whatsapp'
   onSent: (message: string, isError?: boolean) => void
+  documentTitle?: string
+  sendAction?: (input: SendCierreClinicoInput) => Promise<{ success: boolean; error?: string }>
 }
 
 export function CierreSendModal({
@@ -34,6 +37,8 @@ export function CierreSendModal({
   eventId,
   channel,
   onSent,
+  documentTitle,
+  sendAction,
 }: CierreSendModalProps) {
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -104,7 +109,8 @@ export function CierreSendModal({
       .map((p) => p.trim())
       .filter((p) => p.length >= 10)
 
-    const res = await sendCierreClinico({
+    const sendFn = sendAction ?? sendCierreClinico
+    const res = await sendFn({
       eventId,
       channel,
       recipientType,
@@ -118,7 +124,11 @@ export function CierreSendModal({
 
     if (res.success) {
       let msg = ''
-      if (recipientType === 'company') {
+      if (documentTitle) {
+        msg = `${documentTitle} enviado ${
+          recipientType === 'company' ? 'a la empresa' : 'al trabajador'
+        } por ${channel === 'email' ? 'correo electrónico' : 'WhatsApp'}.`
+      } else if (recipientType === 'company') {
         msg =
           channel === 'email'
             ? 'Expediente de cierre clínico enviado a la empresa por correo electrónico.'
@@ -135,6 +145,18 @@ export function CierreSendModal({
       setError(res.error || 'Ocurrió un error al procesar el envío.')
     }
   }
+
+  const modalTitle = documentTitle
+    ? `Enviar ${documentTitle} a ${
+        recipientType === 'company' ? 'Empresa' : 'Trabajador'
+      } (${channel === 'email' ? 'Correo' : 'WhatsApp'})`
+    : recipientType === 'company'
+      ? channel === 'email'
+        ? 'Enviar Cierre a Empresa (Correo)'
+        : 'Enviar Cierre a Empresa (WhatsApp)'
+      : channel === 'email'
+      ? 'Enviar Recomendaciones a Trabajador (Correo)'
+      : 'Enviar Recomendaciones a Trabajador (WhatsApp)'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in">
@@ -155,13 +177,7 @@ export function CierreSendModal({
             </div>
             <div>
               <h3 className="font-bold text-slate-800 text-base">
-                {recipientType === 'company'
-                  ? channel === 'email'
-                    ? 'Enviar Cierre a Empresa (Correo)'
-                    : 'Enviar Cierre a Empresa (WhatsApp)'
-                  : channel === 'email'
-                  ? 'Enviar Recomendaciones a Trabajador (Correo)'
-                  : 'Enviar Recomendaciones a Trabajador (WhatsApp)'}
+                {modalTitle}
               </h3>
               <p className="text-xs text-slate-500">
                 {info?.patientName ? `${info.patientName}` : 'Expediente digital'}
@@ -212,7 +228,7 @@ export function CierreSendModal({
                     }`}
                   >
                     <Building2 className="h-4 w-4" />
-                    <span>Empresa / Cliente (Default)</span>
+                    <span>{documentTitle ? 'Empresa / Cliente' : 'Empresa / Cliente (Default)'}</span>
                   </button>
                   <button
                     type="button"
@@ -226,13 +242,32 @@ export function CierreSendModal({
                     }`}
                   >
                     <User className="h-4 w-4" />
-                    <span>Trabajador (Solo Recs.)</span>
+                    <span>{documentTitle ? 'Trabajador / Paciente' : 'Trabajador (Solo Recs.)'}</span>
                   </button>
                 </div>
               </div>
 
               {/* Banner informativo según destinatario */}
-              {recipientType === 'company' ? (
+              {documentTitle ? (
+                recipientType === 'company' ? (
+                  <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs text-sky-900 flex items-start gap-2.5">
+                    <Package className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>{documentTitle} (PDF) para la Empresa:</strong> Se enviará el{' '}
+                      <strong>{documentTitle} oficial en PDF</strong> con dictamen de aptitud y firma
+                      del médico certificador.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950 flex items-start gap-2.5">
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div>
+                      <strong>{documentTitle} (PDF) para el Paciente:</strong> Se enviará el{' '}
+                      <strong>{documentTitle} oficial en PDF</strong> directamente al trabajador.
+                    </div>
+                  </div>
+                )
+              ) : recipientType === 'company' ? (
                 <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-3 text-xs text-sky-900 flex items-start gap-2.5">
                   <Package className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
                   <div>
