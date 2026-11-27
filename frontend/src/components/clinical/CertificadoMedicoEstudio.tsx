@@ -85,26 +85,22 @@ function CertificadoPdfLink({
   prominent?: boolean
   onBeforeOpen?: (e: React.MouseEvent<HTMLAnchorElement>) => void
 }) {
+  if (isDraft) return null
+
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       onClick={onBeforeOpen}
-      data-testid={
-        isDraft ? 'certificado-pdf-draft-preview-link' : 'certificado-pdf-download-link'
-      }
+      data-testid="certificado-pdf-download-link"
       className={
-        isDraft
-          ? prominent
-            ? 'inline-flex items-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-sm font-bold px-4 py-2.5 rounded-xl shadow-sm transition-colors'
-            : 'inline-flex items-center gap-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold px-3.5 py-2 rounded-xl transition-colors'
-          : prominent
-            ? 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition-colors'
-            : 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors'
+        prominent
+          ? 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold px-5 py-2.5 rounded-xl shadow-md transition-colors'
+          : 'inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors'
       }
     >
-      {isDraft ? '👁️ Vista previa PDF (borrador)' : '📄 Generar / descargar certificado (PDF)'}
+      📄 Generar / descargar certificado (PDF)
     </a>
   )
 }
@@ -1098,19 +1094,19 @@ Tandem: ${tandemVal}`
               disabled={formReadonly}
             />
           </div>
-          <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
-            <CertificadoPdfLink
-              href={pdfHref}
-              isDraft={isDraft}
-              prominent
-              onBeforeOpen={handleDraftPreviewClick}
-            />
-            <p className="text-[10px] text-slate-500">
-              {cerradaAt
-                ? 'El certificado está cerrado. Lugar, hora, datos del paciente y del médico se tomaron del expediente y del evento al guardar.'
-                : 'Vista previa en borrador: permite revisar el formato de impresión antes de cerrar el certificado.'}
-            </p>
-          </div>
+          {!isDraft && (
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-2 items-center">
+              <CertificadoPdfLink
+                href={pdfHref}
+                isDraft={isDraft}
+                prominent
+                onBeforeOpen={handleDraftPreviewClick}
+              />
+              <p className="text-[10px] text-slate-500">
+                El certificado está cerrado. Lugar, hora, datos del paciente y del médico se tomaron del expediente y del evento al guardar.
+              </p>
+            </div>
+          )}
         </section>
       )}
 
